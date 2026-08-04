@@ -50,7 +50,7 @@ export function MarketFeed({ news }: MarketFeedProps) {
             <span className="flex items-center gap-1">
               <Clock className="h-3.5 w-3.5" /> 2 hours ago
             </span>
-            <Link href="/suppliers" className="text-foreground font-bold hover:underline flex items-center gap-0.5">
+            <Link href="#" className="text-foreground font-bold hover:underline flex items-center gap-0.5">
               {t('feed_details')} <ArrowUpRight className="h-3 w-3" />
             </Link>
           </div>
@@ -101,7 +101,7 @@ export function MarketFeed({ news }: MarketFeedProps) {
             <span className="flex items-center gap-1">
               <Clock className="h-3.5 w-3.5" /> 5 hours ago
             </span>
-            <Link href="/requests" className="text-foreground font-bold hover:underline flex items-center gap-0.5">
+            <Link href="/requests/buyer" className="text-foreground font-bold hover:underline flex items-center gap-0.5">
               {t('feed_submit_quote')} <ArrowUpRight className="h-3 w-3" />
             </Link>
           </div>

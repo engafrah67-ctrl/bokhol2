@@ -167,7 +167,7 @@ export default async function BuyerDashboardPage() {
         <div className="lg:col-span-4 space-y-4">
           <div className="flex items-center justify-between">
             <h2 className="text-lg font-bold text-foreground">Saved Suppliers</h2>
-            <Link href="/suppliers" className="text-xs font-semibold text-primary hover:underline flex items-center gap-1">
+            <Link href="/" className="text-xs font-semibold text-primary hover:underline flex items-center gap-1">
               Browse directory <ArrowUpRight className="h-3.5 w-3.5" />
             </Link>
           </div>
@@ -180,7 +180,7 @@ export default async function BuyerDashboardPage() {
               <p className="text-xs text-muted-foreground">
                 No saved suppliers yet. Bookmark suppliers from the directory for quick access.
               </p>
-              <Link href="/suppliers">
+              <Link href="/">
                 <Button variant="outline" size="sm" className="w-full cursor-pointer text-xs">
                   Explore Suppliers
                 </Button>

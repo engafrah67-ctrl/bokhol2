@@ -46,12 +46,12 @@ export function Footer() {
             <h3 className="text-xs font-extrabold text-foreground uppercase tracking-widest">Directory</h3>
             <ul className="mt-5 space-y-3 text-sm">
               <li>
-                <Link href="/suppliers" className="hover:text-primary transition-colors font-medium">
+                <Link href="#" className="hover:text-primary transition-colors font-medium">
                   Supplier Search
                 </Link>
               </li>
               <li>
-                <Link href="/requests" className="hover:text-primary transition-colors font-medium">
+                <Link href="#" className="hover:text-primary transition-colors font-medium">
                   Buying Requests
                 </Link>
               </li>
@@ -68,17 +68,17 @@ export function Footer() {
             <h3 className="text-xs font-extrabold text-foreground uppercase tracking-widest">Legal</h3>
             <ul className="mt-5 space-y-3 text-sm">
               <li>
-                <Link href="/privacy" className="hover:text-primary transition-colors font-medium">
+                <Link href="#" className="hover:text-primary transition-colors font-medium">
                   Privacy Policy
                 </Link>
               </li>
               <li>
-                <Link href="/terms" className="hover:text-primary transition-colors font-medium">
+                <Link href="#" className="hover:text-primary transition-colors font-medium">
                   Terms of Service
                 </Link>
               </li>
               <li>
-                <Link href="/support" className="hover:text-primary transition-colors font-medium">
+                <Link href="#" className="hover:text-primary transition-colors font-medium">
                   Contact Support
                 </Link>
               </li>

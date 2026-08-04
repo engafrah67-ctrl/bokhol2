@@ -56,7 +56,7 @@ export function useUser(): UseUserReturn {
       .from('users')
       .select('id, role, full_name, avatar_url, company_id')
       .eq('id', userId)
-      .single()
+      .maybeSingle()
     setProfile(data)
     setIsLoading(false)
   }

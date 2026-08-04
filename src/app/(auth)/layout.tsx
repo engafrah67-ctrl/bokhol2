@@ -21,9 +21,9 @@ export default function AuthLayout({
       {/* Footer note */}
       <p className="mt-6 text-xs text-muted-foreground text-center">
         By continuing, you agree to FishMarketCap&apos;s{' '}
-        <Link href="/terms" className="underline hover:text-primary">Terms</Link>{' '}
+        <Link href="#" className="underline hover:text-primary">Terms</Link>{' '}
         and{' '}
-        <Link href="/privacy" className="underline hover:text-primary">Privacy Policy</Link>.
+        <Link href="#" className="underline hover:text-primary">Privacy Policy</Link>.
       </p>
     </div>
   )
