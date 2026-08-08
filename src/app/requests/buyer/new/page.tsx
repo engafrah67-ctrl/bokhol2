@@ -110,9 +110,9 @@ export default function NewBuyerRequestPage() {
   }
 
   return (
-    <main className="min-h-screen bg-slate-50/50 pb-16">
+    <main className="min-h-screen bg-transparent pb-16">
       {/* Header */}
-      <div className="border-b border-slate-200 bg-white py-6">
+      <div className="border-b border-white/50 bg-transparent py-6">
         <div className="max-w-3xl mx-auto px-4">
           <Link href="/requests/buyer" className="inline-flex items-center text-sm font-semibold text-slate-500 hover:text-[#022B96] transition-colors gap-1.5">
             <ArrowLeft className="w-4 h-4" />

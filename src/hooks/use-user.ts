@@ -28,19 +28,33 @@ export function useUser(): UseUserReturn {
   const supabase = createClient()
 
   useEffect(() => {
-    // Get current session
-    supabase.auth.getUser().then(({ data: { user } }) => {
-      setUser(user)
-      if (user) fetchProfile(user.id)
-      else setIsLoading(false)
-    })
+    // 1. Get current session from local storage (fast, no rate limits)
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      const currentUser = session?.user ?? null
+      setUser(currentUser)
+      if (currentUser) {
+        fetchProfile(currentUser)
+      } else {
+        // Fallback to getUser() only if getSession() returned no user
+        supabase.auth.getUser().then(({ data: { user: fallbackUser } }) => {
+          setUser(fallbackUser ?? null)
+          if (fallbackUser) fetchProfile(fallbackUser)
+          else setIsLoading(false)
+        }).catch(() => setIsLoading(false))
+      }
+    }).catch(() => setIsLoading(false))
 
-    // Subscribe to auth changes
+    // 2. Subscribe to auth state changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      (_event, session) => {
-        setUser(session?.user ?? null)
-        if (session?.user) fetchProfile(session.user.id)
-        else {
+      (event, session) => {
+        // Ignore TOKEN_REFRESHED events if we already have user state to avoid unnecessary re-fetches
+        if (event === 'TOKEN_REFRESHED' && user) return
+
+        const currentUser = session?.user ?? null
+        setUser(currentUser)
+        if (currentUser) {
+          fetchProfile(currentUser)
+        } else if (event === 'SIGNED_OUT') {
           setProfile(null)
           setIsLoading(false)
         }
@@ -51,20 +65,45 @@ export function useUser(): UseUserReturn {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  async function fetchProfile(userId: string) {
-    const { data } = await supabase
-      .from('users')
-      .select('id, role, full_name, avatar_url, company_id')
-      .eq('id', userId)
-      .maybeSingle()
-    setProfile(data)
-    setIsLoading(false)
+  async function fetchProfile(currentUser: User) {
+    try {
+      const { data, error } = await supabase
+        .from('users')
+        .select('id, role, full_name, avatar_url, company_id')
+        .eq('id', currentUser.id)
+        .maybeSingle()
+
+      if (data) {
+        setProfile(data)
+      } else {
+        // Fallback profile if database row doesn't exist or returns 406/error
+        const fallbackRole = (currentUser.user_metadata?.role as UserRole) || 'supplier'
+        setProfile({
+          id: currentUser.id,
+          role: fallbackRole,
+          full_name: currentUser.user_metadata?.full_name || currentUser.email || 'User',
+          avatar_url: null,
+          company_id: null,
+        })
+      }
+    } catch (_) {
+      const fallbackRole = (currentUser.user_metadata?.role as UserRole) || 'supplier'
+      setProfile({
+        id: currentUser.id,
+        role: fallbackRole,
+        full_name: currentUser.user_metadata?.full_name || currentUser.email || 'User',
+        avatar_url: null,
+        company_id: null,
+      })
+    } finally {
+      setIsLoading(false)
+    }
   }
 
   return {
     user,
     profile,
-    role: profile?.role ?? null,
+    role: profile?.role ?? (user?.user_metadata?.role as UserRole) ?? null,
     isLoading,
     isAuthenticated: !!user,
   }

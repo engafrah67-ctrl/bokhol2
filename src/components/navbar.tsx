@@ -63,11 +63,7 @@ export function Navbar() {
 
   return (
     <nav
-      className={`sticky top-0 z-50 w-full transition-all duration-300 ${
-        isHome
-          ? 'border-b border-[#d8e4f0]/60 backdrop-blur-sm bg-white/70'
-          : 'border-b border-slate-200 bg-white shadow-sm'
-      }`}
+      className="sticky top-0 z-50 w-full transition-all duration-300 glass-panel"
     >
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
         <div className="flex h-16 items-center justify-between">
@@ -82,7 +78,7 @@ export function Navbar() {
               const isActive = item.href !== '/#indexes' && pathname.startsWith(item.href)
               return (
                 <Link
-                  key={item.href}
+                  key={item.href} 
                   href={item.href}
                   className={`relative text-sm font-semibold transition-all duration-300 py-1 
                     ${isActive ? 'text-[#022B96]' : 'text-foreground/75 hover:text-[#022B96]'}

@@ -30,13 +30,25 @@ export async function middleware(request: NextRequest) {
     },
   })
 
-  // 3. IMPORTANT: This refreshes the session if it's expired
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
+  // Check if any Supabase auth cookie is present in the request
+  const allCookies = request.cookies.getAll()
+  const hasAuthCookie = allCookies.some(
+    (c) => c.name.includes('sb-') || c.name.includes('auth-token') || c.name.includes('supabase')
+  )
 
-  // 4. Protect routes
-  if (!user && pathname.startsWith('/dashboard')) {
+  let user = null
+  try {
+    const { data } = await supabase.auth.getUser()
+    user = data?.user || null
+  } catch (err) {
+    // If rate-limited (429) or network glitch, gracefully ignore error
+    console.warn('Middleware auth check warn:', err)
+  }
+
+  // 4. Protect routes:
+  // ONLY redirect to /login if there is NO user AND NO auth cookie present.
+  // If an auth cookie exists but getUser() failed (e.g. 429 rate limit), DO NOT log out!
+  if (!user && !hasAuthCookie && pathname.startsWith('/dashboard')) {
     const redirectUrl = new URL('/login', request.url)
     redirectUrl.searchParams.set('next', pathname)
     return NextResponse.redirect(redirectUrl)
@@ -44,7 +56,7 @@ export async function middleware(request: NextRequest) {
 
   // 5. Protect Auth Pages (if logged in, redirect to dashboard)
   const authPaths = ['/login', '/signup', '/forgot-password', '/reset-password', '/verify-email']
-  if (user && authPaths.some(p => pathname.startsWith(p))) {
+  if (user && authPaths.some((p) => pathname.startsWith(p))) {
     return NextResponse.redirect(new URL('/dashboard', request.url))
   }
 

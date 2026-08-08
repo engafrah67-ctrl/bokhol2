@@ -76,9 +76,9 @@ export default function NewsPage() {
   const [featured, ...rest] = NEWS_ARTICLES
 
   return (
-    <main className="min-h-screen bg-white pb-16">
+    <main className="min-h-screen bg-transparent pb-16">
       {/* Page Header */}
-      <div className="border-b border-slate-100 bg-slate-50 py-10">
+      <div className="border-b border-white/50 bg-transparent py-10">
         <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
           <h1 className="text-3xl font-extrabold text-slate-900 tracking-tight">Seafood Market News</h1>
           <p className="mt-2 text-slate-500 text-sm">Latest insights, price movements, and regulatory updates from global fish markets.</p>

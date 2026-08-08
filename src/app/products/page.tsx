@@ -84,11 +84,10 @@ export default function ProductsPage() {
   })
 
   return (
-    <main className="min-h-screen bg-slate-50 dark:bg-slate-950 pb-12">
+    <main className="min-h-screen bg-transparent pb-12">
       {/* Hero Header */}
       <section 
-        className="relative overflow-hidden py-16 flex flex-col items-center text-center mb-10 border-b border-slate-200 dark:border-slate-800"
-        style={{ background: 'linear-gradient(135deg, #f0f4ff 0%, #e8eeff 30%, #ddeeff 60%, #eef4ff 100%)' }}
+        className="relative overflow-hidden py-16 flex flex-col items-center text-center mb-10 border-b border-white/50"
       >
         <div className="relative z-10 max-w-3xl mx-auto px-4 flex flex-col items-center">
           {/* Search Bar */}

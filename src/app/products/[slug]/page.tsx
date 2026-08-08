@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import Image from 'next/image'
-import { useState } from 'react'
+import React, { useState } from 'react'
 import {
   ArrowLeft, ShieldCheck, MapPin, Star, Filter,
   ChevronDown, MessageSquare, TrendingUp, TrendingDown,
@@ -114,8 +114,9 @@ const SUPPLIER_OFFERS = [
 const PRICE_HISTORY = [3.1, 3.4, 3.0, 3.6, 4.2, 4.8, 5.0, 5.2, 5.3, 5.1, 5.3, 5.2]
 const MONTHS = ['Aug', 'Sep', 'Oct', 'Nov', 'Dec', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul']
 
-export default function ProductDetailsPage({ params }: { params: { slug: string } }) {
-  const productName = params.slug
+export default function ProductDetailsPage({ params }: { params: Promise<{ slug: string }> }) {
+  const { slug } = React.use(params)
+  const productName = slug
     .split('-')
     .map(w => w.charAt(0).toUpperCase() + w.slice(1))
     .join(' ')
@@ -137,50 +138,43 @@ export default function ProductDetailsPage({ params }: { params: { slug: string 
   const maxChart = Math.max(...PRICE_HISTORY)
 
   return (
-    <main className="min-h-screen bg-slate-50 dark:bg-slate-950 pb-20">
+    <main className="min-h-screen bg-transparent pb-20">
 
-      {/* Hero */}
-      <div
-        className="relative w-full px-4 sm:px-8 pt-7 pb-20"
-        style={{ background: 'linear-gradient(135deg, #011440 0%, #022B96 100%)' }}
-      >
-        <div
-          className="absolute inset-0 opacity-10"
-          style={{ backgroundImage: 'radial-gradient(circle, #ffffff 1px, transparent 1px)', backgroundSize: '28px 28px' }}
-        />
+      {/* Clean Header — no dark bg, gradient shows through */}
+      <div className="relative w-full px-4 sm:px-8 pt-7 pb-8 border-b border-white/50">
         <div className="relative z-10 max-w-6xl mx-auto">
-          <Link href="/products" className="inline-flex items-center gap-2 text-sm text-white/70 hover:text-white mb-6 transition-colors font-medium">
+          <Link href="/products" className="inline-flex items-center gap-2 text-sm text-slate-500 hover:text-[#022B96] mb-6 transition-colors font-medium">
             <ArrowLeft className="w-4 h-4" />
             Back to Products
           </Link>
           <div className="flex flex-col sm:flex-row sm:items-center gap-5">
-            <div className="h-20 w-20 bg-white/10 rounded-2xl flex items-center justify-center border border-white/20 shrink-0 overflow-hidden">
-              <Image src={`/${params.slug.split('-').pop()}.png`} alt={productName} width={64} height={64} className="object-contain mix-blend-screen" onError={() => {}} />
+            <div className="h-28 w-28 bg-white/70 backdrop-blur-sm rounded-2xl flex items-center justify-center border border-white/80 shadow-sm shrink-0 overflow-hidden">
+              <Image src={`/${slug.split('-').pop()}.png`} alt={productName} width={100} height={100} className="object-contain" onError={() => {}} />
             </div>
             <div>
-              <span className="inline-block text-xs font-bold text-blue-300 uppercase tracking-widest mb-2 bg-white/10 px-3 py-1 rounded-full">Seafood Species</span>
-              <h1 className="text-3xl sm:text-4xl font-black text-white tracking-tight">{productName}</h1>
-              <p className="text-blue-200/70 text-sm mt-1 italic">Salmo salar · Atlantic species</p>
+              <span className="inline-block text-xs font-bold text-[#022B96] uppercase tracking-widest mb-2 bg-[#022B96]/10 px-3 py-1 rounded-full">Seafood Species</span>
+              <h1 className="text-3xl sm:text-4xl font-black text-slate-900 tracking-tight">{productName}</h1>
+              <p className="text-slate-500 text-sm mt-1 italic">Salmo salar · Atlantic species</p>
             </div>
             <div className="sm:ml-auto flex flex-wrap gap-3">
-              <div className="bg-white/10 border border-white/20 rounded-xl px-4 py-3 text-center">
-                <p className="text-xs text-blue-200/70 font-medium uppercase tracking-wider">Avg. Price</p>
-                <BlurGate><p className="text-xl font-black text-white mt-1">€{avgPrice}<span className="text-sm font-normal text-blue-200/60">/kg</span></p></BlurGate>
+              <div className="bg-white/70 backdrop-blur-sm border border-white/80 rounded-xl px-4 py-3 text-center shadow-sm">
+                <p className="text-xs text-slate-500 font-medium uppercase tracking-wider">Avg. Price</p>
+                <BlurGate><p className="text-xl font-black text-slate-900 mt-1">€{avgPrice}<span className="text-sm font-normal text-slate-400">/kg</span></p></BlurGate>
               </div>
-              <div className="bg-white/10 border border-white/20 rounded-xl px-4 py-3 text-center">
-                <p className="text-xs text-blue-200/70 font-medium uppercase tracking-wider">Active Offers</p>
-                <BlurGate><p className="text-xl font-black text-white mt-1">{SUPPLIER_OFFERS.length}</p></BlurGate>
+              <div className="bg-white/70 backdrop-blur-sm border border-white/80 rounded-xl px-4 py-3 text-center shadow-sm">
+                <p className="text-xs text-slate-500 font-medium uppercase tracking-wider">Active Offers</p>
+                <BlurGate><p className="text-xl font-black text-slate-900 mt-1">{SUPPLIER_OFFERS.length}</p></BlurGate>
               </div>
-              <div className="bg-white/10 border border-white/20 rounded-xl px-4 py-3 text-center">
-                <p className="text-xs text-blue-200/70 font-medium uppercase tracking-wider">Price Range</p>
-                <BlurGate><p className="text-xl font-black text-white mt-1">€{minPrice}–{maxPrice}</p></BlurGate>
+              <div className="bg-white/70 backdrop-blur-sm border border-white/80 rounded-xl px-4 py-3 text-center shadow-sm">
+                <p className="text-xs text-slate-500 font-medium uppercase tracking-wider">Price Range</p>
+                <BlurGate><p className="text-xl font-black text-slate-900 mt-1">€{minPrice}–{maxPrice}</p></BlurGate>
               </div>
             </div>
           </div>
         </div>
       </div>
 
-      <div className="max-w-6xl mx-auto px-4 sm:px-6 -mt-10 relative z-10 space-y-6">
+      <div className="max-w-6xl mx-auto px-4 sm:px-6 mt-8 relative z-10 space-y-6">
 
         {/* Price Chart */}
         <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm p-6">

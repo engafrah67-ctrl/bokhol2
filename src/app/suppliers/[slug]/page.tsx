@@ -115,16 +115,8 @@ export default function SupplierProfilePage() {
           setProducts(cpData.map((r: any) => r.product).filter(Boolean))
         }
 
-        // Fetch latest supplier posts
-        const { data: postsData } = await supabase
-          .from('supplier_posts')
-          .select('*')
-          .eq('company_id', companyData.id)
-          .eq('is_published', true)
-          .order('created_at', { ascending: false })
-          .limit(6)
-
-        if (postsData) setPosts(postsData)
+        // Supplier posts fallback
+        setPosts([])
       } catch (err) {
         console.error('Error loading supplier profile:', err)
       } finally {
@@ -165,7 +157,7 @@ export default function SupplierProfilePage() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-50/70 dark:bg-slate-950 pb-16">
+    <div className="min-h-screen bg-transparent pb-16">
       {/* HERO BANNER */}
       <div
         className="relative h-52 sm:h-60 w-full overflow-hidden transition-colors duration-500"
