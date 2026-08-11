@@ -14,14 +14,14 @@ export function StatsBar() {
   ]
 
   return (
-    <div className="py-8 border-t border-border bg-background text-foreground">
+    <div className="py-8 px-8 border border-border bg-background text-foreground rounded-2xl shadow-sm">
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-8">
         {stats.map((item) => {
           const Icon = item.icon
           return (
             <div key={item.labelKey} className="flex items-center gap-4 group">
               {/* Simple Icon Container */}
-              <div className="h-10 w-10 rounded-sm bg-muted text-foreground flex items-center justify-center border border-border shrink-0">
+              <div className="h-10 w-10 rounded-xl bg-muted text-foreground flex items-center justify-center border border-border shrink-0">
                 <Icon className="h-5 w-5" />
               </div>
               <div>

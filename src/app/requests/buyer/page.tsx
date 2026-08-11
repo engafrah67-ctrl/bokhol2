@@ -2,186 +2,219 @@
 
 import React, { useState, useEffect } from 'react'
 import Link from 'next/link'
-import { Plus, ArrowRight, Search, Ship, Calendar, MapPin } from 'lucide-react'
+import { Plus, Search, ShoppingBag, Calendar, MapPin, Package, DollarSign, MessageSquare, Send, CheckCircle2, X, Tag, Clock } from 'lucide-react'
 import { useUser } from '@/hooks/use-user'
-
 import { createClient } from '@/lib/supabase/client'
 
-interface BuyerRequest {
+interface BuyerSourcingRequest {
   id: string
-  originCountry: string
-  originFlag: string
-  originPort: string
-  destCountry: string
-  destFlag: string
-  destPort: string
-  shippingType: string // "Port to Port", "Door to Door", etc.
-  carrierPreference: string // "HPL", "MSK", "Any", etc.
-  containerType: string // "40RF" (40ft Reefer), "20RF", etc.
-  date: string
+  productNeeded: string
+  quantity: string
+  freshFrozen: string
+  location: string
+  packagingProcessing: string
+  deliveryDate: string
+  targetPrice?: string
+  additionalNotes?: string
+  createdAt: string
+  userEmail?: string
 }
 
-const DEFAULT_REQUESTS: BuyerRequest[] = [
+interface SupplierReply {
+  id: string
+  requestId: string
+  supplierName: string
+  pricePerKg: string
+  deliveryItem: string
+  message: string
+  createdAt: string
+}
+
+const DEFAULT_REQUESTS: BuyerSourcingRequest[] = [
   {
-    id: '1',
-    originCountry: 'China',
-    originFlag: 'https://flagcdn.com/w40/cn.png',
-    originPort: 'Zhanjiang',
-    destCountry: 'Chile',
-    destFlag: 'https://flagcdn.com/w40/cl.png',
-    destPort: 'Caldera',
-    shippingType: 'Port to Port',
-    carrierPreference: 'HPL',
-    containerType: '40RF',
-    date: 'August 14, 2026'
+    id: 'req-sample-1',
+    productNeeded: 'Salmon',
+    quantity: '100 KG',
+    freshFrozen: 'Fresh / Frozen',
+    location: 'Amsterdam, Netherlands',
+    packagingProcessing: 'packing/pure',
+    deliveryDate: 'Friday',
+    targetPrice: '$6.20/kg',
+    additionalNotes: 'Need fresh or frozen salmon delivered by Friday morning at Amsterdam port warehouse.',
+    createdAt: new Date().toISOString(),
   },
   {
-    id: '2',
-    originCountry: 'Vietnam',
-    originFlag: 'https://flagcdn.com/w40/vn.png',
-    originPort: 'Ho Chi Minh Port',
-    destCountry: 'Spain',
-    destFlag: 'https://flagcdn.com/w40/es.png',
-    destPort: 'Valencia',
-    shippingType: 'Port to Port',
-    carrierPreference: 'MSK',
-    containerType: '40RF',
-    date: 'August 18, 2026'
+    id: 'req-sample-2',
+    productNeeded: 'Atlantic Cod Fillets',
+    quantity: '500 KG',
+    freshFrozen: 'Frozen (IQF)',
+    location: 'Vigo, Spain',
+    packagingProcessing: 'Fillet (Skinless)',
+    deliveryDate: 'Next Tuesday',
+    targetPrice: '$4.80/kg',
+    additionalNotes: 'Grade A IQF cod fillets required for restaurant distributor.',
+    createdAt: new Date().toISOString(),
   },
   {
-    id: '3',
-    originCountry: 'Norway',
-    originFlag: 'https://flagcdn.com/w40/no.png',
-    originPort: 'Bergen',
-    destCountry: 'Japan',
-    destFlag: 'https://flagcdn.com/w40/jp.png',
-    destPort: 'Tokyo Port',
-    shippingType: 'Port to Port',
-    carrierPreference: 'ONE',
-    containerType: '20RF',
-    date: 'August 22, 2026'
-  },
-  {
-    id: '4',
-    originCountry: 'Ecuador',
-    originFlag: 'https://flagcdn.com/w40/ec.png',
-    originPort: 'Guayaquil',
-    destCountry: 'China',
-    destFlag: 'https://flagcdn.com/w40/cn.png',
-    destPort: 'Qingdao',
-    shippingType: 'Port to Port',
-    carrierPreference: 'COSCO',
-    containerType: '40RF',
-    date: 'August 29, 2026'
+    id: 'req-sample-3',
+    productNeeded: 'Yellowfin Tuna Loins',
+    quantity: '250 KG',
+    freshFrozen: 'Fresh',
+    location: 'Tokyo, Japan',
+    packagingProcessing: 'Vacuum Packed Loins',
+    deliveryDate: 'Thursday',
+    targetPrice: '$12.50/kg',
+    additionalNotes: 'Sashimi grade fresh yellowfin tuna loins.',
+    createdAt: new Date().toISOString(),
   }
 ]
 
+const DEFAULT_REPLIES: Record<string, SupplierReply[]> = {
+  'req-sample-1': [
+    {
+      id: 'rep-1',
+      requestId: 'req-sample-1',
+      supplierName: 'Norsk Seafood Ltd',
+      pricePerKg: '6.45 €/kg',
+      deliveryItem: 'Friday Delivery Guaranteed',
+      message: 'We can provide 100 KG premium fresh Norwegian Salmon directly to Amsterdam.',
+      createdAt: '10 mins ago',
+    }
+  ]
+}
+
 export default function BuyerRequestsPage() {
   const { user, profile } = useUser()
-  const [requests, setRequests] = useState<BuyerRequest[]>([])
+  const [requests, setRequests] = useState<BuyerSourcingRequest[]>([])
+  const [replies, setReplies] = useState<Record<string, SupplierReply[]>>(DEFAULT_REPLIES)
   const [searchTerm, setSearchTerm] = useState('')
   const [loading, setLoading] = useState(true)
 
+  // Reply Modal State
+  const [selectedRequest, setSelectedRequest] = useState<BuyerSourcingRequest | null>(null)
+  const [replyPrice, setReplyPrice] = useState('')
+  const [replyDelivery, setReplyDelivery] = useState('')
+  const [replyMessage, setReplyMessage] = useState('')
+  const [replySubmitted, setReplySubmitted] = useState(false)
+
   useEffect(() => {
-    async function fetchRequests() {
-      const supabase = createClient()
-
-      // Get current user
-      const { data: { user: currentUser } } = await supabase.auth.getUser()
-      if (!currentUser) {
-        setLoading(false)
-        return
-      }
-
-      // Fetch ONLY this buyer's own requests
-      const { data, error } = await supabase
-        .from('buyer_requests')
-        .select('*')
-        .eq('user_id', currentUser.id)
-        .order('created_at', { ascending: false })
-
-      if (error || !data) {
-        setLoading(false)
-        return
-      }
-
-      // Map Supabase rows to our BuyerRequest structure
-      const dbRequests: BuyerRequest[] = data.map((row: { id: string; title?: string; description?: string; destination?: string; expires_at?: string; created_at?: string }) => {
+    async function loadRequests() {
+      let localReqs: BuyerSourcingRequest[] = []
+      let localReps: Record<string, SupplierReply[]> = DEFAULT_REPLIES
+      
+      if (typeof window !== 'undefined') {
         try {
-          // Attempt to parse description as JSON containing custom fields
-          const custom = JSON.parse(row.description || '{}')
-          return {
-            id: row.id,
-            originCountry: custom.originCountry || 'China',
-            originFlag: custom.originFlag || 'https://flagcdn.com/w40/cn.png',
-            originPort: custom.originPort || row.title || 'Port',
-            destCountry: custom.destCountry || 'Chile',
-            destFlag: custom.destFlag || 'https://flagcdn.com/w40/cl.png',
-            destPort: custom.destPort || row.destination || 'Port',
-            shippingType: custom.shippingType || 'Port to Port',
-            carrierPreference: custom.carrierPreference || 'HPL',
-            containerType: custom.containerType || '40RF',
-            date: new Date(row.expires_at || row.created_at || '').toLocaleDateString('en-US', {
-              month: 'long',
-              day: 'numeric',
-              year: 'numeric'
+          const storedReqs = JSON.parse(localStorage.getItem('buyer_sourcing_requests') || '[]')
+          if (storedReqs && Array.isArray(storedReqs)) {
+            localReqs = storedReqs.map((r: any) => {
+              try {
+                const parsed = JSON.parse(r.description || '{}')
+                return {
+                  id: r.id,
+                  productNeeded: parsed.productNeeded || 'Salmon',
+                  quantity: parsed.quantity || '100 KG',
+                  freshFrozen: parsed.freshFrozen || 'Fresh / Frozen',
+                  location: parsed.location || r.destination || 'Amsterdam',
+                  packagingProcessing: parsed.packagingProcessing || 'packing/pure',
+                  deliveryDate: parsed.deliveryDate || 'Friday',
+                  targetPrice: parsed.targetPrice || null,
+                  additionalNotes: parsed.additionalNotes || null,
+                  createdAt: r.created_at || new Date().toISOString(),
+                }
+              } catch (_) {
+                return {
+                  id: r.id,
+                  productNeeded: r.title || 'Salmon',
+                  quantity: '100 KG',
+                  freshFrozen: 'Fresh / Frozen',
+                  location: r.destination || 'Amsterdam',
+                  packagingProcessing: 'packing/pure',
+                  deliveryDate: 'Friday',
+                  createdAt: r.created_at || new Date().toISOString(),
+                }
+              }
             })
           }
-        } catch (e) {
-          // Fallback if description is not JSON
-          return {
-            id: row.id,
-            originCountry: 'China',
-            originFlag: 'https://flagcdn.com/w40/cn.png',
-            originPort: row.title || 'Port',
-            destCountry: 'Chile',
-            destFlag: 'https://flagcdn.com/w40/cl.png',
-            destPort: row.destination || 'Port',
-            shippingType: 'Port to Port',
-            carrierPreference: 'HPL',
-            containerType: '40RF',
-            date: new Date(row.expires_at || row.created_at || '').toLocaleDateString('en-US', {
-              month: 'long',
-              day: 'numeric',
-              year: 'numeric'
-            })
-          }
-        }
-      })
 
-      // Only show this buyer's own real requests
-      setRequests(dbRequests)
+          const storedReps = JSON.parse(localStorage.getItem('supplier_replies') || '{}')
+          if (storedReps) {
+            localReps = { ...DEFAULT_REPLIES, ...storedReps }
+          }
+        } catch (_) {}
+      }
+
+      setRequests([...localReqs, ...DEFAULT_REQUESTS])
+      setReplies(localReps)
       setLoading(false)
     }
 
-    fetchRequests()
-  }, [user])
+    loadRequests()
+  }, [])
 
-  const filteredRequests = requests.filter(r => 
-    r.originPort.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    r.destPort.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    r.originCountry.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    r.destCountry.toLowerCase().includes(searchTerm.toLowerCase())
+  const handleOpenReplyModal = (req: BuyerSourcingRequest) => {
+    setSelectedRequest(req)
+    setReplyPrice('')
+    setReplyDelivery(req.deliveryDate ? `${req.deliveryDate} delivery` : 'On-time delivery')
+    setReplyMessage('')
+    setReplySubmitted(false)
+  }
+
+  const handleSendReply = (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!selectedRequest) return
+
+    const newReply: SupplierReply = {
+      id: 'reply-' + Date.now(),
+      requestId: selectedRequest.id,
+      supplierName: profile?.full_name ? `${profile.full_name} (Verified Supplier)` : 'Verified Seafood Supplier',
+      pricePerKg: replyPrice.includes('/kg') || replyPrice.includes('€') || replyPrice.includes('$') ? replyPrice : `$${replyPrice}/kg`,
+      deliveryItem: replyDelivery,
+      message: replyMessage,
+      createdAt: 'Just now'
+    }
+
+    const updatedReplies = {
+      ...replies,
+      [selectedRequest.id]: [newReply, ...(replies[selectedRequest.id] || [])]
+    }
+
+    setReplies(updatedReplies)
+
+    if (typeof window !== 'undefined') {
+      try {
+        localStorage.setItem('supplier_replies', JSON.stringify(updatedReplies))
+      } catch (_) {}
+    }
+
+    setReplySubmitted(true)
+    setTimeout(() => {
+      setSelectedRequest(null)
+      setReplySubmitted(false)
+    }, 1200)
+  }
+
+  const filteredRequests = requests.filter(r =>
+    r.productNeeded.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    r.location.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    r.packagingProcessing.toLowerCase().includes(searchTerm.toLowerCase())
   )
 
   return (
     <main className="min-h-screen bg-transparent pb-16">
-      {/* Header */}
+      {/* Page Header */}
       <div className="border-b border-white/50 bg-transparent py-10">
         <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
             <div>
-              <h1 className="text-3xl font-extrabold text-slate-900 tracking-tight">Buyer Requests</h1>
-              <p className="mt-2 text-slate-500 text-sm">Active cargo demands and logistics tenders from verified seafood importers.</p>
+              <h1 className="text-3xl font-extrabold text-slate-900 tracking-tight">Buyer Sourcing Requests</h1>
+              <p className="mt-2 text-slate-500 text-sm">Active buyer tenders and seafood procurement demands from verified importers.</p>
             </div>
-            {profile?.role === 'buyer' && (
-              <Link href="/requests/buyer/new">
-                <button className="inline-flex items-center gap-2 px-5 py-2.5 bg-[#022B96] hover:bg-[#011a5e] text-white text-sm font-semibold rounded-xl shadow-md shadow-[#022B96]/10 transition cursor-pointer">
-                  <Plus className="h-4 w-4" />
-                  Post Sourcing Request
-                </button>
-              </Link>
-            )}
+            <Link href="/requests/buyer/new">
+              <button className="inline-flex items-center gap-2 px-5 py-2.5 bg-[#022B96] hover:bg-[#011a5e] text-white text-sm font-bold rounded-2xl shadow-md transition cursor-pointer">
+                <Plus className="h-4 w-4" />
+                Post Sourcing Request
+              </button>
+            </Link>
           </div>
         </div>
       </div>
@@ -189,84 +222,234 @@ export default function BuyerRequestsPage() {
       <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 pt-8">
         {/* Search Bar */}
         <div className="max-w-md mb-8">
-          <div className="relative flex items-center bg-white rounded-xl shadow-sm border border-slate-200 focus-within:ring-2 focus-within:ring-[#022B96]/20 focus-within:border-[#022B96] transition-all p-1.5">
+          <div className="relative flex items-center bg-white rounded-2xl shadow-sm border border-slate-200 focus-within:ring-2 focus-within:ring-[#022B96]/20 focus-within:border-[#022B96] transition-all p-1.5">
             <div className="pl-3 pr-2 text-slate-400">
               <Search className="w-5 h-5" />
             </div>
-            <input 
-              type="text" 
-              placeholder="Search ports or countries..." 
+            <input
+              type="text"
+              placeholder="Search product (Salmon), location (Amsterdam)..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="flex-1 min-w-0 py-2 px-1 bg-transparent outline-none text-slate-900 placeholder:text-slate-400 text-sm"
+              className="flex-1 min-w-0 py-2 px-1 bg-transparent outline-none text-slate-900 placeholder:text-slate-400 text-sm font-medium"
             />
           </div>
         </div>
 
-        {/* Requests Grid */}
+        {/* Requests Feed Grid */}
         {filteredRequests.length > 0 ? (
           <div className="grid md:grid-cols-2 gap-6">
-            {filteredRequests.map((req) => (
-              <div key={req.id} className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm hover:shadow-md transition-shadow duration-300">
-                {/* Route Header */}
-                <div className="flex items-center justify-between bg-slate-50 border border-slate-100 rounded-xl p-3.5 mb-4 text-sm font-bold text-slate-800">
-                  <div className="flex items-center gap-2">
-                    <img src={req.originFlag} alt="" className="w-5 h-3.5 object-cover rounded shadow-sm" />
-                    <span>{req.originPort}</span>
-                  </div>
-                  <span className="text-slate-400 font-normal">→</span>
-                  <div className="flex items-center gap-2">
-                    <img src={req.destFlag} alt="" className="w-5 h-3.5 object-cover rounded shadow-sm" />
-                    <span>{req.destPort}</span>
-                  </div>
-                </div>
+            {filteredRequests.map((req) => {
+              const reqReplies = replies[req.id] || []
+              return (
+                <div key={req.id} className="bg-white border border-slate-200/90 rounded-3xl p-6 shadow-sm hover:shadow-md transition-all duration-300 flex flex-col justify-between">
+                  <div className="space-y-4">
+                    
+                    {/* Header Row: Category Badge + Delivery Date */}
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-blue-50 text-[#022B96] text-xs font-black uppercase tracking-wider border border-blue-100">
+                        <ShoppingBag className="h-3.5 w-3.5" />
+                        Buyer Request
+                      </span>
+                      <span className="text-xs text-slate-500 font-semibold flex items-center gap-1">
+                        <Calendar className="h-3.5 w-3.5 text-slate-400" />
+                        Delivery: <strong className="text-slate-800">{req.deliveryDate}</strong>
+                      </span>
+                    </div>
 
-                {/* Details */}
-                <div className="space-y-2 mb-6">
-                  <div className="flex justify-between items-center text-sm">
-                    <span className="text-slate-600 font-medium">{req.shippingType}</span>
-                    <span className="text-slate-700 font-bold">{req.carrierPreference}</span>
-                  </div>
-                  <div className="flex justify-between items-center text-sm">
-                    <span className="text-slate-800 font-bold">{req.containerType}</span>
-                  </div>
-                </div>
+                    {/* Product Needed & Target Price */}
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <h2 className="text-2xl font-black text-slate-900 leading-snug tracking-tight">
+                          {req.quantity} {req.productNeeded}
+                        </h2>
+                      </div>
+                      {req.targetPrice && (
+                        <span className="text-xs font-black bg-emerald-50 text-emerald-700 border border-emerald-200/80 px-3 py-1.5 rounded-xl shrink-0">
+                          Target: {req.targetPrice}
+                        </span>
+                      )}
+                    </div>
 
-                {/* Divider */}
-                <div className="border-t border-slate-100 my-4" />
+                    {/* Clean Spec Pills (No duplicates!) */}
+                    <div className="flex flex-wrap items-center gap-2 text-xs">
+                      <span className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-bold border border-slate-200/60">
+                        ❄️ {req.freshFrozen}
+                      </span>
+                      <span className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-bold border border-slate-200/60">
+                        <MapPin className="h-3.5 w-3.5 text-red-500" /> {req.location}
+                      </span>
+                      <span className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-bold border border-slate-200/60">
+                        <Package className="h-3.5 w-3.5 text-blue-500" /> {req.packagingProcessing}
+                      </span>
+                    </div>
 
-                {/* Footer Actions */}
-                <div className="flex items-center justify-between">
-                  <button className="inline-flex items-center gap-1.5 px-4 py-2 bg-slate-50 border border-slate-200 hover:bg-slate-100 text-slate-800 text-xs font-bold rounded-lg transition cursor-pointer">
-                    Request offer
-                    <ArrowRight className="h-3.5 w-3.5" />
-                  </button>
-                  <span className="text-xs text-slate-400 font-medium flex items-center gap-1">
-                    <Calendar className="h-3 w-3" />
-                    {req.date}
-                  </span>
+                    {/* Additional Notes Quote */}
+                    {req.additionalNotes && (
+                      <div className="p-3.5 bg-slate-50 rounded-2xl border border-slate-100 text-xs text-slate-600 italic">
+                        &quot;{req.additionalNotes}&quot;
+                      </div>
+                    )}
+
+                    {/* Supplier Replies List */}
+                    {reqReplies.length > 0 && (
+                      <div className="pt-3 border-t border-slate-100 space-y-2">
+                        <p className="text-[10px] font-black uppercase tracking-wider text-slate-400">
+                          Supplier Replies ({reqReplies.length})
+                        </p>
+                        {reqReplies.map((rep) => (
+                          <div key={rep.id} className="p-3.5 bg-blue-50/60 border border-blue-100 rounded-2xl text-xs space-y-1">
+                            <div className="flex items-center justify-between font-extrabold text-slate-900">
+                              <span>{rep.supplierName}</span>
+                              <span className="text-[#022B96] font-black">{rep.pricePerKg}</span>
+                            </div>
+                            <p className="text-slate-600 font-semibold">📦 {rep.deliveryItem}</p>
+                            {rep.message && <p className="text-slate-500 italic">&quot;{rep.message}&quot;</p>}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                  </div>
+
+                  {/* Actions Footer */}
+                  <div className="pt-4 border-t border-slate-100 mt-5 flex items-center justify-between">
+                    <button
+                      onClick={() => handleOpenReplyModal(req)}
+                      className="inline-flex items-center gap-2 px-5 py-2.5 bg-[#022B96] hover:bg-[#011a5e] text-white text-xs font-extrabold rounded-xl transition cursor-pointer shadow-sm"
+                    >
+                      <MessageSquare className="h-3.5 w-3.5" />
+                      Supplier Reply
+                    </button>
+                    <span className="text-xs text-slate-400 font-semibold">
+                      Replies: <strong className="text-slate-700">{reqReplies.length}</strong>
+                    </span>
+                  </div>
+
                 </div>
-              </div>
-            ))}
+              )
+            })}
           </div>
         ) : loading ? (
           <div className="text-center py-16">
             <div className="h-8 w-8 border-2 border-[#022B96] border-t-transparent rounded-full animate-spin mx-auto" />
           </div>
         ) : (
-          <div className="text-center py-20 bg-white border border-slate-200 rounded-2xl">
-            <Ship className="h-12 w-12 text-slate-200 mx-auto mb-4" />
-            <h3 className="text-base font-bold text-slate-800">No requests yet</h3>
-            <p className="text-sm text-slate-400 mt-1 mb-6">Post your first sourcing request to receive offers from verified suppliers.</p>
+          <div className="text-center py-20 bg-white border border-slate-200 rounded-3xl">
+            <ShoppingBag className="h-12 w-12 text-slate-200 mx-auto mb-4" />
+            <h3 className="text-base font-bold text-slate-800">No requests found</h3>
+            <p className="text-sm text-slate-400 mt-1 mb-6">Post a sourcing request to get supplier quotes.</p>
             <Link href="/requests/buyer/new">
               <button className="inline-flex items-center gap-2 px-5 py-2.5 bg-[#022B96] hover:bg-[#011a5e] text-white text-sm font-semibold rounded-xl shadow-md transition cursor-pointer">
                 <Plus className="h-4 w-4" />
-                Post sourcing request
+                Post Sourcing Request
               </button>
             </Link>
           </div>
         )}
       </div>
+
+      {/* SUPPLIER REPLY MODAL */}
+      {selectedRequest && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+          <div className="bg-white rounded-3xl p-6 sm:p-8 max-w-lg w-full shadow-2xl border border-slate-200 space-y-6 relative">
+            <button
+              onClick={() => setSelectedRequest(null)}
+              className="absolute top-5 right-5 text-slate-400 hover:text-slate-600 transition"
+            >
+              <X className="h-5 w-5" />
+            </button>
+
+            {replySubmitted ? (
+              <div className="py-8 text-center space-y-3">
+                <div className="h-16 w-16 bg-emerald-50 text-emerald-600 rounded-full flex items-center justify-center mx-auto">
+                  <CheckCircle2 className="h-8 w-8" />
+                </div>
+                <h3 className="text-xl font-extrabold text-slate-900">Reply Sent to Buyer!</h3>
+                <p className="text-xs text-slate-500">Your price per KG and delivery details have been submitted.</p>
+              </div>
+            ) : (
+              <form onSubmit={handleSendReply} className="space-y-5">
+                <div>
+                  <span className="text-[10px] font-black uppercase tracking-wider text-blue-600 bg-blue-50 px-2.5 py-1 rounded-md">
+                    Supplier Reply Form
+                  </span>
+                  <h3 className="text-xl font-extrabold text-slate-900 mt-2">
+                    Offer for {selectedRequest.quantity} {selectedRequest.productNeeded}
+                  </h3>
+                  <p className="text-xs text-slate-400 mt-0.5">
+                    Location: {selectedRequest.location} · Required: {selectedRequest.deliveryDate}
+                  </p>
+                </div>
+
+                <div className="space-y-4 pt-1">
+                  <div>
+                    <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1.5">
+                      1. Price per KG *
+                    </label>
+                    <div className="relative">
+                      <DollarSign className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+                      <input
+                        type="text"
+                        required
+                        placeholder="e.g. 6.50 €/kg or 7.00 USD/kg"
+                        value={replyPrice}
+                        onChange={e => setReplyPrice(e.target.value)}
+                        className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold outline-none focus:border-[#022B96] focus:bg-white transition"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1.5">
+                      2. Delivery Item / Date *
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      placeholder="e.g. Friday delivery guaranteed, DAP Amsterdam"
+                      value={replyDelivery}
+                      onChange={e => setReplyDelivery(e.target.value)}
+                      className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold outline-none focus:border-[#022B96] focus:bg-white transition"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1.5">
+                      3. Message to Buyer *
+                    </label>
+                    <textarea
+                      rows={3}
+                      required
+                      placeholder="Add details about fish quality, cold chain, packaging specs..."
+                      value={replyMessage}
+                      onChange={e => setReplyMessage(e.target.value)}
+                      className="w-full p-4 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:border-[#022B96] focus:bg-white transition"
+                    />
+                  </div>
+                </div>
+
+                <div className="pt-2 flex justify-end gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setSelectedRequest(null)}
+                    className="px-5 py-2.5 text-xs font-bold text-slate-500 hover:text-slate-700 rounded-xl transition cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    className="inline-flex items-center gap-2 px-6 py-2.5 bg-[#022B96] hover:bg-[#011a5e] text-white text-xs font-bold rounded-xl shadow-md transition cursor-pointer"
+                  >
+                    <Send className="h-3.5 w-3.5" />
+                    Submit Reply
+                  </button>
+                </div>
+              </form>
+            )}
+          </div>
+        </div>
+      )}
     </main>
   )
 }

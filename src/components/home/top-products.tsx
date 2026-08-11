@@ -8,20 +8,15 @@ interface TopProductsProps {
 }
 
 const COUNTRY_FLAGS: Record<string, string> = {
-  Norway: 'https://flagcdn.com/w40/no.png',
-  Spain: 'https://flagcdn.com/w40/es.png',
-  Greece: 'https://flagcdn.com/w40/gr.png',
-  Iceland: 'https://flagcdn.com/w40/is.png',
-  Vietnam: 'https://flagcdn.com/w40/vn.png',
-  Chile: 'https://flagcdn.com/w40/cl.png',
-  China: 'https://flagcdn.com/w40/cn.png',
-  Japan: 'https://flagcdn.com/w40/jp.png',
+  Belgium: 'https://flagcdn.com/w40/be.png',
+  Netherlands: 'https://flagcdn.com/w40/nl.png',
+  Germany: 'https://flagcdn.com/w40/de.png',
 }
 
 const DEFAULT_PRODUCTS = [
   {
     name: 'Mackerel',
-    origin: 'Norway',
+    origin: 'Belgium',
     avgPrice: '€5.31',
     suppliersCount: 20,
     slug: 'mackerel',
@@ -29,7 +24,7 @@ const DEFAULT_PRODUCTS = [
   },
   {
     name: 'Tuna',
-    origin: 'Spain',
+    origin: 'Netherlands',
     avgPrice: '€6.11',
     suppliersCount: 18,
     slug: 'tuna',
@@ -37,7 +32,7 @@ const DEFAULT_PRODUCTS = [
   },
   {
     name: 'Atlantic Cod',
-    origin: 'Greece',
+    origin: 'Germany',
     avgPrice: '€6.91',
     suppliersCount: 16,
     slug: 'atlantic-cod',
@@ -45,7 +40,7 @@ const DEFAULT_PRODUCTS = [
   },
   {
     name: 'Atlantic Salmon',
-    origin: 'Iceland',
+    origin: 'Belgium',
     avgPrice: '€7.71',
     suppliersCount: 14,
     slug: 'atlantic-salmon',
@@ -53,7 +48,7 @@ const DEFAULT_PRODUCTS = [
   },
   {
     name: 'Shrimp',
-    origin: 'Vietnam',
+    origin: 'Netherlands',
     avgPrice: '€8.51',
     suppliersCount: 12,
     slug: 'shrimp',
@@ -62,12 +57,15 @@ const DEFAULT_PRODUCTS = [
 ]
 
 export function TopProducts({ products }: TopProductsProps) {
+  const THREE_COUNTRIES = ['Belgium', 'Netherlands', 'Germany']
+
   const productsList = products.length > 0
     ? products.slice(0, 5).map((p, i) => {
         const fallback = DEFAULT_PRODUCTS[i % DEFAULT_PRODUCTS.length]
+        const assignedCountry = THREE_COUNTRIES[i % THREE_COUNTRIES.length]
         return {
           name: p.name,
-          origin: fallback.origin,
+          origin: assignedCountry,
           avgPrice: `€${(5.31 + (i * 0.8) % 4).toFixed(2)}`,
           suppliersCount: 20 - i * 2,
           slug: p.slug,
@@ -77,19 +75,19 @@ export function TopProducts({ products }: TopProductsProps) {
     : DEFAULT_PRODUCTS
 
   return (
-    <div className="py-6 bg-background text-foreground transition-all">
+    <div className="py-8 px-8 bg-background text-foreground transition-all border border-border rounded-2xl shadow-sm">
       <div className="flex items-center justify-between mb-6">
         <div>
           <h3 className="text-base font-extrabold text-foreground tracking-tight">Top Seafood Products</h3>
-          <p className="text-[11px] text-muted-foreground mt-0.5">Most demanded species in the spot market.</p>
+          <p className="text-[11px] text-muted-foreground mt-0.5">Most demanded species across Belgium, Netherlands, and Germany spot markets.</p>
         </div>
-        <Link href="/products" className="text-xs font-bold text-foreground hover:text-foreground/80 transition-colors inline-flex items-center gap-1 bg-muted px-3 py-1.5 rounded-sm border border-border">
+        <Link href="/products" className="text-xs font-bold text-foreground hover:text-foreground/80 transition-colors inline-flex items-center gap-1 bg-muted px-3 py-1.5 rounded-lg border border-border">
           View all
           <ArrowUpRight className="h-3.5 w-3.5" />
         </Link>
       </div>
 
-      <div className="overflow-x-auto">
+      <div className="overflow-x-auto rounded-xl border border-border">
         <table className="w-full text-left text-sm">
           <thead>
             <tr className="border-b border-slate-200 dark:border-slate-800 text-xs text-slate-500 font-medium">

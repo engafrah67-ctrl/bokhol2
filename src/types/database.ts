@@ -156,10 +156,46 @@ export interface BuyerRequest {
   updated_at: string
 }
 
+export interface BuyerRequestDetails {
+  productNeeded: string
+  quantity: string // e.g. "100 KG"
+  freshFrozen: string // "Fresh" | "Frozen" | "Fresh / Frozen"
+  location: string // e.g. "Amsterdam"
+  packagingProcessing: string // e.g. "packing/pure", "fillet"
+  deliveryDate: string // e.g. "Friday" or target date
+  additionalNotes?: string
+}
+
+export interface SupplierReply {
+  id: string
+  requestId: string
+  supplierId?: string
+  supplierName: string
+  pricePerKg: number
+  deliveryItem: string
+  message: string
+  createdAt: string
+}
+
+export interface SupplierProductListing {
+  id?: string
+  productName: string
+  pricePerKg: number | string
+  currency?: string
+  countryOfOrigin: string
+  freshFrozen: string
+  sizeWeight: string
+  packagingFillet: string
+  availability: string
+  location: string
+  supplierInfoExtra: string
+}
+
 export interface BuyerRequestWithRelations extends BuyerRequest {
   product?: Product
   country?: Country
   user?: User
+  replies?: SupplierReply[]
 }
 
 // ── market_indexes ────────────────────────────────────────────

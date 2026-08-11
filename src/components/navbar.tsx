@@ -35,6 +35,7 @@ export function Navbar() {
     { name: t('nav_products'),       href: '/products' },
     { name: t('nav_news'),           href: '/news' },
     { name: t('nav_about'),          href: '/about' },
+    { name: 'Membership',            href: '/membership' },
   ]
 
   const REQUEST_ITEMS = [

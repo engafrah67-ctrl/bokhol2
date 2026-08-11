@@ -28,11 +28,11 @@ export function MarketFeed({ news }: MarketFeedProps) {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 border border-border divide-y md:divide-y-0 md:divide-x divide-border">
+      <div className="grid grid-cols-1 md:grid-cols-3 border border-border divide-y md:divide-y-0 md:divide-x divide-border rounded-2xl overflow-hidden shadow-sm">
         {/* Column 1: Latest Supplier Updates */}
         <div className="p-6 flex flex-col justify-between hover:bg-muted/30 transition-all duration-200 group">
           <div>
-            <div className="flex items-center gap-2 text-xs font-bold text-foreground mb-4 bg-muted px-3 py-1.5 rounded-sm border border-border self-start w-fit">
+            <div className="flex items-center gap-2 text-xs font-bold text-foreground mb-4 bg-muted px-3 py-1.5 rounded-lg border border-border self-start w-fit">
               <Building2 className="h-3.5 w-3.5" />
               {t('feed_supplier_updates')}
             </div>
@@ -59,7 +59,7 @@ export function MarketFeed({ news }: MarketFeedProps) {
         {/* Column 2: Latest News */}
         <div className="p-6 flex flex-col justify-between hover:bg-muted/30 transition-all duration-200 group">
           <div>
-            <div className="flex items-center gap-2 text-xs font-bold text-foreground mb-4 bg-muted px-3 py-1.5 rounded-sm border border-border self-start w-fit">
+            <div className="flex items-center gap-2 text-xs font-bold text-foreground mb-4 bg-muted px-3 py-1.5 rounded-lg border border-border self-start w-fit">
               <Newspaper className="h-3.5 w-3.5" />
               {t('feed_latest_news')}
             </div>
@@ -83,7 +83,7 @@ export function MarketFeed({ news }: MarketFeedProps) {
         {/* Column 3: Latest Buyer Requests */}
         <div className="p-6 flex flex-col justify-between hover:bg-muted/30 transition-all duration-200 group">
           <div>
-            <div className="flex items-center gap-2 text-xs font-bold text-foreground mb-4 bg-muted px-3 py-1.5 rounded-sm border border-border self-start w-fit">
+            <div className="flex items-center gap-2 text-xs font-bold text-foreground mb-4 bg-muted px-3 py-1.5 rounded-lg border border-border self-start w-fit">
               <ShoppingBag className="h-3.5 w-3.5" />
               {t('feed_buyer_tenders')}
             </div>

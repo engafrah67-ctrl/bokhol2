@@ -24,6 +24,34 @@ import {
 } from 'lucide-react'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
+const DEFAULT_SUPPLIER_PRODUCTS = [
+  {
+    id: 'prod-1',
+    productName: 'Atlantic Salmon',
+    pricePerKg: '7.80 EUR',
+    countryOfOrigin: 'Norway',
+    freshFrozen: 'Fresh',
+    sizeWeight: 'Medium (3–5 kg)',
+    packagingFillet: 'Fillet (Skin On)',
+    availability: 'In Stock — Ready to Ship',
+    location: 'Alesund Port, Norway',
+    supplierInfoExtra: 'ASC & MSC certified. Global export cold chain guaranteed with 48h dispatch.',
+    customImage: '/fish-salmon.png'
+  },
+  {
+    id: 'prod-2',
+    productName: 'Yellowfin Tuna Loins',
+    pricePerKg: '14.50 EUR',
+    countryOfOrigin: 'Spain',
+    freshFrozen: 'Frozen',
+    sizeWeight: 'Large (> 5 kg)',
+    packagingFillet: 'Vacuum Packed Loin',
+    availability: 'Available within 7 days',
+    location: 'Vigo Port, Spain',
+    supplierInfoExtra: 'Sashimi grade -60°C ultra-deep frozen. HACCP and ISO 22000 certified.',
+    customImage: '/fish-tuna.png'
+  }
+]
 
 export default function SupplierProfilePage() {
   const params = useParams()
@@ -334,39 +362,88 @@ export default function SupplierProfilePage() {
           {/* RIGHT COL: Products + Posts */}
           <div className="lg:col-span-2 space-y-5">
             {/* Products */}
-            <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm">
-              <h2 className="text-sm font-bold text-slate-900 mb-4 flex items-center gap-1.5">
-                <Package className="h-4 w-4 text-blue-600" />
-                Seafood Products
-              </h2>
-              {products.length === 0 ? (
-                <div className="text-center py-8 text-slate-400">
-                  <Package className="h-8 w-8 mx-auto text-slate-300 mb-2" />
-                  <p className="text-sm">No products listed yet</p>
-                </div>
-              ) : (
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                  {products.map((product) => (
-                    <Link
-                      key={product.id}
-                      href={`/products/${product.slug}`}
-                      className="group flex flex-col items-center p-4 bg-slate-50 hover:bg-blue-50 border border-slate-100 hover:border-blue-200 rounded-xl transition text-center"
-                    >
-                      {product.image_url ? (
-                        <img src={product.image_url} alt={product.name} className="h-12 w-12 rounded-xl object-cover border border-slate-100 mb-2" />
-                      ) : (
-                        <div className="h-12 w-12 bg-blue-100 text-blue-600 rounded-xl flex items-center justify-center mb-2">
-                          <Package className="h-6 w-6" />
+            <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm space-y-4">
+              <div className="flex items-center justify-between">
+                <h2 className="text-base font-extrabold text-slate-900 flex items-center gap-2">
+                  <Package className="h-5 w-5 text-blue-600" />
+                  Product Listings ({products.length > 0 ? products.length : DEFAULT_SUPPLIER_PRODUCTS.length})
+                </h2>
+                <span className="text-xs font-bold text-[#022B96] bg-blue-50 px-2.5 py-1 rounded-md">
+                  Supplier Profile Products (9 Fields)
+                </span>
+              </div>
+
+              {/* 9-Field Product Cards List */}
+              <div className="grid grid-cols-1 gap-4">
+                {(products.length > 0 ? products : DEFAULT_SUPPLIER_PRODUCTS).map((product: any, idx: number) => {
+                  const pName = product.productName || product.name || 'Seafood Product'
+                  const pPrice = product.pricePerKg ? `${product.pricePerKg}/kg` : (product.price_per_kg ? `${product.currency || 'EUR'} ${product.price_per_kg}/kg` : 'Contact for price')
+                  const pOrigin = product.countryOfOrigin || product.country_of_origin || company?.country?.name || 'Global'
+                  const pFresh = product.freshFrozen || product.fresh_frozen || 'Fresh / Frozen'
+                  const pSize = product.sizeWeight || product.size_weight || 'Standard Size'
+                  const pPackaging = product.packagingFillet || product.packaging || 'Fillet / Packed'
+                  const pAvailability = product.availability || 'In Stock — Ready to Ship'
+                  const pLocation = product.location || company?.city || 'Main Port'
+                  const pExtra = product.supplierInfoExtra || product.supplier_info_extra || product.additional_info || 'Certified export quality seafood.'
+                  const pImg = product.customImage || product.image_url || '/fish-salmon.png'
+
+                  return (
+                    <div key={product.id || idx} className="bg-slate-50 border border-slate-200/80 hover:border-blue-300 rounded-2xl p-5 transition space-y-4 shadow-xs">
+                      {/* Product Header */}
+                      <div className="flex items-start justify-between gap-4">
+                        <div className="flex items-center gap-3.5">
+                          <div className="h-14 w-14 rounded-2xl bg-white border border-slate-200 flex items-center justify-center p-1 overflow-hidden shadow-xs shrink-0">
+                            {pImg ? (
+                              <img src={pImg} alt={pName} className="h-full w-full object-cover rounded-xl" />
+                            ) : (
+                              <Package className="h-7 w-7 text-blue-600" />
+                            )}
+                          </div>
+                          <div>
+                            <h3 className="text-base font-extrabold text-slate-900 leading-snug">{pName}</h3>
+                            <p className="text-xs font-bold text-blue-600 mt-0.5">{pPrice}</p>
+                          </div>
                         </div>
-                      )}
-                      <p className="text-xs font-bold text-slate-800 group-hover:text-blue-700 leading-tight">{product.name}</p>
-                      {product.category && (
-                        <p className="text-[10px] text-slate-400 mt-0.5">{product.category}</p>
-                      )}
-                    </Link>
-                  ))}
-                </div>
-              )}
+
+                        <span className="text-[11px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 px-3 py-1 rounded-full shrink-0">
+                          {pAvailability}
+                        </span>
+                      </div>
+
+                      {/* 9 Product Specification Grid */}
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 text-xs">
+                        <div className="bg-white p-2.5 rounded-xl border border-slate-100">
+                          <span className="text-[10px] font-bold uppercase text-slate-400 block">Country of Origin</span>
+                          <span className="font-bold text-slate-800">🌍 {pOrigin}</span>
+                        </div>
+                        <div className="bg-white p-2.5 rounded-xl border border-slate-100">
+                          <span className="text-[10px] font-bold uppercase text-slate-400 block">Fresh / Frozen</span>
+                          <span className="font-bold text-slate-800">❄️ {pFresh}</span>
+                        </div>
+                        <div className="bg-white p-2.5 rounded-xl border border-slate-100">
+                          <span className="text-[10px] font-bold uppercase text-slate-400 block">Size / Weight</span>
+                          <span className="font-bold text-slate-800">⚖️ {pSize}</span>
+                        </div>
+                        <div className="bg-white p-2.5 rounded-xl border border-slate-100">
+                          <span className="text-[10px] font-bold uppercase text-slate-400 block">Packaging / Cut</span>
+                          <span className="font-bold text-slate-800">📦 {pPackaging}</span>
+                        </div>
+                      </div>
+
+                      {/* Location & Supplier Extra Info */}
+                      <div className="pt-2 border-t border-slate-200/60 space-y-1.5 text-xs">
+                        <div className="flex items-center gap-1.5 text-slate-700 font-semibold">
+                          <MapPin className="h-3.5 w-3.5 text-red-500 shrink-0" />
+                          <span>Location: <strong>{pLocation}</strong></span>
+                        </div>
+                        <p className="text-slate-500 leading-relaxed text-[11px]">
+                          <strong>Supplier Info Extra:</strong> {pExtra}
+                        </p>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
             </div>
 
             {/* Posts */}

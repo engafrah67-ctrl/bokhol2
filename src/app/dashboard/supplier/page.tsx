@@ -772,12 +772,27 @@ export default function SupplierDashboardPage() {
             ) : (
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 {supplierPosts.map((post: any) => {
-                  const img = getFishImage(post.product_name)
+                  let parsed = post
+                  if (typeof post.content === 'string') {
+                    try { parsed = { ...post, ...JSON.parse(post.content) } } catch (_) {}
+                  }
+
+                  const pName = parsed.product_name || parsed.productName || 'Seafood Product'
+                  const pPrice = parsed.price_per_kg || parsed.pricePerKg ? `${parsed.currency || 'EUR'} ${parsed.price_per_kg || parsed.pricePerKg}/kg` : 'Contact for Price'
+                  const pOrigin = parsed.country_of_origin || parsed.countryOfOrigin || 'Norway'
+                  const pFresh = parsed.fresh_frozen || parsed.freshFrozen || 'Frozen'
+                  const pSize = parsed.size_weight || parsed.sizeWeight || 'Medium (1-3 kg)'
+                  const pPackaging = parsed.packaging || parsed.packagingFillet || 'Fillet Cut'
+                  const pAvailability = parsed.availability || 'In Stock — Ready to Ship'
+                  const pLocation = parsed.location || 'Urk, Netherlands'
+                  const pExtra = parsed.supplier_info_extra || parsed.supplierInfoExtra || parsed.additionalInfo || 'Export quality certified.'
+                  const img = getFishImage(pName)
+
                   return (
                     <div key={post.id} className="bg-white border border-slate-200 rounded-2xl p-5 hover:shadow-md transition space-y-4">
                       <div className="flex items-start gap-4">
                         {img ? (
-                          <img src={img} alt={post.product_name} className="h-16 w-16 rounded-2xl object-cover border border-slate-200 bg-slate-50 flex-shrink-0" />
+                          <img src={img} alt={pName} className="h-16 w-16 rounded-2xl object-cover border border-slate-200 bg-slate-50 flex-shrink-0" />
                         ) : (
                           <div className="h-16 w-16 rounded-2xl bg-blue-50 text-blue-500 flex items-center justify-center flex-shrink-0">
                             <Fish className="h-8 w-8" />
@@ -785,65 +800,62 @@ export default function SupplierDashboardPage() {
                         )}
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center justify-between gap-2">
-                            <h3 className="font-extrabold text-slate-900 text-base leading-tight truncate">{post.product_name}</h3>
+                            <h3 className="font-extrabold text-slate-900 text-base leading-tight truncate">{pName}</h3>
                             <span className="text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-100 px-2.5 py-1 rounded-full flex-shrink-0">
                               Active
                             </span>
                           </div>
-                          <p className="text-sm font-bold text-[#022B96] mt-1">
-                            {post.currency} {post.price_per_kg}/kg
-                          </p>
+                          <p className="text-sm font-bold text-[#022B96] mt-1">{pPrice}</p>
                           <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-slate-400 mt-1">
-                            {post.fresh_frozen && <span className="flex items-center gap-0.5">{post.fresh_frozen === 'Frozen' ? '❄️' : '🧊'} {post.fresh_frozen}</span>}
-                            {post.country_of_origin && <span>• 🌍 {post.country_of_origin}</span>}
-                            {post.location && <span>• <MapPin className="h-2.5 w-2.5 inline" /> {post.location}</span>}
+                            <span>❄️ {pFresh}</span>
+                            <span>• 🌍 {pOrigin}</span>
+                            <span>• <MapPin className="h-2.5 w-2.5 inline" /> {pLocation}</span>
                           </div>
                         </div>
                       </div>
 
-                      <div className="grid grid-cols-2 gap-3">
-                        {post.quantity && (
-                          <div className="bg-slate-50 rounded-xl p-3 border border-slate-100">
-                            <p className="text-[10px] font-bold uppercase text-slate-400 tracking-wider">Quantity</p>
-                            <p className="text-sm font-bold text-slate-700 mt-0.5">{post.quantity} {post.quantity_unit}</p>
-                          </div>
-                        )}
-                        {post.availability && (
-                          <div className="bg-slate-50 rounded-xl p-3 border border-slate-100">
-                            <p className="text-[10px] font-bold uppercase text-slate-400 tracking-wider">Availability</p>
-                            <p className="text-xs font-semibold text-slate-700 mt-0.5 leading-tight">{post.availability}</p>
-                          </div>
-                        )}
-                        {post.packaging && (
-                          <div className="bg-slate-50 rounded-xl p-3 border border-slate-100">
-                            <p className="text-[10px] font-bold uppercase text-slate-400 tracking-wider">Packaging</p>
-                            <p className="text-xs font-semibold text-slate-700 mt-0.5">{post.packaging}</p>
-                          </div>
-                        )}
-                        {post.min_order_kg && (
-                          <div className="bg-slate-50 rounded-xl p-3 border border-slate-100">
-                            <p className="text-[10px] font-bold uppercase text-slate-400 tracking-wider">Min Order</p>
-                            <p className="text-sm font-bold text-slate-700 mt-0.5">{post.min_order_kg} kg</p>
-                          </div>
-                        )}
+                      {/* 9 Specs Grid */}
+                      <div className="grid grid-cols-2 gap-2 text-xs">
+                        <div className="bg-slate-50 rounded-xl p-2.5 border border-slate-100">
+                          <p className="text-[10px] font-bold uppercase text-slate-400 tracking-wider">5. Size / Weight</p>
+                          <p className="font-bold text-slate-700 mt-0.5">{pSize}</p>
+                        </div>
+                        <div className="bg-slate-50 rounded-xl p-2.5 border border-slate-100">
+                          <p className="text-[10px] font-bold uppercase text-slate-400 tracking-wider">6. Packaging / Cut</p>
+                          <p className="font-bold text-slate-700 mt-0.5">{pPackaging}</p>
+                        </div>
+                        <div className="bg-slate-50 rounded-xl p-2.5 border border-slate-100">
+                          <p className="text-[10px] font-bold uppercase text-slate-400 tracking-wider">7. Availability</p>
+                          <p className="font-bold text-slate-700 mt-0.5">{pAvailability}</p>
+                        </div>
+                        <div className="bg-slate-50 rounded-xl p-2.5 border border-slate-100">
+                          <p className="text-[10px] font-bold uppercase text-slate-400 tracking-wider">8. Location</p>
+                          <p className="font-bold text-slate-700 mt-0.5">{pLocation}</p>
+                        </div>
                       </div>
 
-                      {post.certifications?.length > 0 && (
-                        <div className="flex flex-wrap gap-1.5">
-                          {post.certifications.map((cert: string) => (
-                            <span key={cert} className="text-[10px] font-bold bg-blue-50 text-blue-700 border border-blue-100 px-2 py-0.5 rounded-full">
-                              {cert}
-                            </span>
-                          ))}
-                        </div>
-                      )}
+                      <div className="bg-blue-50/50 p-2.5 rounded-xl border border-blue-100/60 text-xs">
+                        <p className="text-[10px] font-bold uppercase text-blue-900 tracking-wider">9. Supplier Extra Info</p>
+                        <p className="text-slate-600 font-medium mt-0.5">{pExtra}</p>
+                      </div>
 
                       <div className="flex items-center justify-between text-xs text-slate-400 pt-2 border-t border-slate-100">
                         <span className="flex items-center gap-1">
                           <Clock className="h-3 w-3" />
-                          {new Date(post.created_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}
+                          {new Date(post.created_at || Date.now()).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}
                         </span>
-                        <button className="text-xs text-red-500 hover:underline cursor-pointer font-medium">Delete</button>
+                        <button
+                          onClick={() => {
+                            const updated = supplierPosts.filter((p: any) => p.id !== post.id)
+                            setSupplierPosts(updated)
+                            if (typeof window !== 'undefined') {
+                              localStorage.setItem('supplier_posts', JSON.stringify(updated))
+                            }
+                          }}
+                          className="text-xs text-red-500 hover:underline cursor-pointer font-medium"
+                        >
+                          Delete
+                        </button>
                       </div>
                     </div>
                   )

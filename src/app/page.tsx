@@ -4,6 +4,8 @@ import { PartnersSection } from '@/components/home/partners-section'
 import { SeafoodIndexCard } from '@/components/home/seafood-index'
 import { TopProducts } from '@/components/home/top-products'
 import { MarketFeed } from '@/components/home/market-feed'
+import { ExpertProfile } from '@/components/home/expert-profile'
+import { FAQSection } from '@/components/home/faq-section'
 import { StatsBar } from '@/components/home/stats-bar'
 import { Product, NewsArticle } from '@/types/database'
 
@@ -43,6 +45,12 @@ export default async function HomePage() {
 
         {/* 3. Top Seafood Products */}
         <TopProducts products={(products as Product[]) || []} />
+
+        {/* 3.5 Expert Profile — Hassan Abdulkadir */}
+        <ExpertProfile />
+
+        {/* 3.75 FAQ Section */}
+        <FAQSection />
 
         {/* 4. Market Feed */}
         <MarketFeed news={(news as NewsArticle[]) || []} />

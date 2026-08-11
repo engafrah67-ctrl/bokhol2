@@ -14,7 +14,7 @@ export interface CompanyProfile {
   description: string
   logoUrl?: string
   bannerColor?: string
-  status: 'unclaimed' | 'claim_requested' | 'claimed'
+  status: 'unclaimed' | 'claim_requested' | 'claimed' | 'rejected'
   isVerified: boolean
   isFoundingMember?: boolean
   isPublicListing: boolean
@@ -27,6 +27,7 @@ export interface CompanyProfile {
     jobTitle: string
     phone: string
     requestedAt: string
+    rejectionReason?: string
   }
 }
 
