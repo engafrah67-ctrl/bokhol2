@@ -48,7 +48,7 @@ export function ClaimProfileModal({ company, isOpen, onClose, onSuccess }: Claim
     setLoading(true)
 
     setTimeout(() => {
-      const ok = requestProfileClaim(company.id, {
+      const res = requestProfileClaim(company.id, {
         fullName: fullName.trim(),
         businessEmail: businessEmail.trim(),
         jobTitle: jobTitle.trim(),
@@ -56,7 +56,7 @@ export function ClaimProfileModal({ company, isOpen, onClose, onSuccess }: Claim
       })
 
       setLoading(false)
-      if (ok) {
+      if (res.success) {
         setSubmitted(true)
         setTimeout(() => {
           onSuccess()
@@ -64,7 +64,7 @@ export function ClaimProfileModal({ company, isOpen, onClose, onSuccess }: Claim
           setSubmitted(false)
         }, 2200)
       } else {
-        setError('Failed to submit claim request. Please try again.')
+        setError(res.error || 'Failed to submit claim request. Please try again.')
       }
     }, 600)
   }

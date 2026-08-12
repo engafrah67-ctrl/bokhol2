@@ -57,10 +57,19 @@ export function Navbar() {
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [])
 
-  const { user, profile, isLoading } = useUser()
-  const badge = profile?.role ? ROLE_BADGE[profile.role] : null
+  const { user, profile, role, isLoading } = useUser()
+  const activeRole = role || (user?.email === 'admin@gmail.com' ? 'admin' : profile?.role)
+  const badge = activeRole ? ROLE_BADGE[activeRole] : null
   const isHome = pathname === '/'
   const currentLocale = LOCALES.find(l => l.code === locale)!
+
+  const handleSignOut = async () => {
+    try {
+      const supabase = createClient()
+      await supabase.auth.signOut()
+    } catch (_) {}
+    window.location.href = '/'
+  }
 
   return (
     <nav
@@ -184,7 +193,7 @@ export function Navbar() {
                     {badge.label}
                   </span>
                 )}
-                {profile?.role === 'buyer' ? (
+                {activeRole === 'buyer' ? (
                   <Link href="/requests/buyer/new">
                     <Button size="sm" className="gap-2 cursor-pointer font-semibold rounded-lg bg-[#022B96] hover:bg-[#011a5e] text-white">
                       <Plus className="h-4 w-4" />
@@ -192,23 +201,22 @@ export function Navbar() {
                     </Button>
                   </Link>
                 ) : (
-                  <Link href="/dashboard">
+                  <Link href={activeRole === 'admin' ? '/dashboard/admin' : '/dashboard'}>
                     <Button variant="ghost" size="sm" className="gap-2 cursor-pointer font-semibold rounded-lg hover:bg-muted">
                       <LayoutDashboard className="h-4 w-4" />
-                      {t('nav_dashboard')}
+                      {activeRole === 'admin' ? 'Admin Panel' : t('nav_dashboard')}
                     </Button>
                   </Link>
                 )}
-                <form action={signOut}>
-                  <Button
-                    type="submit"
-                    variant="outline"
-                    size="sm"
-                    className="cursor-pointer font-semibold rounded-lg hover:bg-muted/80 transition-all"
-                  >
-                    {t('nav_sign_out')}
-                  </Button>
-                </form>
+                <Button
+                  type="button"
+                  onClick={handleSignOut}
+                  variant="outline"
+                  size="sm"
+                  className="cursor-pointer font-semibold rounded-lg hover:bg-muted/80 transition-all"
+                >
+                  {t('nav_sign_out')}
+                </Button>
               </div>
             ) : (
               /* Guest State */
@@ -325,11 +333,14 @@ export function Navbar() {
                     </Button>
                   </Link>
                 )}
-                <form action={signOut}>
-                  <Button type="submit" variant="ghost" className="w-full cursor-pointer mt-2">
-                    {t('nav_sign_out')}
-                  </Button>
-                </form>
+                <Button
+                  type="button"
+                  onClick={() => { setIsOpen(false); handleSignOut() }}
+                  variant="ghost"
+                  className="w-full cursor-pointer mt-2"
+                >
+                  {t('nav_sign_out')}
+                </Button>
               </>
             ) : (
               <>

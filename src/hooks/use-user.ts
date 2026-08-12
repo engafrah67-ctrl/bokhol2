@@ -28,56 +28,50 @@ export function useUser(): UseUserReturn {
   const supabase = createClient()
 
   useEffect(() => {
-    // 1. Get current session from local storage (fast, no rate limits)
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      const currentUser = session?.user ?? null
-      setUser(currentUser)
-      if (currentUser) {
-        fetchProfile(currentUser)
-      } else {
-        // Fallback to getUser() only if getSession() returned no user
-        supabase.auth.getUser().then(({ data: { user: fallbackUser } }) => {
-          setUser(fallbackUser ?? null)
-          if (fallbackUser) fetchProfile(fallbackUser)
-          else setIsLoading(false)
-        }).catch(() => setIsLoading(false))
-      }
-    }).catch(() => setIsLoading(false))
+    let isMounted = true
 
-    // 2. Subscribe to auth state changes
+    // Subscribe to auth state changes.
+    // Supabase onAuthStateChange automatically emits the initial session (INITIAL_SESSION)
+    // as well as SIGNED_IN, SIGNED_OUT, and TOKEN_REFRESHED events cleanly.
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      (event, session) => {
-        // Ignore TOKEN_REFRESHED events if we already have user state to avoid unnecessary re-fetches
-        if (event === 'TOKEN_REFRESHED' && user) return
-
+      async (event: string, session: any) => {
         const currentUser = session?.user ?? null
-        setUser(currentUser)
-        if (currentUser) {
-          fetchProfile(currentUser)
-        } else if (event === 'SIGNED_OUT') {
+
+        if (currentUser && isMounted) {
+          setUser(currentUser)
+          await fetchProfile(currentUser)
+        } else if (isMounted) {
+          setUser(null)
           setProfile(null)
           setIsLoading(false)
         }
       }
     )
 
-    return () => subscription.unsubscribe()
+    return () => {
+      isMounted = false
+      subscription.unsubscribe()
+    }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   async function fetchProfile(currentUser: User) {
     try {
-      const { data, error } = await supabase
+      const { data } = await supabase
         .from('users')
         .select('id, role, full_name, avatar_url, company_id')
         .eq('id', currentUser.id)
         .maybeSingle()
 
+      const isAdmin = currentUser.email === 'admin@gmail.com'
+
       if (data) {
-        setProfile(data)
+        setProfile({
+          ...data,
+          role: isAdmin ? 'admin' : data.role,
+        })
       } else {
-        // Fallback profile if database row doesn't exist or returns 406/error
-        const fallbackRole = (currentUser.user_metadata?.role as UserRole) || 'supplier'
+        const fallbackRole = isAdmin ? 'admin' : (currentUser.user_metadata?.role as UserRole) || 'buyer'
         setProfile({
           id: currentUser.id,
           role: fallbackRole,
@@ -87,7 +81,8 @@ export function useUser(): UseUserReturn {
         })
       }
     } catch (_) {
-      const fallbackRole = (currentUser.user_metadata?.role as UserRole) || 'supplier'
+      const isAdmin = currentUser.email === 'admin@gmail.com'
+      const fallbackRole = isAdmin ? 'admin' : (currentUser.user_metadata?.role as UserRole) || 'buyer'
       setProfile({
         id: currentUser.id,
         role: fallbackRole,
@@ -100,10 +95,15 @@ export function useUser(): UseUserReturn {
     }
   }
 
+  const effectiveRole: UserRole | null =
+    user?.email === 'admin@gmail.com'
+      ? 'admin'
+      : profile?.role ?? (user?.user_metadata?.role as UserRole) ?? null
+
   return {
     user,
     profile,
-    role: profile?.role ?? (user?.user_metadata?.role as UserRole) ?? null,
+    role: effectiveRole,
     isLoading,
     isAuthenticated: !!user,
   }

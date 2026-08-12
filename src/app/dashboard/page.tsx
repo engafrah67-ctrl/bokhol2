@@ -10,6 +10,9 @@ export default async function DashboardRedirectPage() {
     redirect('/login')
   }
 
+  // Check if user is the admin account
+  const isAdminEmail = user.email === 'admin@gmail.com'
+
   // Try to get user profile from public.users
   const { data: profile } = await supabase
     .from('users')
@@ -18,6 +21,17 @@ export default async function DashboardRedirectPage() {
     .maybeSingle()
 
   let role = profile?.role
+
+  // If admin email, ensure database role is set to 'admin'
+  if (isAdminEmail && role !== 'admin') {
+    const fullName = user.user_metadata?.full_name || 'Administrator'
+    await supabase.from('users').upsert({
+      id: user.id,
+      full_name: fullName,
+      role: 'admin',
+    })
+    role = 'admin'
+  }
 
   // If user profile is missing in public.users, create it now
   if (!role) {
@@ -33,10 +47,10 @@ export default async function DashboardRedirectPage() {
     role = userRole
   }
 
-  if (role === 'supplier') {
-    redirect('/dashboard/supplier')
-  } else if (role === 'admin') {
+  if (role === 'admin') {
     redirect('/dashboard/admin')
+  } else if (role === 'supplier') {
+    redirect('/dashboard/supplier')
   } else {
     redirect('/dashboard/buyer')
   }

@@ -2,45 +2,50 @@
 
 import React from 'react'
 import Image from 'next/image'
-import { useLanguage } from '@/contexts/language-context'
 
 export interface Partner {
   name: string
   logo: string
 }
 
-const PARTNERS: Partner[] = [
-  { name: 'DAYSEADAY', logo: '/partners/dayseaday.png' },
-  { name: 'AM fish', logo: '/partners/am-fish.png' },
-  { name: 'ATL SEAFOOD', logo: '/partners/atl-seafood.png' },
-  { name: 'ANT SEAFOOD', logo: '/partners/ant-seafood.png' },
-  { name: 'amacore', logo: '/partners/amacore.png' },
-  { name: 'BLUE WORLD SEAFOOD', logo: '/partners/blue-world-seafood.png' },
+const BUYER_PARTNERS: Partner[] = [
+  { name: 'Van der Valk', logo: '/partners/buyers/van-der-valk.png' },
+  { name: 'Tasty Food', logo: '/partners/buyers/tasty-food.png' },
+  { name: 'Horeca Club Antwerpen', logo: '/partners/buyers/horeca-club.png' },
+  { name: 'CPH Hotels', logo: '/partners/buyers/cph-hotels.png' },
+  { name: 'Klüt Hotel Hameln', logo: '/partners/buyers/klut-hotel.png' },
+  { name: 'NH Hotels', logo: '/partners/buyers/nh-hotels.png' },
+  { name: 'Alexander Hotel', logo: '/partners/buyers/alexander-hotel.png' },
+  { name: 'Hokkai', logo: '/partners/buyers/hokkai.png' },
+  { name: 'NLG Restaurant', logo: '/partners/buyers/nlg-restaurant.png' },
 ]
 
 export function PartnersSection() {
-  const { t } = useLanguage()
-  const marqueePartners = [...PARTNERS, ...PARTNERS, ...PARTNERS, ...PARTNERS]
+  const marqueePartners = [
+    ...BUYER_PARTNERS,
+    ...BUYER_PARTNERS,
+    ...BUYER_PARTNERS,
+  ]
 
   return (
     <section className="relative w-full py-10 bg-slate-50/50 dark:bg-slate-950/50 border-y border-slate-200/50 dark:border-slate-800/50 overflow-hidden">
       
-      {/* Centered Minimal Header */}
+      {/* Centered Title */}
       <div className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mb-6 text-center">
-        <p className="text-sm font-medium text-slate-500 dark:text-slate-400">
-          {t('partners_title')}
+        <p className="text-sm sm:text-base font-extrabold text-foreground tracking-tight uppercase">
+          Our EU Buyers Partners
         </p>
       </div>
 
-      {/* Frameless Floating Ticker */}
+      {/* Floating Ticker */}
       <div className="relative z-10 w-full overflow-hidden">
         
-        {/* Soft Fading Edges */}
+        {/* Fading Edges */}
         <div className="absolute top-0 bottom-0 left-0 w-16 sm:w-36 z-20 pointer-events-none bg-gradient-to-r from-slate-50/90 dark:from-slate-950/90 via-slate-50/50 dark:via-slate-950/50 to-transparent" />
         <div className="absolute top-0 bottom-0 right-0 w-16 sm:w-36 z-20 pointer-events-none bg-gradient-to-l from-slate-50/90 dark:from-slate-950/90 via-slate-50/50 dark:via-slate-950/50 to-transparent" />
 
         {/* Scrolling Track */}
-        <div className="flex w-max animate-marquee space-x-10 sm:space-x-16 items-center py-2 px-6">
+        <div className="flex w-max animate-marquee space-x-12 sm:space-x-20 items-center py-2 px-6">
           {marqueePartners.map((partner, idx) => (
             <div
               key={`${partner.name}-${idx}`}
@@ -49,9 +54,9 @@ export function PartnersSection() {
               <Image
                 src={partner.logo}
                 alt={`${partner.name} logo`}
-                width={180}
-                height={60}
-                className="h-10 sm:h-12 w-auto object-contain rounded-md"
+                width={200}
+                height={70}
+                className="h-12 sm:h-16 w-auto object-contain rounded-md mix-blend-multiply dark:invert"
               />
             </div>
           ))}

@@ -345,13 +345,21 @@ export function requestProfileClaim(
     jobTitle: string
     phone: string
   }
-): boolean {
+): { success: boolean; error?: string } {
   const companies = getStoredCompanies()
   const idx = companies.findIndex((c) => c.id === companyId)
-  if (idx === -1) return false
+  if (idx === -1) return { success: false, error: 'Company profile not found.' }
+
+  const current = companies[idx]
+  if (current.status === 'claimed') {
+    return { success: false, error: 'This company profile has already been claimed and verified.' }
+  }
+  if (current.status === 'claim_requested') {
+    return { success: false, error: 'A claim request is already pending verification for this company.' }
+  }
 
   companies[idx] = {
-    ...companies[idx],
+    ...current,
     status: 'claim_requested',
     claimRequest: {
       ...claimData,
@@ -360,7 +368,7 @@ export function requestProfileClaim(
   }
 
   saveCompanies(companies)
-  return true
+  return { success: true }
 }
 
 export function approveProfileClaim(companyId: string): boolean {
@@ -379,15 +387,22 @@ export function approveProfileClaim(companyId: string): boolean {
   return true
 }
 
-export function rejectProfileClaim(companyId: string): boolean {
+export function rejectProfileClaim(companyId: string, reason?: string): boolean {
   const companies = getStoredCompanies()
   const idx = companies.findIndex((c) => c.id === companyId)
   if (idx === -1) return false
 
+  const existingRequest = companies[idx].claimRequest
+
   companies[idx] = {
     ...companies[idx],
-    status: 'unclaimed',
-    claimRequest: undefined,
+    status: 'rejected',
+    claimRequest: existingRequest
+      ? {
+          ...existingRequest,
+          rejectionReason: reason || 'Business verification could not be completed.',
+        }
+      : undefined,
   }
 
   saveCompanies(companies)
