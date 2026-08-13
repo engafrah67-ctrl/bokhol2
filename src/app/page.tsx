@@ -49,14 +49,14 @@ export default async function HomePage() {
         {/* 3.5 Expert Profile — Hassan Abdulkadir */}
         <ExpertProfile />
 
-        {/* 3.75 FAQ Section */}
-        <FAQSection />
-
         {/* 4. Market Feed */}
         <MarketFeed news={(news as NewsArticle[]) || []} />
 
         {/* 5. Bottom Stats Bar */}
         <StatsBar />
+
+        {/* FAQ Section — just before footer */}
+        <FAQSection />
       </div>
     </div>
   )
