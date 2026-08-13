@@ -23,7 +23,15 @@ export function BlurGate({ children, blurPx = 4, forceBlur = false }: BlurGatePr
     return <span className="inline-block rounded bg-slate-100 animate-pulse w-14 h-3.5" />
   }
 
-  if (user && !forceBlur) {
+  // Check if user is logged in or has active session cookie/storage indicator
+  const hasAuthCookie = typeof document !== 'undefined' && (
+    document.cookie.includes('sb-') ||
+    document.cookie.includes('auth') ||
+    !!localStorage.getItem('sb-supplier') ||
+    !!localStorage.getItem('supplier_posts')
+  )
+
+  if ((user || hasAuthCookie) && !forceBlur) {
     return <>{children}</>
   }
 

@@ -17,16 +17,11 @@ import {
   Eye,
   Loader2,
   AlertCircle,
-  Plus,
   X,
   User,
-  Mail,
-  Phone,
-  Briefcase,
-  ChevronRight,
-  SlidersHorizontal,
   Calendar,
   Check,
+  DollarSign,
 } from 'lucide-react'
 import {
   CompanyProfile,
@@ -34,6 +29,12 @@ import {
   approveProfileClaim,
   rejectProfileClaim,
 } from '@/lib/data/companies-data'
+import {
+  getStoredSupplierPosts,
+  updateProductPrice,
+  getFishImageForProduct,
+  SupplierPost,
+} from '@/lib/data/products-data'
 
 export default function AdminDashboardPage() {
   const router = useRouter()
@@ -42,10 +43,8 @@ export default function AdminDashboardPage() {
   const [loading, setLoading] = useState(true)
   const [authorized, setAuthorized] = useState(false)
 
-  // Sidebar active state
   const [activeNav, setActiveNav] = useState<'overview' | 'verification' | 'posts' | 'indexes' | 'users'>('verification')
 
-  // Real Database Metrics State
   const [stats, setStats] = useState({
     totalUsers: 0,
     totalBuyers: 0,
@@ -53,16 +52,18 @@ export default function AdminDashboardPage() {
     totalBuyerRequests: 0,
   })
 
-  // Company Claim & Verification State
   const [companies, setCompanies] = useState<CompanyProfile[]>([])
-  const [supplierPosts, setSupplierPosts] = useState<any[]>([])
+  const [supplierPosts, setSupplierPosts] = useState<SupplierPost[]>([])
 
-  // Filters & Search
+  const [updatingPostModal, setUpdatingPostModal] = useState<SupplierPost | null>(null)
+  const [updatePriceInput, setUpdatePriceInput] = useState<string>('')
+  const [updateCurrencyInput, setUpdateCurrencyInput] = useState<string>('EUR')
+  const [updateAvailInput, setUpdateAvailInput] = useState<string>('In Stock — Ready to Ship')
+  const [priceUpdateMsg, setPriceUpdateMsg] = useState<string | null>(null)
+
   const [searchQuery, setSearchQuery] = useState('')
   const [claimFilter, setClaimFilter] = useState<'all' | 'pending' | 'claimed' | 'rejected'>('pending')
-  const [postFilter, setPostFilter] = useState<'all' | 'active' | 'pending'>('all')
 
-  // Selected company for detail inspection modal
   const [selectedCompanyModal, setSelectedCompanyModal] = useState<CompanyProfile | null>(null)
   const [rejectionReasonInput, setRejectionReasonInput] = useState('')
 
@@ -117,14 +118,7 @@ export default function AdminDashboardPage() {
           totalBuyerRequests: totalReq,
         })
 
-        if (typeof window !== 'undefined') {
-          try {
-            const stored = JSON.parse(localStorage.getItem('supplier_posts') || '[]')
-            if (stored && Array.isArray(stored)) {
-              setSupplierPosts(stored)
-            }
-          } catch (_) {}
-        }
+        setSupplierPosts(getStoredSupplierPosts())
       } catch (err) {
         console.error('Admin initialization error:', err)
       } finally {
@@ -138,18 +132,14 @@ export default function AdminDashboardPage() {
   const handleApproveClaim = (companyId: string) => {
     approveProfileClaim(companyId)
     reloadCompanies()
-    if (selectedCompanyModal?.id === companyId) {
-      setSelectedCompanyModal(null)
-    }
+    if (selectedCompanyModal?.id === companyId) setSelectedCompanyModal(null)
   }
 
   const handleRejectClaim = (companyId: string) => {
     rejectProfileClaim(companyId, rejectionReasonInput || undefined)
     reloadCompanies()
     setRejectionReasonInput('')
-    if (selectedCompanyModal?.id === companyId) {
-      setSelectedCompanyModal(null)
-    }
+    if (selectedCompanyModal?.id === companyId) setSelectedCompanyModal(null)
   }
 
   const pendingClaims = companies.filter((c) => c.status === 'claim_requested')
@@ -157,19 +147,17 @@ export default function AdminDashboardPage() {
   const rejectedClaims = companies.filter((c) => c.status === 'rejected')
 
   const filteredClaims = companies.filter((c) => {
-    // Status filter
     if (claimFilter === 'pending' && c.status !== 'claim_requested') return false
     if (claimFilter === 'claimed' && c.status !== 'claimed') return false
     if (claimFilter === 'rejected' && c.status !== 'rejected') return false
-
-    // Search query filter
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase()
-      const matchesName = c.name.toLowerCase().includes(q)
-      const matchesCountry = c.country.toLowerCase().includes(q)
-      const matchesApplicant = c.claimRequest?.fullName?.toLowerCase().includes(q) || false
-      const matchesEmail = c.claimRequest?.businessEmail?.toLowerCase().includes(q) || false
-      return matchesName || matchesCountry || matchesApplicant || matchesEmail
+      return (
+        c.name.toLowerCase().includes(q) ||
+        c.country.toLowerCase().includes(q) ||
+        (c.claimRequest?.fullName?.toLowerCase().includes(q) ?? false) ||
+        (c.claimRequest?.businessEmail?.toLowerCase().includes(q) ?? false)
+      )
     }
     return true
   })
@@ -195,49 +183,39 @@ export default function AdminDashboardPage() {
 
   return (
     <div className="min-h-screen bg-slate-100/70 py-6 px-4 sm:px-6 lg:px-8 font-sans">
-      
-      {/* ── Main Dashboard Container with Curved Sidebar ── */}
+
+      {/* ── Main Dashboard Container ── */}
       <div className="max-w-7xl mx-auto bg-white rounded-3xl shadow-xl border border-slate-200/80 overflow-hidden flex flex-col lg:flex-row min-h-[780px]">
-        
-        {/* ── Left Sidebar (Vibrant Blue #022B96) ── */}
-        <aside className="w-full lg:w-64 bg-[#022B96] text-white p-6 flex flex-col justify-between shrink-0 relative">
+
+        {/* ── Left Sidebar ── */}
+        <aside className="w-full lg:w-64 bg-[#022B96] text-white p-6 flex flex-col justify-between shrink-0">
           <div>
-            {/* Branding Header */}
             <div className="flex items-center gap-3 mb-10">
-              <div className="w-10 h-10 rounded-2xl bg-white text-[#022B96] font-black text-lg flex items-center justify-center shadow-md">
-                B
-              </div>
+              <div className="w-10 h-10 rounded-2xl bg-white text-[#022B96] font-black text-lg flex items-center justify-center shadow-md">B</div>
               <div>
                 <h2 className="text-base font-black text-white tracking-tight leading-none">Bokhol</h2>
                 <span className="text-[10px] text-blue-200 font-bold uppercase tracking-widest">Admin Center</span>
               </div>
             </div>
 
-            {/* Navigation Menu */}
             <nav className="space-y-2">
               {SIDEBAR_ITEMS.map((item) => {
                 const Icon = item.icon
                 const isActive = activeNav === item.key
-
                 return (
                   <button
                     key={item.key}
                     onClick={() => setActiveNav(item.key as any)}
                     className={`w-full flex items-center justify-between px-4 py-3.5 rounded-2xl text-xs font-bold transition-all duration-200 cursor-pointer ${
-                      isActive
-                        ? 'bg-white text-[#022B96] shadow-lg translate-x-1'
-                        : 'text-blue-100 hover:bg-white/10 hover:text-white'
+                      isActive ? 'bg-white text-[#022B96] shadow-lg translate-x-1' : 'text-blue-100 hover:bg-white/10 hover:text-white'
                     }`}
                   >
                     <div className="flex items-center gap-3">
                       <Icon className={`w-4 h-4 ${isActive ? 'text-[#022B96]' : 'text-blue-200'}`} />
                       <span>{item.label}</span>
                     </div>
-
                     {item.badge !== undefined && item.badge > 0 && (
-                      <span className={`text-[10px] font-black px-2 py-0.5 rounded-full ${
-                        isActive ? 'bg-[#022B96] text-white' : 'bg-white/20 text-white'
-                      }`}>
+                      <span className={`text-[10px] font-black px-2 py-0.5 rounded-full ${isActive ? 'bg-[#022B96] text-white' : 'bg-white/20 text-white'}`}>
                         {item.badge}
                       </span>
                     )}
@@ -247,7 +225,6 @@ export default function AdminDashboardPage() {
             </nav>
           </div>
 
-          {/* Footer note inside sidebar */}
           <div className="pt-6 border-t border-blue-400/20 text-[11px] text-blue-200 font-medium">
             <p className="font-bold text-white">Bokhol FishMarketCap</p>
             <p className="text-[10px] opacity-75 mt-0.5">Admin Security Console v2.4</p>
@@ -256,22 +233,18 @@ export default function AdminDashboardPage() {
 
         {/* ── Right Content Area ── */}
         <main className="flex-1 p-6 sm:p-10 bg-slate-50/50 flex flex-col justify-between">
-          
           <div>
-            {/* ══ VIEW 1: VERIFICATION REQUESTS (DEFAULT) ════════════════ */}
+
+            {/* VIEW 1: VERIFICATION */}
             {activeNav === 'verification' && (
               <div className="space-y-6">
-                
-                {/* Header Row */}
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                   <div>
                     <h1 className="text-2xl font-black text-slate-900 tracking-tight">Supplier Profile Claims</h1>
                     <p className="text-xs text-slate-500 mt-1 font-medium">
-                      {filteredClaims.length} verification requests found · Review company profile claims &amp; domain matching
+                      {filteredClaims.length} verification requests found
                     </p>
                   </div>
-
-                  {/* Search Input */}
                   <div className="relative w-full sm:w-64">
                     <Search className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
                     <input
@@ -284,14 +257,13 @@ export default function AdminDashboardPage() {
                   </div>
                 </div>
 
-                {/* Filter Tabs */}
                 <div className="flex items-center justify-between border-b border-slate-200/80 pb-3">
                   <div className="flex items-center gap-6">
                     {[
-                      { key: 'pending', label: 'Pending Verification', count: pendingClaims.length },
+                      { key: 'pending', label: 'Pending', count: pendingClaims.length },
                       { key: 'claimed', label: 'Approved', count: claimedCompanies.length },
                       { key: 'rejected', label: 'Rejected', count: rejectedClaims.length },
-                      { key: 'all', label: 'All Requests', count: companies.length },
+                      { key: 'all', label: 'All', count: companies.length },
                     ].map(({ key, label, count }) => (
                       <button
                         key={key}
@@ -306,25 +278,22 @@ export default function AdminDashboardPage() {
                       </button>
                     ))}
                   </div>
-
                   <div className="hidden sm:flex items-center gap-2 text-xs font-semibold text-slate-400">
                     <Calendar className="w-3.5 h-3.5" />
                     <span>Updated Live</span>
                   </div>
                 </div>
 
-                {/* Data Rows Table */}
                 {filteredClaims.length === 0 ? (
                   <div className="bg-white border border-slate-200 rounded-2xl p-12 text-center space-y-2 shadow-xs">
                     <div className="w-12 h-12 rounded-2xl bg-slate-100 text-slate-400 flex items-center justify-center mx-auto">
                       <CheckCircle2 className="w-6 h-6" />
                     </div>
                     <h3 className="text-sm font-bold text-slate-800">No requests found</h3>
-                    <p className="text-xs text-slate-400">There are no verification requests matching your query or filter.</p>
+                    <p className="text-xs text-slate-400">No verification requests match your query or filter.</p>
                   </div>
                 ) : (
                   <div className="space-y-3">
-                    {/* Table Header */}
                     <div className="hidden md:grid grid-cols-12 gap-4 px-6 py-2 text-[10px] font-extrabold uppercase tracking-wider text-slate-400">
                       <div className="col-span-3">Company / Id</div>
                       <div className="col-span-3">Applicant Info</div>
@@ -333,13 +302,11 @@ export default function AdminDashboardPage() {
                       <div className="col-span-2 text-right">Action</div>
                     </div>
 
-                    {/* Rows */}
-                    {filteredClaims.map((company, index) => {
+                    {filteredClaims.map((company) => {
                       const req = company.claimRequest
                       const companyDomain = company.domain || company.email?.split('@')[1] || ''
                       const applicantDomain = req?.businessEmail ? req.businessEmail.split('@')[1] : ''
                       const domainMatches = companyDomain && applicantDomain && companyDomain.toLowerCase() === applicantDomain.toLowerCase()
-
                       const isPending = company.status === 'claim_requested'
                       const isClaimed = company.status === 'claimed'
                       const isRejected = company.status === 'rejected'
@@ -348,14 +315,11 @@ export default function AdminDashboardPage() {
                         <div
                           key={company.id}
                           className={`grid grid-cols-1 md:grid-cols-12 gap-4 px-6 py-4 rounded-2xl border transition-all duration-200 items-center ${
-                            isPending
-                              ? 'bg-amber-50/40 border-amber-200/80 shadow-xs hover:border-amber-300'
-                              : isClaimed
-                              ? 'bg-white border-slate-200/80 hover:border-slate-300'
-                              : 'bg-slate-50 border-slate-200/60 opacity-85'
+                            isPending ? 'bg-amber-50/40 border-amber-200/80 shadow-xs hover:border-amber-300'
+                            : isClaimed ? 'bg-white border-slate-200/80 hover:border-slate-300'
+                            : 'bg-slate-50 border-slate-200/60 opacity-85'
                           }`}
                         >
-                          {/* Col 1: Company */}
                           <div className="col-span-3 flex items-center gap-3">
                             <div className="w-9 h-9 rounded-xl bg-slate-900 text-white font-black text-xs flex items-center justify-center shrink-0">
                               {company.name.slice(0, 2).toUpperCase()}
@@ -366,7 +330,6 @@ export default function AdminDashboardPage() {
                             </div>
                           </div>
 
-                          {/* Col 2: Applicant */}
                           <div className="col-span-3 min-w-0">
                             {req ? (
                               <div>
@@ -378,14 +341,9 @@ export default function AdminDashboardPage() {
                             )}
                           </div>
 
-                          {/* Col 3: Domain Match */}
                           <div className="col-span-2">
                             {req ? (
-                              <span className={`inline-flex items-center gap-1 text-[10px] font-bold px-2.5 py-1 rounded-full ${
-                                domainMatches
-                                  ? 'bg-emerald-100 text-emerald-800'
-                                  : 'bg-amber-100 text-amber-900'
-                              }`}>
+                              <span className={`inline-flex items-center gap-1 text-[10px] font-bold px-2.5 py-1 rounded-full ${domainMatches ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-900'}`}>
                                 {domainMatches ? <Check className="w-3 h-3 text-emerald-600" /> : <AlertCircle className="w-3 h-3 text-amber-600" />}
                                 {domainMatches ? 'Match' : 'Mismatch'}
                               </span>
@@ -394,19 +352,13 @@ export default function AdminDashboardPage() {
                             )}
                           </div>
 
-                          {/* Col 4: Status */}
                           <div className="col-span-2">
-                            <span className={`inline-flex items-center gap-1.5 text-xs font-extrabold ${
-                              isPending ? 'text-amber-600' : isClaimed ? 'text-emerald-600' : 'text-rose-600'
-                            }`}>
-                              <span className={`h-2 w-2 rounded-full ${
-                                isPending ? 'bg-amber-500 animate-pulse' : isClaimed ? 'bg-emerald-500' : 'bg-rose-500'
-                              }`} />
+                            <span className={`inline-flex items-center gap-1.5 text-xs font-extrabold ${isPending ? 'text-amber-600' : isClaimed ? 'text-emerald-600' : 'text-rose-600'}`}>
+                              <span className={`h-2 w-2 rounded-full ${isPending ? 'bg-amber-500 animate-pulse' : isClaimed ? 'bg-emerald-500' : 'bg-rose-500'}`} />
                               {isPending ? 'Pending' : isClaimed ? 'Approved' : 'Rejected'}
                             </span>
                           </div>
 
-                          {/* Col 5: Actions */}
                           <div className="col-span-2 flex items-center justify-end gap-1.5">
                             <button
                               onClick={() => setSelectedCompanyModal(company)}
@@ -415,7 +367,6 @@ export default function AdminDashboardPage() {
                             >
                               <Eye className="w-4 h-4" />
                             </button>
-
                             {isPending && (
                               <>
                                 <button
@@ -439,99 +390,130 @@ export default function AdminDashboardPage() {
                     })}
                   </div>
                 )}
-
               </div>
             )}
 
-            {/* ══ VIEW 2: DASHBOARD OVERVIEW METRICS ════════════════════ */}
+            {/* VIEW 2: OVERVIEW */}
             {activeNav === 'overview' && (
               <div className="space-y-6">
                 <div>
                   <h1 className="text-2xl font-black text-slate-900 tracking-tight">System Overview</h1>
                   <p className="text-xs text-slate-500 mt-1 font-medium">Platform performance &amp; database activity metrics</p>
                 </div>
-
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
-                  <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-xs">
-                    <div className="flex items-center justify-between text-slate-400 mb-3">
-                      <span className="text-xs font-bold uppercase tracking-wider">Total Users</span>
-                      <Users className="w-5 h-5 text-[#022B96]" />
-                    </div>
-                    <p className="text-3xl font-black text-slate-900">{stats.totalUsers}</p>
-                    <p className="text-xs text-slate-400 mt-1">Registered Accounts</p>
-                  </div>
-
-                  <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-xs">
-                    <div className="flex items-center justify-between text-slate-400 mb-3">
-                      <span className="text-xs font-bold uppercase tracking-wider">Buyers</span>
-                      <User className="w-5 h-5 text-blue-600" />
-                    </div>
-                    <p className="text-3xl font-black text-[#022B96]">{stats.totalBuyers}</p>
-                    <p className="text-xs text-slate-400 mt-1">Active Buyer Accounts</p>
-                  </div>
-
-                  <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-xs">
-                    <div className="flex items-center justify-between text-slate-400 mb-3">
-                      <span className="text-xs font-bold uppercase tracking-wider">Suppliers</span>
-                      <Building2 className="w-5 h-5 text-emerald-600" />
-                    </div>
-                    <p className="text-3xl font-black text-emerald-600">{stats.totalSuppliers}</p>
-                    <p className="text-xs text-slate-400 mt-1">Verified Businesses</p>
-                  </div>
-
-                  <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-xs">
-                    <div className="flex items-center justify-between text-slate-400 mb-3">
-                      <span className="text-xs font-bold uppercase tracking-wider">Pending Claims</span>
-                      <ShieldCheck className="w-5 h-5 text-amber-500" />
-                    </div>
-                    <p className="text-3xl font-black text-amber-600">{pendingClaims.length}</p>
-                    <p className="text-xs text-slate-400 mt-1">Awaiting Verification</p>
-                  </div>
+                  {[
+                    { label: 'Total Users', value: stats.totalUsers, sub: 'Registered Accounts', icon: Users, color: 'text-[#022B96]' },
+                    { label: 'Buyers', value: stats.totalBuyers, sub: 'Active Buyer Accounts', icon: User, color: 'text-blue-600' },
+                    { label: 'Suppliers', value: stats.totalSuppliers, sub: 'Verified Businesses', icon: Building2, color: 'text-emerald-600' },
+                    { label: 'Pending Claims', value: pendingClaims.length, sub: 'Awaiting Verification', icon: ShieldCheck, color: 'text-amber-600' },
+                  ].map((card) => {
+                    const CardIcon = card.icon
+                    return (
+                      <div key={card.label} className="bg-white border border-slate-200 rounded-2xl p-6 shadow-xs">
+                        <div className="flex items-center justify-between text-slate-400 mb-3">
+                          <span className="text-xs font-bold uppercase tracking-wider">{card.label}</span>
+                          <CardIcon className={`w-5 h-5 ${card.color}`} />
+                        </div>
+                        <p className={`text-3xl font-black ${card.color}`}>{card.value}</p>
+                        <p className="text-xs text-slate-400 mt-1">{card.sub}</p>
+                      </div>
+                    )
+                  })}
                 </div>
               </div>
             )}
 
-            {/* ══ VIEW 3: SUPPLIER PRODUCT POSTS ════════════════════════ */}
+            {/* VIEW 3: PRODUCT OFFERS */}
             {activeNav === 'posts' && (
               <div className="space-y-6">
-                <div>
-                  <h1 className="text-2xl font-black text-slate-900 tracking-tight">Supplier Product Offers</h1>
-                  <p className="text-xs text-slate-500 mt-1 font-medium">{supplierPosts.length} published products</p>
-                </div>
-
-                <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-xs">
-                  {supplierPosts.length === 0 ? (
-                    <div className="text-center py-10 text-slate-400">
-                      <Fish className="w-10 h-10 mx-auto mb-2 opacity-50" />
-                      <p className="text-xs font-bold">No supplier product posts yet</p>
-                    </div>
-                  ) : (
-                    <div className="space-y-3">
-                      {supplierPosts.map((p) => (
-                        <div key={p.id} className="flex items-center justify-between p-4 rounded-xl border border-slate-100 bg-slate-50/50">
-                          <div>
-                            <p className="font-bold text-slate-900 text-xs">{p.product_name}</p>
-                            <p className="text-[11px] text-slate-400">{p.origin_country} · €{p.price_per_kg}/kg</p>
-                          </div>
-                          <span className="text-xs font-extrabold text-emerald-600 bg-emerald-50 px-3 py-1 rounded-full border border-emerald-200">
-                            {p.status || 'Active'}
-                          </span>
-                        </div>
-                      ))}
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h1 className="text-2xl font-black text-slate-900 tracking-tight">Supplier Product Offers</h1>
+                    <p className="text-xs text-slate-500 mt-1 font-medium">{supplierPosts.length} published product listings</p>
+                  </div>
+                  {priceUpdateMsg && (
+                    <div className="flex items-center gap-2 text-xs font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-4 py-2 rounded-xl">
+                      <CheckCircle2 className="w-4 h-4" />
+                      {priceUpdateMsg}
                     </div>
                   )}
                 </div>
+
+                {supplierPosts.length === 0 ? (
+                  <div className="bg-white rounded-2xl border border-slate-200 p-12 text-center">
+                    <Fish className="w-10 h-10 mx-auto mb-2 text-slate-300" />
+                    <p className="text-xs font-bold text-slate-400">No supplier product posts yet</p>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    {supplierPosts.map((p) => {
+                      const img = getFishImageForProduct(p.product_name, p.custom_image)
+                      const symbol = p.currency === 'USD' ? '$' : p.currency === 'GBP' ? '£' : '€'
+                      return (
+                        <div key={p.id} className="bg-white rounded-2xl border border-slate-200 p-5 hover:shadow-md transition space-y-3">
+                          <div className="flex items-start gap-3">
+                            <img
+                              src={img}
+                              alt={p.product_name}
+                              className="h-14 w-14 rounded-xl object-contain border border-slate-100 bg-slate-50 flex-shrink-0"
+                            />
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center justify-between gap-2">
+                                <h3 className="font-extrabold text-slate-900 text-sm truncate">{p.product_name}</h3>
+                                <span className="text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-100 px-2.5 py-1 rounded-full flex-shrink-0">
+                                  {p.status || 'Active'}
+                                </span>
+                              </div>
+                              <p className="text-sm font-black text-[#022B96] mt-0.5">{symbol}{p.price_per_kg?.toFixed(2)}/kg</p>
+                              <p className="text-xs text-slate-400 mt-0.5">{p.fresh_frozen} · {p.country_of_origin}</p>
+                            </div>
+                          </div>
+
+                          <div className="grid grid-cols-2 gap-2 text-xs">
+                            <div className="bg-slate-50 rounded-xl p-2 border border-slate-100">
+                              <p className="text-[10px] font-bold uppercase text-slate-400 tracking-wider">Packaging</p>
+                              <p className="font-bold text-slate-700 mt-0.5 truncate">{p.packaging}</p>
+                            </div>
+                            <div className="bg-slate-50 rounded-xl p-2 border border-slate-100">
+                              <p className="text-[10px] font-bold uppercase text-slate-400 tracking-wider">Availability</p>
+                              <p className="font-bold text-slate-700 mt-0.5 truncate">{p.availability}</p>
+                            </div>
+                          </div>
+
+                          <div className="flex items-center justify-between pt-2 border-t border-slate-100">
+                            <span className="flex items-center gap-1 text-[11px] text-slate-400 font-medium">
+                              <Clock className="w-3 h-3" />
+                              {new Date(p.updated_at || p.created_at || Date.now()).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}
+                            </span>
+                            <button
+                              onClick={() => {
+                                setUpdatingPostModal(p)
+                                setUpdatePriceInput(String(p.price_per_kg || ''))
+                                setUpdateCurrencyInput(p.currency || 'EUR')
+                                setUpdateAvailInput(p.availability || 'In Stock — Ready to Ship')
+                                setPriceUpdateMsg(null)
+                              }}
+                              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-[#022B96] hover:bg-[#011a5e] text-white text-xs font-bold rounded-xl transition cursor-pointer"
+                            >
+                              <DollarSign className="w-3.5 h-3.5" />
+                              Update Price
+                            </button>
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                )}
               </div>
             )}
 
-            {/* ══ VIEW 4: MARKET INDEXES ════════════════════════════════ */}
+            {/* VIEW 4: MARKET INDEXES */}
             {activeNav === 'indexes' && (
               <div className="space-y-6">
                 <div>
                   <h1 className="text-2xl font-black text-slate-900 tracking-tight">Market Benchmarks</h1>
                   <p className="text-xs text-slate-500 mt-1 font-medium">Weekly price index benchmarks across EU hubs</p>
                 </div>
-
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                   {[
                     { country: 'Spain', product: 'Yellowfin Tuna', price: '€5.31/kg' },
@@ -548,14 +530,13 @@ export default function AdminDashboardPage() {
               </div>
             )}
 
-            {/* ══ VIEW 5: USER DIRECTORY ════════════════════════════════ */}
+            {/* VIEW 5: USER DIRECTORY */}
             {activeNav === 'users' && (
               <div className="space-y-6">
                 <div>
                   <h1 className="text-2xl font-black text-slate-900 tracking-tight">User Accounts</h1>
                   <p className="text-xs text-slate-500 mt-1 font-medium">{stats.totalUsers} registered users in database</p>
                 </div>
-
                 <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-xs">
                   <p className="text-xs text-slate-500 font-medium">
                     Total Buyers: <strong className="text-[#022B96]">{stats.totalBuyers}</strong> · Total Suppliers: <strong className="text-emerald-600">{stats.totalSuppliers}</strong>
@@ -563,25 +544,25 @@ export default function AdminDashboardPage() {
                 </div>
               </div>
             )}
+
           </div>
 
-          {/* Footer inside content area */}
+          {/* Footer */}
           <div className="pt-8 border-t border-slate-200/80 flex items-center justify-between text-[11px] text-slate-400 font-semibold">
             <span>Bokhol Administration Platform</span>
             <span>All System Data Synchronized</span>
           </div>
         </main>
-
       </div>
 
-      {/* ── Detailed Inspection Modal ── */}
+      {/* ── Company Detail Modal ── */}
       {selectedCompanyModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4 overflow-y-auto">
-          <div className="bg-white rounded-3xl border border-slate-200 max-w-md w-full shadow-2xl overflow-hidden animate-in fade-in zoom-in-95">
+          <div className="bg-white rounded-3xl border border-slate-200 max-w-md w-full shadow-2xl overflow-hidden">
             <div className="bg-[#022B96] text-white p-6 relative">
               <button
                 onClick={() => setSelectedCompanyModal(null)}
-                className="absolute top-4 right-4 text-white/80 hover:text-white p-1 rounded-full hover:bg-white/10 transition"
+                className="absolute top-4 right-4 text-white/80 hover:text-white p-1 rounded-full hover:bg-white/10 transition cursor-pointer"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -602,17 +583,13 @@ export default function AdminDashboardPage() {
                   <p><strong className="text-slate-900">Phone:</strong> {selectedCompanyModal.claimRequest.phone}</p>
                 </div>
               )}
-
               <div className="space-y-1 text-slate-600">
                 <p><strong className="text-slate-900">Official Website:</strong> {selectedCompanyModal.website}</p>
                 <p><strong className="text-slate-900">Official Address:</strong> {selectedCompanyModal.address}</p>
               </div>
-
               {selectedCompanyModal.status === 'claim_requested' && (
                 <div className="pt-2">
-                  <label className="block font-bold text-slate-900 text-xs mb-1">
-                    Rejection Reason (Optional):
-                  </label>
+                  <label className="block font-bold text-slate-900 text-xs mb-1">Rejection Reason (Optional):</label>
                   <input
                     type="text"
                     placeholder="e.g. Email domain mismatch"
@@ -627,7 +604,7 @@ export default function AdminDashboardPage() {
             <div className="bg-slate-50 border-t border-slate-200 px-6 py-4 flex items-center justify-end gap-2">
               <button
                 onClick={() => setSelectedCompanyModal(null)}
-                className="px-4 py-2 border border-slate-200 bg-white text-slate-700 font-bold rounded-xl text-xs"
+                className="px-4 py-2 border border-slate-200 bg-white text-slate-700 font-bold rounded-xl text-xs cursor-pointer"
               >
                 Close
               </button>
@@ -635,13 +612,13 @@ export default function AdminDashboardPage() {
                 <>
                   <button
                     onClick={() => handleRejectClaim(selectedCompanyModal.id)}
-                    className="px-4 py-2 border border-rose-200 bg-white text-rose-600 font-bold rounded-xl text-xs"
+                    className="px-4 py-2 border border-rose-200 bg-white text-rose-600 font-bold rounded-xl text-xs cursor-pointer"
                   >
                     Reject
                   </button>
                   <button
                     onClick={() => handleApproveClaim(selectedCompanyModal.id)}
-                    className="px-4 py-2 bg-[#022B96] text-white font-bold rounded-xl text-xs shadow-xs"
+                    className="px-4 py-2 bg-[#022B96] text-white font-bold rounded-xl text-xs shadow-xs cursor-pointer"
                   >
                     Approve &amp; Verify
                   </button>
@@ -652,6 +629,99 @@ export default function AdminDashboardPage() {
         </div>
       )}
 
+      {/* ══ UPDATE PRICE MODAL ══════════════════════════════════════════ */}
+      {updatingPostModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4">
+          <div className="bg-white rounded-3xl border border-slate-200 max-w-sm w-full shadow-2xl overflow-hidden">
+            <div className="bg-[#022B96] text-white p-6 relative">
+              <button
+                onClick={() => setUpdatingPostModal(null)}
+                className="absolute top-4 right-4 text-white/70 hover:text-white p-1.5 rounded-full hover:bg-white/15 transition cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+              <span className="text-[10px] font-extrabold uppercase tracking-widest text-blue-200 bg-white/15 px-2.5 py-0.5 rounded-full mb-2 inline-block">
+                Admin Price Control
+              </span>
+              <h3 className="text-lg font-black text-white mt-1">{updatingPostModal.product_name}</h3>
+              <p className="text-xs text-blue-200 mt-0.5">Override supplier price &amp; availability.</p>
+            </div>
+
+            <form
+              onSubmit={(e) => {
+                e.preventDefault()
+                const post = updatingPostModal
+                const numPrice = parseFloat(updatePriceInput)
+                if (!post || isNaN(numPrice) || numPrice < 0) return
+                const updatedPosts = updateProductPrice(post.id, numPrice, updateCurrencyInput, updateAvailInput)
+                setSupplierPosts(updatedPosts)
+                setPriceUpdateMsg(`"${post.product_name}" updated → ${updateCurrencyInput} ${numPrice.toFixed(2)}/kg`)
+                setUpdatingPostModal(null)
+              }}
+              className="p-6 space-y-5"
+            >
+              <div>
+                <label className="block text-xs font-bold uppercase text-slate-500 tracking-wider mb-2">New Price per KG *</label>
+                <div className="flex gap-2">
+                  <select
+                    value={updateCurrencyInput}
+                    onChange={(e) => setUpdateCurrencyInput(e.target.value)}
+                    className="bg-slate-50 border border-slate-200 text-slate-800 font-bold rounded-xl px-3 py-2.5 text-sm outline-none focus:border-[#022B96] transition cursor-pointer"
+                  >
+                    <option>EUR</option>
+                    <option>USD</option>
+                    <option>GBP</option>
+                  </select>
+                  <input
+                    type="number"
+                    required
+                    min="0"
+                    step="0.01"
+                    placeholder="e.g. 7.50"
+                    value={updatePriceInput}
+                    onChange={(e) => setUpdatePriceInput(e.target.value)}
+                    className="flex-1 bg-slate-50 border border-slate-200 text-slate-800 font-semibold rounded-xl px-4 py-2.5 text-sm outline-none focus:border-[#022B96] focus:bg-white transition"
+                    autoFocus
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold uppercase text-slate-500 tracking-wider mb-2">Availability</label>
+                <select
+                  value={updateAvailInput}
+                  onChange={(e) => setUpdateAvailInput(e.target.value)}
+                  className="w-full bg-slate-50 border border-slate-200 text-slate-800 rounded-xl px-4 py-2.5 text-sm outline-none focus:border-[#022B96] transition cursor-pointer"
+                >
+                  <option>In Stock — Ready to Ship</option>
+                  <option>Available within 7 days</option>
+                  <option>Available within 2 weeks</option>
+                  <option>Available within 1 month</option>
+                  <option>Pre-order Only</option>
+                  <option>Seasonal</option>
+                </select>
+              </div>
+
+              <div className="flex gap-3 pt-1">
+                <button
+                  type="button"
+                  onClick={() => setUpdatingPostModal(null)}
+                  className="flex-1 py-2.5 border border-slate-200 text-slate-600 font-semibold rounded-xl text-sm hover:bg-slate-50 transition cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="flex-1 py-2.5 bg-[#022B96] hover:bg-[#011a5e] text-white font-bold rounded-xl text-sm transition cursor-pointer flex items-center justify-center gap-2"
+                >
+                  <DollarSign className="h-4 w-4" />
+                  Save Price
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

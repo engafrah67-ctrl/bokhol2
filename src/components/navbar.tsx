@@ -11,6 +11,7 @@ import { usePathname } from 'next/navigation'
 import { useLanguage } from '@/contexts/language-context'
 import { LOCALES, type Locale } from '@/lib/i18n/translations'
 import ReactCountryFlag from 'react-country-flag'
+import { createClient } from '@/lib/supabase/client'
 
 const ROLE_BADGE: Record<string, { label: string; color: string }> = {
   buyer:    { label: 'Buyer',    color: 'bg-sky-500/10 text-sky-600 dark:text-sky-400 border border-sky-500/20' },

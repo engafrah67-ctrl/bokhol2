@@ -31,6 +31,13 @@ import {
   Globe2,
 } from 'lucide-react'
 import Link from 'next/link'
+import {
+  getStoredSupplierPosts,
+  updateProductPrice,
+  getFishImageForProduct,
+  saveSupplierPosts,
+  SupplierPost,
+} from '@/lib/data/products-data'
 
 /* ─── Fish category image map (for My Posts display) ─── */
 const FISH_IMAGE_MAP: Record<string, string> = {
@@ -103,52 +110,72 @@ export default function SupplierDashboardPage() {
   const [companyYearFounded, setCompanyYearFounded] = useState('')
   const [companyEmployeeCount, setCompanyEmployeeCount] = useState('')
   const [companyLogoUrl, setCompanyLogoUrl] = useState('')
+  // Update Price Modal states
+  const [updatingPostModal, setUpdatingPostModal] = useState<any | null>(null)
+  const [updatePriceInput, setUpdatePriceInput] = useState<string>('')
+  const [updateCurrencyInput, setUpdateCurrencyInput] = useState<string>('EUR')
+  const [updateAvailabilityInput, setUpdateAvailabilityInput] = useState<string>('In Stock — Ready to Ship')
 
   // Settings Form States
   const [userFullName, setUserFullName] = useState('')
   const [userPhone, setUserPhone] = useState('')
 
   useEffect(() => {
+    // 1. Immediately load local supplier posts so UI has data right away
+    const initialPosts = getStoredSupplierPosts()
+    setSupplierPosts(initialPosts)
+
+    let isMounted = true
+
+    // 2. Safety timer: Guarantee loading finishes in 1.2 seconds max
+    const safetyTimer = setTimeout(() => {
+      if (isMounted) setLoading(false)
+    }, 1200)
+
     async function loadDashboardData() {
       try {
-        const { data: { session } } = await supabase.auth.getSession()
-        let currentUser = session?.user || null
-        if (!currentUser) {
-          const { data: { user: fetchedUser } } = await supabase.auth.getUser()
-          currentUser = fetchedUser || null
-        }
+        // Fast race timeout for Supabase auth
+        const timeoutPromise = new Promise<{ data: { session: null } }>((resolve) =>
+          setTimeout(() => resolve({ data: { session: null } }), 1000)
+        )
+
+        const sessionResult = await Promise.race([
+          supabase.auth.getSession(),
+          timeoutPromise,
+        ])
+
+        let currentUser = sessionResult?.data?.session?.user || null
 
         if (!currentUser) {
-          const hasCookie = typeof document !== 'undefined' && document.cookie.includes('sb-')
-          if (!hasCookie) {
-            router.push('/login')
-            return
-          }
+          const userResult = await Promise.race([
+            supabase.auth.getUser(),
+            new Promise<{ data: { user: null } }>((res) => setTimeout(() => res({ data: { user: null } }), 1000))
+          ])
+          currentUser = userResult?.data?.user || null
         }
-        if (currentUser) setUser(currentUser)
 
-        // 1. Fetch User Profile
-        if (currentUser?.id) {
+        if (isMounted && currentUser) {
+          setUser(currentUser)
+
+          // 1. Fetch User Profile
           const { data: userProfile } = await supabase
             .from('users')
             .select('*')
             .eq('id', currentUser.id)
-            .single()
-          if (userProfile) {
+            .maybeSingle()
+          if (userProfile && isMounted) {
             setProfile(userProfile)
             setUserFullName(userProfile.full_name || '')
             setUserPhone(userProfile.phone || '')
           }
-        }
 
-        // 2. Fetch Company Profile
-        if (currentUser?.id) {
+          // 2. Fetch Company Profile
           const { data: companyData } = await supabase
             .from('companies')
             .select('*')
             .eq('owner_id', currentUser.id)
             .maybeSingle()
-          if (companyData) {
+          if (companyData && isMounted) {
             setCompany(companyData)
             setCompanyName(companyData.name || '')
             setCompanyDescription(companyData.description || '')
@@ -169,7 +196,7 @@ export default function SupplierDashboardPage() {
           .from('countries')
           .select('id, name, flag_emoji')
           .order('name')
-        if (countriesData) setCountries(countriesData)
+        if (countriesData && isMounted) setCountries(countriesData)
 
         // 4. Fetch Buyer Requests
         const { data: requestsData } = await supabase
@@ -177,26 +204,43 @@ export default function SupplierDashboardPage() {
           .select('id, title, created_at')
           .order('created_at', { ascending: false })
           .limit(5)
-        if (requestsData) setBuyerRequests(requestsData)
-
-        // 5. Fetch this supplier's own posts from local storage
-        if (typeof window !== 'undefined') {
-          try {
-            const stored = JSON.parse(localStorage.getItem('supplier_posts') || '[]')
-            if (stored && Array.isArray(stored)) {
-              setSupplierPosts(stored)
-            }
-          } catch (_) {}
-        }
+        if (requestsData && isMounted) setBuyerRequests(requestsData)
 
       } catch (err) {
-        console.error('Error loading supplier dashboard data:', err)
+        console.error('Supplier dashboard load warning:', err)
       } finally {
-        setLoading(false)
+        if (isMounted) setLoading(false)
+        clearTimeout(safetyTimer)
       }
     }
+
     loadDashboardData()
+
+    return () => {
+      isMounted = false
+      clearTimeout(safetyTimer)
+    }
   }, [])
+
+  const handleSavePriceUpdate = (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!updatingPostModal) return
+    const numPrice = parseFloat(updatePriceInput)
+    if (isNaN(numPrice) || numPrice < 0) return
+
+    const updatedPosts = updateProductPrice(
+      updatingPostModal.id,
+      numPrice,
+      updateCurrencyInput,
+      updateAvailabilityInput
+    )
+    setSupplierPosts(updatedPosts)
+    setMessage({
+      type: 'success',
+      text: `Price for "${updatingPostModal.product_name || updatingPostModal.productName || 'Product'}" updated to ${updateCurrencyInput} ${numPrice.toFixed(2)}/kg!`,
+    })
+    setUpdatingPostModal(null)
+  }
 
   // Handle Logo Upload
   async function handleLogoUpload(e: React.ChangeEvent<HTMLInputElement>) {
@@ -839,23 +883,39 @@ export default function SupplierDashboardPage() {
                         <p className="text-slate-600 font-medium mt-0.5">{pExtra}</p>
                       </div>
 
-                      <div className="flex items-center justify-between text-xs text-slate-400 pt-2 border-t border-slate-100">
-                        <span className="flex items-center gap-1">
-                          <Clock className="h-3 w-3" />
-                          {new Date(post.created_at || Date.now()).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}
+                      <div className="flex items-center justify-between text-xs text-slate-400 pt-3 border-t border-slate-100">
+                        <span className="flex items-center gap-1 font-medium">
+                          <Clock className="h-3.5 w-3.5 text-blue-600" />
+                          Updated: {new Date(post.updated_at || post.created_at || Date.now()).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}
                         </span>
-                        <button
-                          onClick={() => {
-                            const updated = supplierPosts.filter((p: any) => p.id !== post.id)
-                            setSupplierPosts(updated)
-                            if (typeof window !== 'undefined') {
-                              localStorage.setItem('supplier_posts', JSON.stringify(updated))
-                            }
-                          }}
-                          className="text-xs text-red-500 hover:underline cursor-pointer font-medium"
-                        >
-                          Delete
-                        </button>
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={() => {
+                              let parsed = post
+                              if (typeof post.content === 'string') {
+                                try { parsed = { ...post, ...JSON.parse(post.content) } } catch (_) {}
+                              }
+                              setUpdatingPostModal(post)
+                              setUpdatePriceInput(String(parsed.price_per_kg || parsed.pricePerKg || ''))
+                              setUpdateCurrencyInput(parsed.currency || 'EUR')
+                              setUpdateAvailabilityInput(parsed.availability || 'In Stock — Ready to Ship')
+                            }}
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-[#022B96] hover:bg-[#011a5e] text-white text-xs font-bold rounded-xl transition cursor-pointer shadow-xs"
+                          >
+                            <DollarSign className="h-3.5 w-3.5" />
+                            Update Price
+                          </button>
+                          <button
+                            onClick={() => {
+                              const updated = supplierPosts.filter((p: any) => p.id !== post.id)
+                              setSupplierPosts(updated)
+                              saveSupplierPosts(updated)
+                            }}
+                            className="text-xs text-red-500 hover:underline cursor-pointer font-medium px-2 py-1"
+                          >
+                            Delete
+                          </button>
+                        </div>
                       </div>
                     </div>
                   )
@@ -908,6 +968,89 @@ export default function SupplierDashboardPage() {
           </div>
         )}
       </main>
+
+      {/* ══ UPDATE PRICE MODAL ══════════════════════════════════ */}
+      {updatingPostModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4">
+          <div className="bg-white rounded-3xl border border-slate-200 max-w-sm w-full shadow-2xl overflow-hidden">
+            <div className="bg-[#022B96] text-white p-6 relative">
+              <button
+                onClick={() => setUpdatingPostModal(null)}
+                className="absolute top-4 right-4 text-white/70 hover:text-white p-1.5 rounded-full hover:bg-white/15 transition cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+              <span className="text-[10px] font-extrabold uppercase tracking-widest text-blue-200 bg-white/15 px-2.5 py-0.5 rounded-full mb-2 inline-block">
+                Weekly Price Update
+              </span>
+              <h3 className="text-lg font-black text-white mt-1">
+                {(() => {
+                  let p = updatingPostModal
+                  if (typeof p.content === 'string') { try { p = { ...p, ...JSON.parse(p.content) } } catch (_) {} }
+                  return p.product_name || p.productName || 'Seafood Product'
+                })()}
+              </h3>
+              <p className="text-xs text-blue-200 mt-0.5">Update your price &amp; availability to stay competitive.</p>
+            </div>
+
+            <form onSubmit={handleSavePriceUpdate} className="p-6 space-y-5">
+              <div>
+                <label className="block text-xs font-bold uppercase text-slate-500 tracking-wider mb-2">New Price per KG *</label>
+                <div className="flex gap-2">
+                  <select
+                    value={updateCurrencyInput}
+                    onChange={(e) => setUpdateCurrencyInput(e.target.value)}
+                    className="bg-slate-50 border border-slate-200 text-slate-800 font-bold rounded-xl px-3 py-2.5 text-sm outline-none focus:border-[#022B96] transition cursor-pointer"
+                  >
+                    <option>EUR</option>
+                    <option>USD</option>
+                    <option>GBP</option>
+                  </select>
+                  <input
+                    type="number"
+                    required
+                    min="0"
+                    step="0.01"
+                    placeholder="e.g. 7.50"
+                    value={updatePriceInput}
+                    onChange={(e) => setUpdatePriceInput(e.target.value)}
+                    className="flex-1 bg-slate-50 border border-slate-200 text-slate-800 font-semibold rounded-xl px-4 py-2.5 text-sm outline-none focus:border-[#022B96] focus:bg-white transition"
+                    autoFocus
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold uppercase text-slate-500 tracking-wider mb-2">Availability</label>
+                <select
+                  value={updateAvailabilityInput}
+                  onChange={(e) => setUpdateAvailabilityInput(e.target.value)}
+                  className="w-full bg-slate-50 border border-slate-200 text-slate-800 rounded-xl px-4 py-2.5 text-sm outline-none focus:border-[#022B96] focus:bg-white transition cursor-pointer"
+                >
+                  <option>In Stock — Ready to Ship</option>
+                  <option>Available within 7 days</option>
+                  <option>Available within 2 weeks</option>
+                  <option>Available within 1 month</option>
+                  <option>Pre-order Only</option>
+                  <option>Seasonal</option>
+                </select>
+              </div>
+
+              <div className="flex gap-3 pt-1">
+                <button type="button" onClick={() => setUpdatingPostModal(null)}
+                  className="flex-1 py-2.5 border border-slate-200 text-slate-600 font-semibold rounded-xl text-sm hover:bg-slate-50 transition cursor-pointer">
+                  Cancel
+                </button>
+                <button type="submit"
+                  className="flex-1 py-2.5 bg-[#022B96] hover:bg-[#011a5e] text-white font-bold rounded-xl text-sm transition cursor-pointer shadow-sm flex items-center justify-center gap-2">
+                  <DollarSign className="h-4 w-4" />
+                  Save New Price
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

@@ -4,6 +4,7 @@ import React, { useState, useEffect, useRef } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
+import { addSupplierPost } from '@/lib/data/products-data'
 import {
   ArrowLeft,
   Fish,
@@ -89,10 +90,9 @@ const ALL_PRODUCTS = FISH_CATALOG.flatMap((cat) =>
 )
 
 const COUNTRIES = [
-  'Norway', 'Netherlands', 'Iceland', 'Denmark', 'Scotland',
-  'Spain', 'Portugal', 'France', 'Greece', 'Turkey',
-  'Morocco', 'Japan', 'China', 'Chile', 'Peru', 'Canada', 'USA',
-  'Ecuador', 'Vietnam', 'India', 'Australia', 'Other',
+  'Holland (Netherlands)',
+  'Germany',
+  'Belgium',
 ]
 
 const SIZE_OPTIONS = [
@@ -144,7 +144,7 @@ export default function PostStockPage() {
     productName: '',
     pricePerKg: '',
     currency: 'EUR',
-    countryOfOrigin: 'Norway',
+    countryOfOrigin: 'Holland (Netherlands)',
     freshFrozen: 'Frozen',
     sizeWeight: 'Medium (1–3 kg)',
     packagingFillet: 'Fillet (Skin On)',
@@ -159,26 +159,43 @@ export default function PostStockPage() {
   const [uploadingImage, setUploadingImage] = useState(false)
 
   useEffect(() => {
+    let isMounted = true
+    const safetyTimer = setTimeout(() => {
+      if (isMounted) setLoading(false)
+    }, 1000)
+
     async function checkAuth() {
       try {
-        const { data: { session } } = await supabase.auth.getSession()
-        const currentUser = session?.user
-        if (currentUser) {
+        const timeoutPromise = new Promise<{ data: { session: null } }>((res) =>
+          setTimeout(() => res({ data: { session: null } }), 800)
+        )
+        const sessionResult = await Promise.race([
+          supabase.auth.getSession(),
+          timeoutPromise,
+        ])
+        const currentUser = sessionResult?.data?.session?.user
+        if (currentUser && isMounted) {
           setUser(currentUser)
           const { data: companyData } = await supabase
             .from('companies')
             .select('id')
             .eq('owner_id', currentUser.id)
             .maybeSingle()
-          if (companyData) setCompanyId(companyData.id)
+          if (companyData && isMounted) setCompanyId(companyData.id)
         }
       } catch (err) {
         console.error('Auth check error:', err)
       } finally {
-        setLoading(false)
+        if (isMounted) setLoading(false)
+        clearTimeout(safetyTimer)
       }
     }
     checkAuth()
+
+    return () => {
+      isMounted = false
+      clearTimeout(safetyTimer)
+    }
   }, [])
 
   useEffect(() => {
@@ -270,12 +287,7 @@ export default function PostStockPage() {
       } catch (_) {}
     }
 
-    if (typeof window !== 'undefined') {
-      try {
-        const existing = JSON.parse(localStorage.getItem('supplier_posts') || '[]')
-        localStorage.setItem('supplier_posts', JSON.stringify([postPayload, ...existing]))
-      } catch (_) {}
-    }
+    addSupplierPost(postPayload)
 
     setSubmitting(false)
     setSubmitted(true)
@@ -284,7 +296,7 @@ export default function PostStockPage() {
   const resetForm = () => {
     setSubmitted(false)
     setForm({
-      productName: '', pricePerKg: '', currency: 'EUR', countryOfOrigin: 'Norway',
+      productName: '', pricePerKg: '', currency: 'EUR', countryOfOrigin: 'Holland (Netherlands)',
       freshFrozen: 'Frozen', sizeWeight: 'Medium (1–3 kg)', packagingFillet: 'Fillet (Skin On)',
       availability: 'In Stock — Ready to Ship', location: '', supplierInfoExtra: '', customImage: '',
     })

@@ -30,9 +30,35 @@ export function useUser(): UseUserReturn {
   useEffect(() => {
     let isMounted = true
 
+    const safetyTimer = setTimeout(() => {
+      if (isMounted) setIsLoading(false)
+    }, 1200)
+
+    async function initSession() {
+      try {
+        const { data: { session } } = await supabase.auth.getSession()
+        if (isMounted) {
+          if (session?.user) {
+            setUser(session.user)
+            await fetchProfile(session.user)
+          } else {
+            setUser(null)
+            setProfile(null)
+            setIsLoading(false)
+          }
+        }
+      } catch (_) {
+        if (isMounted) {
+          setIsLoading(false)
+        }
+      } finally {
+        clearTimeout(safetyTimer)
+      }
+    }
+
+    initSession()
+
     // Subscribe to auth state changes.
-    // Supabase onAuthStateChange automatically emits the initial session (INITIAL_SESSION)
-    // as well as SIGNED_IN, SIGNED_OUT, and TOKEN_REFRESHED events cleanly.
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event: string, session: any) => {
         const currentUser = session?.user ?? null
