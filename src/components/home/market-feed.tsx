@@ -1,9 +1,11 @@
 'use client'
 
+import React, { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { NewsArticle } from '@/types/database'
-import { Building2, Newspaper, ShoppingBag, ArrowUpRight, Clock } from 'lucide-react'
+import { Building2, Newspaper, ShoppingBag, ArrowUpRight, Clock, Lock } from 'lucide-react'
 import { useLanguage } from '@/contexts/language-context'
+import { getStoredNewsArticles, NewsArticle as StoredNewsArticle } from '@/lib/data/news-data'
 
 interface MarketFeedProps {
   news: NewsArticle[]
@@ -11,13 +13,25 @@ interface MarketFeedProps {
 
 export function MarketFeed({ news }: MarketFeedProps) {
   const { t } = useLanguage()
-  const latestNews = news.length > 0
-    ? news[0]
-    : {
-        title: 'EU Seafood Report 2026',
-        summary: 'Strong demand and stable supply expected across European trade hubs.',
-        published_at: '2 hours ago',
-      }
+  const [topStory, setTopStory] = useState<{ title: string; summary: string }>({
+    title: 'EU Seafood Report 2026',
+    summary: 'Strong demand and stable supply expected across European trade hubs.',
+  })
+
+  useEffect(() => {
+    const articles = getStoredNewsArticles()
+    if (articles.length > 0) {
+      setTopStory({
+        title: articles[0].title,
+        summary: articles[0].excerpt,
+      })
+    } else if (news.length > 0) {
+      setTopStory({
+        title: news[0].title,
+        summary: news[0].summary || news[0].excerpt || 'European seafood spot market prices rise.',
+      })
+    }
+  }, [news])
 
   return (
     <section className="space-y-6">
@@ -64,10 +78,10 @@ export function MarketFeed({ news }: MarketFeedProps) {
               {t('feed_latest_news')}
             </div>
             <h3 className="font-extrabold text-foreground text-base mb-1.5 group-hover:underline transition-all cursor-pointer line-clamp-2 leading-snug">
-              {latestNews.title}
+              {topStory.title}
             </h3>
             <p className="text-xs text-muted-foreground leading-relaxed line-clamp-3 mt-3">
-              {latestNews.summary || 'European seafood spot market prices rise following updated environmental standards.'}
+              {topStory.summary}
             </p>
           </div>
           <div className="flex items-center justify-between mt-6 pt-4 border-t border-border text-[10px] text-muted-foreground font-semibold">
@@ -83,9 +97,14 @@ export function MarketFeed({ news }: MarketFeedProps) {
         {/* Column 3: Latest Buyer Requests */}
         <div className="p-6 flex flex-col justify-between hover:bg-muted/30 transition-all duration-200 group">
           <div>
-            <div className="flex items-center gap-2 text-xs font-bold text-foreground mb-4 bg-muted px-3 py-1.5 rounded-lg border border-border self-start w-fit">
-              <ShoppingBag className="h-3.5 w-3.5" />
-              {t('feed_buyer_tenders')}
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-2 text-xs font-bold text-foreground bg-muted px-3 py-1.5 rounded-lg border border-border">
+                <ShoppingBag className="h-3.5 w-3.5" />
+                {t('feed_buyer_tenders')}
+              </div>
+              <span className="inline-flex items-center gap-1 text-[10px] font-bold text-amber-700 bg-amber-50 border border-amber-200/80 px-2 py-0.5 rounded-md">
+                <Lock className="w-2.5 h-2.5" /> Suppliers Only
+              </span>
             </div>
             <h3 className="font-extrabold text-foreground text-base mb-1.5 group-hover:underline transition-all cursor-pointer leading-snug">
               Looking for 50 Tons of Salmon

@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react'
 import Link from 'next/link'
-import { Plus, Search, ShoppingBag, Calendar, MapPin, Package, DollarSign, MessageSquare, Send, CheckCircle2, X, Tag, Clock } from 'lucide-react'
+import { Plus, Search, ShoppingBag, Calendar, MapPin, Package, DollarSign, MessageSquare, Send, CheckCircle2, X, Tag, Clock, Lock, ShieldAlert, LogIn, UserPlus, Building2 } from 'lucide-react'
 import { useUser } from '@/hooks/use-user'
 import { createClient } from '@/lib/supabase/client'
 
@@ -84,7 +84,7 @@ const DEFAULT_REPLIES: Record<string, SupplierReply[]> = {
 }
 
 export default function BuyerRequestsPage() {
-  const { user, profile } = useUser()
+  const { user, profile, role, isLoading } = useUser()
   const [requests, setRequests] = useState<BuyerSourcingRequest[]>([])
   const [replies, setReplies] = useState<Record<string, SupplierReply[]>>(DEFAULT_REPLIES)
   const [searchTerm, setSearchTerm] = useState('')
@@ -96,6 +96,8 @@ export default function BuyerRequestsPage() {
   const [replyDelivery, setReplyDelivery] = useState('')
   const [replyMessage, setReplyMessage] = useState('')
   const [replySubmitted, setReplySubmitted] = useState(false)
+
+  const isSupplierOrAdmin = role === 'supplier' || role === 'admin' || user?.email === 'admin@gmail.com'
 
   useEffect(() => {
     async function loadRequests() {
@@ -198,6 +200,93 @@ export default function BuyerRequestsPage() {
     r.location.toLowerCase().includes(searchTerm.toLowerCase()) ||
     r.packagingProcessing.toLowerCase().includes(searchTerm.toLowerCase())
   )
+
+  // Skeleton state while checking auth
+  if (isLoading) {
+    return (
+      <main className="min-h-screen bg-transparent py-16 flex items-center justify-center">
+        <div className="text-center space-y-3">
+          <div className="w-8 h-8 border-4 border-[#022B96] border-t-transparent rounded-full animate-spin mx-auto" />
+          <p className="text-xs text-slate-500 font-semibold">Verifying supplier access permissions...</p>
+        </div>
+      </main>
+    )
+  }
+
+  // Gated Access Screen for Unauthenticated Visitors or Non-Suppliers
+  if (!user || !isSupplierOrAdmin) {
+    return (
+      <main className="min-h-screen bg-transparent pb-16">
+        <div className="border-b border-slate-200/80 bg-white/60 backdrop-blur-sm py-10">
+          <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div>
+              <h1 className="text-3xl font-extrabold text-slate-900 tracking-tight">Buyer Sourcing Requests</h1>
+              <p className="mt-1 text-slate-500 text-sm">Exclusive tender access for verified seafood suppliers & exporters.</p>
+            </div>
+          </div>
+        </div>
+
+        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 pt-10">
+          <div className="bg-white rounded-3xl p-8 md:p-12 text-slate-900 shadow-xl border border-slate-200/80 relative overflow-hidden">
+            <div className="space-y-6">
+              <div>
+                <h2 className="text-2xl md:text-3xl font-extrabold text-slate-900 leading-tight">
+                  Buyer Requests are Restricted to Logged-in Suppliers
+                </h2>
+                <p className="text-slate-600 text-sm md:text-base mt-2 leading-relaxed max-w-2xl">
+                  To protect buyer trade confidentiality and preserve competitive bidding, active buyer tenders and sourcing specifications are only visible to authenticated seafood suppliers.
+                </p>
+              </div>
+
+              {/* Value Proposition Highlights */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-2">
+                <div className="bg-slate-50/80 border border-slate-100 rounded-2xl p-5 text-left space-y-1.5">
+                  <div className="w-8 h-8 rounded-xl bg-blue-100 text-[#022B96] flex items-center justify-center font-bold text-sm mb-2 border border-blue-200">
+                    <ShieldAlert className="w-4 h-4" />
+                  </div>
+                  <h4 className="font-extrabold text-slate-900 text-sm">Protected Trade Privacy</h4>
+                  <p className="text-xs text-slate-500 leading-relaxed">
+                    Sourcing specifications and buyer tender volumes are kept confidential from public web indexing.
+                  </p>
+                </div>
+
+                <div className="bg-slate-50/80 border border-slate-100 rounded-2xl p-5 text-left space-y-1.5">
+                  <div className="w-8 h-8 rounded-xl bg-amber-100 text-amber-800 flex items-center justify-center font-bold text-sm mb-2 border border-amber-200">
+                    <Building2 className="w-4 h-4" />
+                  </div>
+                  <h4 className="font-extrabold text-slate-900 text-sm">Verified Importers Only</h4>
+                  <p className="text-xs text-slate-500 leading-relaxed">
+                    Connecting authenticated seafood suppliers directly with vetted global buyers and processors.
+                  </p>
+                </div>
+
+                <div className="bg-slate-50/80 border border-slate-100 rounded-2xl p-5 text-left space-y-1.5">
+                  <div className="w-8 h-8 rounded-xl bg-emerald-100 text-emerald-800 flex items-center justify-center font-bold text-sm mb-2 border border-emerald-200">
+                    <Send className="w-4 h-4" />
+                  </div>
+                  <h4 className="font-extrabold text-slate-900 text-sm">Direct Wholesale Quotes</h4>
+                  <p className="text-xs text-slate-500 leading-relaxed">
+                    Submit wholesale pricing, incoterms, and product availability directly to active buyers.
+                  </p>
+                </div>
+              </div>
+
+              {/* CTA Action Button */}
+              <div className="pt-4">
+                <Link href="/login?next=/requests/buyer">
+                  <button className="inline-flex items-center justify-center gap-2 px-8 py-3.5 bg-[#022B96] hover:bg-[#011a5e] text-white text-sm font-extrabold rounded-2xl shadow-md transition cursor-pointer">
+                    <LogIn className="w-4 h-4" />
+                    Log In as Supplier
+                  </button>
+                </Link>
+              </div>
+
+            </div>
+          </div>
+        </div>
+      </main>
+    )
+  }
 
   return (
     <main className="min-h-screen bg-transparent pb-16">

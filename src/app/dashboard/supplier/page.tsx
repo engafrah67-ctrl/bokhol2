@@ -29,6 +29,9 @@ import {
   Pencil,
   Clock,
   Globe2,
+  ShoppingBag,
+  Send,
+  Lock,
 } from 'lucide-react'
 import Link from 'next/link'
 import {
@@ -75,12 +78,51 @@ function getFishImage(productName: string): string | null {
   return FISH_IMAGE_MAP[productName] || null
 }
 
+const DASHBOARD_BUYER_REQUESTS = [
+  {
+    id: 'req-sample-1',
+    productNeeded: 'Salmon',
+    quantity: '100 KG',
+    freshFrozen: 'Fresh / Frozen',
+    location: 'Amsterdam, Netherlands',
+    packagingProcessing: 'packing/pure',
+    deliveryDate: 'Friday',
+    targetPrice: '$6.20/kg',
+    additionalNotes: 'Need fresh or frozen salmon delivered by Friday morning at Amsterdam port warehouse.',
+    createdAt: new Date().toISOString(),
+  },
+  {
+    id: 'req-sample-2',
+    productNeeded: 'Atlantic Cod Fillets',
+    quantity: '500 KG',
+    freshFrozen: 'Frozen (IQF)',
+    location: 'Vigo, Spain',
+    packagingProcessing: 'Fillet (Skinless)',
+    deliveryDate: 'Next Tuesday',
+    targetPrice: '$4.80/kg',
+    additionalNotes: 'Grade A IQF cod fillets required for restaurant distributor.',
+    createdAt: new Date().toISOString(),
+  },
+  {
+    id: 'req-sample-3',
+    productNeeded: 'Yellowfin Tuna Loins',
+    quantity: '250 KG',
+    freshFrozen: 'Fresh',
+    location: 'Tokyo, Japan',
+    packagingProcessing: 'Vacuum Packed Loins',
+    deliveryDate: 'Thursday',
+    targetPrice: '$12.50/kg',
+    additionalNotes: 'Sashimi grade fresh yellowfin tuna loins.',
+    createdAt: new Date().toISOString(),
+  }
+]
+
 export default function SupplierDashboardPage() {
   const router = useRouter()
   const supabase = createClient()
 
-  // Active tab — only 4 tabs now
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'profile' | 'myposts' | 'settings'>('dashboard')
+  // Active tab — includes buyer-requests tab
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'profile' | 'myposts' | 'buyer-requests' | 'settings'>('dashboard')
 
   // Auth & Profile states
   const [user, setUser] = useState<any>(null)
@@ -391,6 +433,7 @@ export default function SupplierDashboardPage() {
             { key: 'dashboard', icon: <LayoutDashboard className="h-4 w-4" />, label: 'Dashboard' },
             { key: 'profile', icon: <Building2 className="h-4 w-4" />, label: 'My Profile' },
             { key: 'myposts', icon: <FileText className="h-4 w-4" />, label: 'My Posts', badge: supplierPosts.length },
+            { key: 'buyer-requests', icon: <ShoppingBag className="h-4 w-4" />, label: 'Buyer Requests', badge: 3 },
             { key: 'settings', icon: <Settings className="h-4 w-4" />, label: 'Settings' },
           ].map(({ key, icon, label, badge }) => (
             <button
@@ -965,6 +1008,82 @@ export default function SupplierDashboardPage() {
                 </Button>
               </div>
             </form>
+          </div>
+        )}
+
+        {/* ══ TAB: BUYER REQUESTS ══════════════════════════════ */}
+        {activeTab === 'buyer-requests' && (
+          <div className="space-y-6">
+            <div className="bg-gradient-to-r from-slate-900 to-[#022B96] text-white rounded-2xl p-6 shadow-md flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div>
+                <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-white/15 text-blue-200 text-xs font-semibold mb-2 border border-white/20">
+                  <ShoppingBag className="h-3.5 w-3.5" /> Logged-In Supplier Access
+                </span>
+                <h1 className="text-2xl font-bold tracking-tight text-white">Active Buyer Sourcing Requests</h1>
+                <p className="text-blue-100/90 text-sm mt-1 max-w-xl">
+                  Browse buyer tenders, review product specifications, and submit direct wholesale quotes.
+                </p>
+              </div>
+              <Link href="/requests/buyer">
+                <Button className="bg-white text-[#022B96] hover:bg-slate-100 font-bold px-4 py-2 rounded-xl transition cursor-pointer text-xs shadow-sm flex items-center gap-1.5">
+                  Full Requests Portal <ArrowUpRight className="w-3.5 h-3.5" />
+                </Button>
+              </Link>
+            </div>
+
+            <div className="grid grid-cols-1 gap-4">
+              {DASHBOARD_BUYER_REQUESTS.map((req) => (
+                <div key={req.id} className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm hover:border-[#022B96]/30 transition space-y-4">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-3">
+                    <div>
+                      <span className="inline-block text-[10px] font-black uppercase tracking-wider text-blue-700 bg-blue-50 px-2.5 py-0.5 rounded-md mb-1">
+                        Buyer Tender
+                      </span>
+                      <h3 className="text-lg font-extrabold text-slate-900">{req.productNeeded}</h3>
+                    </div>
+                    <div className="flex items-center gap-2 text-xs font-bold text-slate-700 bg-slate-100 px-3 py-1.5 rounded-xl self-start sm:self-auto">
+                      <span>Target: {req.targetPrice || 'Negotiable'}</span>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+                    <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-100">
+                      <span className="text-slate-400 block text-[10px] uppercase font-bold">Quantity Needed</span>
+                      <span className="font-extrabold text-slate-800">{req.quantity}</span>
+                    </div>
+                    <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-100">
+                      <span className="text-slate-400 block text-[10px] uppercase font-bold">State / Condition</span>
+                      <span className="font-semibold text-slate-800">{req.freshFrozen}</span>
+                    </div>
+                    <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-100">
+                      <span className="text-slate-400 block text-[10px] uppercase font-bold">Delivery Port</span>
+                      <span className="font-semibold text-slate-800">{req.location}</span>
+                    </div>
+                    <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-100">
+                      <span className="text-slate-400 block text-[10px] uppercase font-bold">Delivery Date</span>
+                      <span className="font-semibold text-slate-800">{req.deliveryDate}</span>
+                    </div>
+                  </div>
+
+                  {req.additionalNotes && (
+                    <p className="text-xs text-slate-600 bg-blue-50/50 p-3 rounded-xl border border-blue-100/60 leading-relaxed italic">
+                      "{req.additionalNotes}"
+                    </p>
+                  )}
+
+                  <div className="flex items-center justify-between pt-2 border-t border-slate-100">
+                    <span className="text-[11px] text-slate-400 font-medium flex items-center gap-1">
+                      <Clock className="w-3.5 h-3.5" /> Posted recently by verified buyer
+                    </span>
+                    <Link href="/requests/buyer">
+                      <Button className="bg-[#022B96] hover:bg-[#011a5e] text-white text-xs font-bold px-4 py-2 rounded-xl shadow-sm cursor-pointer flex items-center gap-1.5">
+                        <Send className="w-3.5 h-3.5" /> Send Quote to Buyer
+                      </Button>
+                    </Link>
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
         )}
       </main>

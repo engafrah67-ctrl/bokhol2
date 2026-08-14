@@ -30,6 +30,7 @@ export function ClaimProfileModal({ company, isOpen, onClose, onSuccess }: Claim
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
+    if (!company) return
     setError(null)
 
     if (!fullName.trim() || !businessEmail.trim() || !jobTitle.trim() || !phone.trim() || !password) {
@@ -46,9 +47,10 @@ export function ClaimProfileModal({ company, isOpen, onClose, onSuccess }: Claim
     }
 
     setLoading(true)
+    const companyId = company.id
 
     setTimeout(() => {
-      const res = requestProfileClaim(company.id, {
+      const res = requestProfileClaim(companyId, {
         fullName: fullName.trim(),
         businessEmail: businessEmail.trim(),
         jobTitle: jobTitle.trim(),

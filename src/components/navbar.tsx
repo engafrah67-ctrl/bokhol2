@@ -2,7 +2,7 @@
 
 import * as React from 'react'
 import Link from 'next/link'
-import { ChevronDown, Menu, X, User, LogOut, LayoutDashboard, Plus } from 'lucide-react'
+import { ChevronDown, Menu, X, User, LogOut, LayoutDashboard, Plus, Lock } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Logo } from '@/components/logo'
 import { useUser } from '@/hooks/use-user'
@@ -116,7 +116,7 @@ export function Navbar() {
               </button>
 
               <div
-                className={`absolute top-full left-1/2 -translate-x-1/2 mt-3 w-52 bg-white border border-slate-200 rounded-xl shadow-lg overflow-hidden transition-all duration-200 origin-top ${
+                className={`absolute top-full left-1/2 -translate-x-1/2 mt-3 w-56 bg-white border border-slate-200 rounded-xl shadow-lg overflow-hidden transition-all duration-200 origin-top ${
                   requestsOpen ? 'opacity-100 scale-y-100 translate-y-0' : 'opacity-0 scale-y-95 -translate-y-1 pointer-events-none'
                 }`}
               >
@@ -125,11 +125,16 @@ export function Navbar() {
                     key={item.href}
                     href={item.href}
                     onClick={() => setRequestsOpen(false)}
-                    className={`flex items-center px-4 py-3 text-sm font-medium transition-colors hover:bg-slate-50 hover:text-[#022B96] border-b border-slate-100 last:border-0 ${
+                    className={`flex items-center justify-between px-4 py-3 text-sm font-medium transition-colors hover:bg-slate-50 hover:text-[#022B96] border-b border-slate-100 last:border-0 ${
                       pathname === item.href ? 'text-[#022B96] bg-blue-50' : 'text-slate-700'
                     }`}
                   >
-                    {item.name}
+                    <span>{item.name}</span>
+                    {item.href === '/requests/buyer' && (
+                      <span className="inline-flex items-center gap-1 text-[10px] font-bold text-amber-700 bg-amber-50 border border-amber-200/80 px-2 py-0.5 rounded-full">
+                        <Lock className="w-2.5 h-2.5" /> Suppliers Only
+                      </span>
+                    )}
                   </Link>
                 ))}
               </div>

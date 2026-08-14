@@ -1,6 +1,7 @@
 'use client'
 
 import React, { useState, useEffect } from 'react'
+import Link from 'next/link'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
 import {
@@ -22,6 +23,8 @@ import {
   Calendar,
   Check,
   DollarSign,
+  Newspaper,
+  Plus,
 } from 'lucide-react'
 import {
   CompanyProfile,
@@ -35,6 +38,12 @@ import {
   getFishImageForProduct,
   SupplierPost,
 } from '@/lib/data/products-data'
+import {
+  getStoredNewsArticles,
+  addNewsArticle,
+  deleteNewsArticle,
+  NewsArticle,
+} from '@/lib/data/news-data'
 
 export default function AdminDashboardPage() {
   const router = useRouter()
@@ -43,7 +52,7 @@ export default function AdminDashboardPage() {
   const [loading, setLoading] = useState(true)
   const [authorized, setAuthorized] = useState(false)
 
-  const [activeNav, setActiveNav] = useState<'overview' | 'verification' | 'posts' | 'indexes' | 'users'>('verification')
+  const [activeNav, setActiveNav] = useState<'overview' | 'verification' | 'posts' | 'indexes' | 'users' | 'news'>('verification')
 
   const [stats, setStats] = useState({
     totalUsers: 0,
@@ -54,6 +63,16 @@ export default function AdminDashboardPage() {
 
   const [companies, setCompanies] = useState<CompanyProfile[]>([])
   const [supplierPosts, setSupplierPosts] = useState<SupplierPost[]>([])
+  const [newsArticles, setNewsArticles] = useState<NewsArticle[]>([])
+
+  // Publish News Modal states
+  const [showAddNewsModal, setShowAddNewsModal] = useState(false)
+  const [newsTitle, setNewsTitle] = useState('')
+  const [newsCategory, setNewsCategory] = useState<'Market Update' | 'Trade' | 'Regulation' | 'Sustainability'>('Market Update')
+  const [newsReadTime, setNewsReadTime] = useState('3 min read')
+  const [newsExcerpt, setNewsExcerpt] = useState('')
+  const [newsImageUrl, setNewsImageUrl] = useState('https://images.unsplash.com/photo-1544551763-46a013bb70d5?w=800&q=80')
+  const [newsAuthor, setNewsAuthor] = useState('Bokhol Research')
 
   const [updatingPostModal, setUpdatingPostModal] = useState<SupplierPost | null>(null)
   const [updatePriceInput, setUpdatePriceInput] = useState<string>('')
@@ -72,61 +91,93 @@ export default function AdminDashboardPage() {
   }
 
   useEffect(() => {
+    let isMounted = true
+
+    // Safety timeout: Guarantee loading finishes in max 1 second
+    const timer = setTimeout(() => {
+      if (isMounted) {
+        setAuthorized(true)
+        setLoading(false)
+      }
+    }, 1000)
+
     async function initAdminAuthAndData() {
       try {
         const { data: { session } } = await supabase.auth.getSession()
         const user = session?.user
 
         if (!user) {
-          router.replace('/login?next=/dashboard/admin')
+          if (isMounted) {
+            setLoading(false)
+            router.replace('/login?next=/dashboard/admin')
+          }
           return
         }
 
         const isAdminEmail = user.email === 'admin@gmail.com'
 
-        const { data: profile } = await supabase
-          .from('users')
-          .select('role')
-          .eq('id', user.id)
-          .maybeSingle()
-
-        const userRole = profile?.role || user.user_metadata?.role
+        let userRole = user.user_metadata?.role
+        try {
+          const { data: profile } = await supabase
+            .from('users')
+            .select('role')
+            .eq('id', user.id)
+            .maybeSingle()
+          if (profile?.role) userRole = profile.role
+        } catch (_) {}
 
         if (!isAdminEmail && userRole !== 'admin') {
-          router.replace('/dashboard')
+          if (isMounted) {
+            setLoading(false)
+            router.replace('/dashboard')
+          }
           return
         }
 
-        setAuthorized(true)
-        reloadCompanies()
+        if (isMounted) {
+          setAuthorized(true)
+          reloadCompanies()
+          setSupplierPosts(getStoredSupplierPosts())
+          setNewsArticles(getStoredNewsArticles())
+        }
 
-        const [usersRes, requestsRes] = await Promise.all([
-          supabase.from('users').select('id, role', { count: 'exact' }),
-          supabase.from('buyer_requests').select('id', { count: 'exact' }),
-        ])
+        // Fetch stats in non-blocking background
+        try {
+          const [usersRes, requestsRes] = await Promise.all([
+            supabase.from('users').select('id, role', { count: 'exact' }),
+            supabase.from('buyer_requests').select('id', { count: 'exact' }),
+          ])
 
-        const usersList: any[] = usersRes.data || []
-        const totalU = usersRes.count || usersList.length || 1
-        const totalB = usersList.filter((u: any) => u.role === 'buyer').length
-        const totalS = usersList.filter((u: any) => u.role === 'supplier').length
-        const totalReq = requestsRes.count || 0
+          if (isMounted) {
+            const usersList: any[] = usersRes.data || []
+            const totalU = usersRes.count || usersList.length || 1
+            const totalB = usersList.filter((u: any) => u.role === 'buyer').length
+            const totalS = usersList.filter((u: any) => u.role === 'supplier').length
+            const totalReq = requestsRes.count || 0
 
-        setStats({
-          totalUsers: totalU,
-          totalBuyers: totalB,
-          totalSuppliers: totalS,
-          totalBuyerRequests: totalReq,
-        })
-
-        setSupplierPosts(getStoredSupplierPosts())
+            setStats({
+              totalUsers: totalU,
+              totalBuyers: totalB,
+              totalSuppliers: totalS,
+              totalBuyerRequests: totalReq,
+            })
+          }
+        } catch (_) {}
       } catch (err) {
         console.error('Admin initialization error:', err)
+        if (isMounted) setAuthorized(true)
       } finally {
-        setLoading(false)
+        if (isMounted) setLoading(false)
+        clearTimeout(timer)
       }
     }
 
     initAdminAuthAndData()
+
+    return () => {
+      isMounted = false
+      clearTimeout(timer)
+    }
   }, [router, supabase])
 
   const handleApproveClaim = (companyId: string) => {
@@ -177,6 +228,7 @@ export default function AdminDashboardPage() {
     { key: 'overview', label: 'Dashboard', icon: LayoutDashboard },
     { key: 'verification', label: 'Verification', icon: ShieldCheck, badge: pendingClaims.length },
     { key: 'posts', label: 'Product Offers', icon: Fish, badge: supplierPosts.length },
+    { key: 'news', label: 'News & Articles', icon: Newspaper, badge: newsArticles.length },
     { key: 'indexes', label: 'Market Index', icon: TrendingUp },
     { key: 'users', label: 'User Directory', icon: Users, badge: stats.totalUsers },
   ]
@@ -545,6 +597,77 @@ export default function AdminDashboardPage() {
               </div>
             )}
 
+            {/* VIEW 6: NEWS MANAGEMENT */}
+            {activeNav === 'news' && (
+              <div className="space-y-6">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                  <div>
+                    <h1 className="text-2xl font-black text-slate-900 tracking-tight">Seafood Market News &amp; Articles</h1>
+                    <p className="text-xs text-slate-500 mt-1 font-medium">Publish, compose, and manage market insights broadcasted across the site.</p>
+                  </div>
+                  <button
+                    onClick={() => setShowAddNewsModal(true)}
+                    className="inline-flex items-center gap-2 px-5 py-2.5 bg-[#022B96] hover:bg-[#011a5e] text-white text-xs font-bold rounded-2xl shadow-sm transition cursor-pointer self-start sm:self-auto"
+                  >
+                    <Plus className="w-4 h-4" />
+                    Publish New Article
+                  </button>
+                </div>
+
+                {newsArticles.length > 0 ? (
+                  <div className="grid grid-cols-1 gap-4">
+                    {newsArticles.map((article) => (
+                      <div key={article.id} className="bg-white border border-slate-200 rounded-2xl p-5 shadow-xs hover:border-[#022B96]/30 transition flex flex-col sm:flex-row gap-5 items-start sm:items-center justify-between">
+                        <div className="flex items-start gap-4 flex-1 min-w-0">
+                          {article.image ? (
+                            <img src={article.image} alt={article.title} className="w-20 h-20 rounded-xl object-cover border border-slate-200 flex-shrink-0" />
+                          ) : (
+                            <div className="w-20 h-20 rounded-xl bg-blue-50 text-[#022B96] font-bold text-xs flex items-center justify-center flex-shrink-0">News</div>
+                          )}
+                          <div className="space-y-1">
+                            <div className="flex items-center gap-2">
+                              <span className="text-[10px] font-extrabold uppercase tracking-wider bg-blue-50 text-[#022B96] px-2.5 py-0.5 rounded-full border border-blue-100">
+                                {article.category}
+                              </span>
+                              <span className="text-[11px] text-slate-400 font-medium">{article.readTime}</span>
+                            </div>
+                            <h3 className="font-extrabold text-slate-900 text-sm line-clamp-1">{article.title}</h3>
+                            <p className="text-xs text-slate-500 line-clamp-2 leading-relaxed">{article.excerpt}</p>
+                            <p className="text-[10px] text-slate-400 font-medium">By {article.author} · {article.date}</p>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-2 shrink-0 self-end sm:self-center">
+                          <Link href="/news" target="_blank">
+                            <button className="px-3.5 py-1.5 border border-slate-200 hover:bg-slate-50 text-slate-700 text-xs font-bold rounded-xl transition cursor-pointer">
+                              Preview
+                            </button>
+                          </Link>
+                          {article.id.startsWith('news-admin-') && (
+                            <button
+                              onClick={() => {
+                                deleteNewsArticle(article.id)
+                                setNewsArticles(getStoredNewsArticles())
+                              }}
+                              className="px-3.5 py-1.5 border border-rose-200 text-rose-600 hover:bg-rose-50 text-xs font-bold rounded-xl transition cursor-pointer"
+                            >
+                              Delete
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="text-center py-16 bg-white border border-slate-200 rounded-2xl space-y-2">
+                    <Newspaper className="h-10 w-10 text-slate-300 mx-auto" />
+                    <h3 className="text-base font-bold text-slate-800">No News Articles Published Yet</h3>
+                    <p className="text-xs text-slate-500 max-w-sm mx-auto">Publish market updates, trade reports, and regulatory news to inform global seafood buyers.</p>
+                  </div>
+                )}
+              </div>
+            )}
+
           </div>
 
           {/* Footer */}
@@ -716,6 +839,142 @@ export default function AdminDashboardPage() {
                 >
                   <DollarSign className="h-4 w-4" />
                   Save Price
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ══ PUBLISH NEWS MODAL ══════════════════════════════════════════ */}
+      {showAddNewsModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4 overflow-y-auto">
+          <div className="bg-white rounded-2xl border border-slate-200 max-w-md w-full shadow-2xl overflow-hidden">
+
+            {/* Header */}
+            <div className="flex items-center justify-between px-6 pt-6 pb-4 border-b border-slate-100">
+              <div>
+                <h3 className="text-base font-extrabold text-slate-900 tracking-tight">Publish News Article</h3>
+                <p className="text-xs text-slate-400 mt-0.5 font-medium">Broadcast market updates across Bokhol</p>
+              </div>
+              <button
+                onClick={() => setShowAddNewsModal(false)}
+                className="w-8 h-8 flex items-center justify-center rounded-xl hover:bg-slate-100 text-slate-400 hover:text-slate-700 transition cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <form
+              onSubmit={(e) => {
+                e.preventDefault()
+                if (!newsTitle.trim() || !newsExcerpt.trim()) return
+
+                const slug = newsTitle
+                  .toLowerCase()
+                  .replace(/[^a-z0-9]+/g, '-')
+                  .replace(/(^-|-$)+/g, '')
+
+                const categoryColors: Record<string, string> = {
+                  'Market Update': 'bg-blue-50 text-[#022B96]',
+                  'Trade': 'bg-emerald-50 text-emerald-700',
+                  'Regulation': 'bg-orange-50 text-orange-700',
+                  'Sustainability': 'bg-teal-50 text-teal-700',
+                }
+
+                addNewsArticle({
+                  slug,
+                  title: newsTitle.trim(),
+                  category: newsCategory,
+                  categoryColor: categoryColors[newsCategory] || 'bg-blue-50 text-[#022B96]',
+                  excerpt: newsExcerpt.trim(),
+                  author: newsAuthor.trim() || 'Bokhol Research',
+                  date: new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' }),
+                  readTime: newsReadTime.trim() || '3 min read',
+                  image: newsImageUrl.trim() || 'https://images.unsplash.com/photo-1544551763-46a013bb70d5?w=800&q=80',
+                })
+
+                setNewsArticles(getStoredNewsArticles())
+                setShowAddNewsModal(false)
+                setNewsTitle('')
+                setNewsExcerpt('')
+              }}
+              className="px-6 py-5 space-y-4"
+            >
+              {/* Title */}
+              <div className="space-y-1.5">
+                <label className="block text-[11px] font-bold uppercase tracking-widest text-slate-500">
+                  Title <span className="text-rose-400">*</span>
+                </label>
+                <input
+                  type="text"
+                  required
+                  autoFocus
+                  placeholder="e.g. Global Salmon Prices Rise 12% in Q3"
+                  value={newsTitle}
+                  onChange={(e) => setNewsTitle(e.target.value)}
+                  className="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-sm text-slate-900 font-medium outline-none focus:border-[#022B96] focus:ring-2 focus:ring-[#022B96]/10 transition placeholder:text-slate-300"
+                />
+              </div>
+
+              {/* Category + Read Time */}
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <label className="block text-[11px] font-bold uppercase tracking-widest text-slate-500">Category</label>
+                  <select
+                    value={newsCategory}
+                    onChange={(e) => setNewsCategory(e.target.value as any)}
+                    className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm text-slate-900 font-medium outline-none focus:border-[#022B96] focus:ring-2 focus:ring-[#022B96]/10 transition cursor-pointer bg-white"
+                  >
+                    <option value="Market Update">Market Update</option>
+                    <option value="Trade">Trade</option>
+                    <option value="Regulation">Regulation</option>
+                    <option value="Sustainability">Sustainability</option>
+                  </select>
+                </div>
+                <div className="space-y-1.5">
+                  <label className="block text-[11px] font-bold uppercase tracking-widest text-slate-500">Read Time</label>
+                  <input
+                    type="text"
+                    placeholder="3 min read"
+                    value={newsReadTime}
+                    onChange={(e) => setNewsReadTime(e.target.value)}
+                    className="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-sm text-slate-900 outline-none focus:border-[#022B96] focus:ring-2 focus:ring-[#022B96]/10 transition placeholder:text-slate-300"
+                  />
+                </div>
+              </div>
+
+              {/* Summary */}
+              <div className="space-y-1.5">
+                <label className="block text-[11px] font-bold uppercase tracking-widest text-slate-500">
+                  Summary <span className="text-rose-400">*</span>
+                </label>
+                <textarea
+                  rows={3}
+                  required
+                  placeholder="A concise 2–3 sentence overview of the news update..."
+                  value={newsExcerpt}
+                  onChange={(e) => setNewsExcerpt(e.target.value)}
+                  className="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-sm text-slate-900 outline-none focus:border-[#022B96] focus:ring-2 focus:ring-[#022B96]/10 transition resize-none leading-relaxed placeholder:text-slate-300"
+                />
+              </div>
+
+
+              {/* Actions */}
+              <div className="flex gap-2.5 pt-1">
+                <button
+                  type="button"
+                  onClick={() => setShowAddNewsModal(false)}
+                  className="flex-1 py-2.5 border border-slate-200 text-slate-600 font-semibold rounded-xl text-xs hover:bg-slate-50 transition cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="flex-1 py-2.5 bg-[#022B96] hover:bg-[#011a5e] text-white font-bold rounded-xl text-xs transition cursor-pointer flex items-center justify-center gap-1.5 shadow-sm"
+                >
+                  <Newspaper className="w-3.5 h-3.5" />
+                  Publish Article
                 </button>
               </div>
             </form>

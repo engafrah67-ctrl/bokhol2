@@ -3,14 +3,16 @@
 import React, { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { ArrowLeft, ArrowRight, Loader2, ShoppingBag, MapPin, ShieldCheck, AlertCircle, Calendar, Package } from 'lucide-react'
+import { ArrowLeft, ArrowRight, Loader2, ShoppingBag, MapPin, ShieldCheck, AlertCircle, Calendar, Package, Lock, LogIn, UserPlus } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
+import { useUser } from '@/hooks/use-user'
 
 const inputCls = 'w-full text-sm border border-slate-200 rounded-xl bg-white px-4 py-3 focus:ring-2 focus:ring-[#022B96]/20 focus:border-[#022B96] outline-none placeholder:text-slate-400 font-medium transition'
 const labelCls = 'block text-xs font-bold uppercase tracking-wider text-slate-700 mb-2'
 
 export default function NewBuyerRequestPage() {
   const router = useRouter()
+  const { user, isLoading } = useUser()
   const [loading, setLoading] = useState(false)
   const [errorMessage, setErrorMessage] = useState('')
 
@@ -23,6 +25,41 @@ export default function NewBuyerRequestPage() {
   const [deliveryDate, setDeliveryDate] = useState('Friday')
   const [targetPrice, setTargetPrice] = useState('')
   const [additionalNotes, setAdditionalNotes] = useState('')
+
+  React.useEffect(() => {
+    if (!isLoading && !user) {
+      router.replace('/login?next=/requests/buyer/new')
+    }
+  }, [isLoading, user, router])
+
+  // Loading spinner while checking auth status
+  if (isLoading || !user) {
+    return (
+      <main className="min-h-[75vh] flex items-center justify-center px-4 py-16">
+        <div className="bg-white border border-slate-200 rounded-3xl p-8 max-w-md w-full text-center shadow-xl space-y-4">
+          <div className="w-14 h-14 rounded-2xl bg-blue-50 text-[#022B96] flex items-center justify-center mx-auto border border-blue-100 shadow-sm">
+            <Lock className="w-6 h-6" />
+          </div>
+          <div>
+            <span className="inline-block text-[10px] font-extrabold uppercase tracking-widest text-[#022B96] bg-blue-50 px-2.5 py-0.5 rounded-full mb-1 border border-blue-100">
+              Account Required
+            </span>
+            <h2 className="text-xl font-extrabold text-slate-900">Redirecting to Sign In...</h2>
+            <p className="text-xs text-slate-500 mt-1 leading-relaxed">
+              You need to log in to post a seafood sourcing request. Redirecting you to login...
+            </p>
+          </div>
+          <div className="pt-2 flex justify-center gap-3">
+            <Link href="/login?next=/requests/buyer/new" className="w-full">
+              <button className="w-full py-3 px-5 bg-[#022B96] hover:bg-[#011a5e] text-white text-xs font-bold rounded-xl shadow transition cursor-pointer">
+                Sign In Now
+              </button>
+            </Link>
+          </div>
+        </div>
+      </main>
+    )
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()

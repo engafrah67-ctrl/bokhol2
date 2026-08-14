@@ -3,20 +3,7 @@
 import React, { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { Calendar, Clock, ArrowRight, Tag, Rss, Building2, Package, MapPin, CheckCircle2, ShieldAlert } from 'lucide-react'
-
-interface NewsArticle {
-  slug: string
-  category: string
-  categoryColor: string
-  title: string
-  excerpt: string
-  author: string
-  date: string
-  readTime: string
-  image: string
-  isSupplierNews?: boolean
-  companyName?: string
-}
+import { getStoredNewsArticles, NewsArticle, DEFAULT_NEWS_ARTICLES } from '@/lib/data/news-data'
 
 interface SupplierPostFeed {
   id: string
@@ -32,63 +19,7 @@ interface SupplierPostFeed {
   date: string
 }
 
-const NEWS_ARTICLES: NewsArticle[] = [
-  {
-    slug: 'global-salmon-prices-q3-2026',
-    category: 'Market Update',
-    categoryColor: 'bg-blue-50 text-[#022B96]',
-    title: 'Global Salmon Prices Rise 12% in Q3 2026 Amid Supply Constraints',
-    excerpt: 'Atlantic salmon prices have surged to their highest level in three years, driven by reduced harvests in Norway and Scotland following environmental regulations.',
-    author: 'FishMarketCap Research',
-    date: 'July 25, 2026',
-    readTime: '4 min read',
-    image: 'https://images.unsplash.com/photo-1544551763-46a013bb70d5?w=800&q=80',
-  },
-  {
-    slug: 'vietnam-shrimp-exports-record',
-    category: 'Trade',
-    categoryColor: 'bg-emerald-50 text-emerald-700',
-    title: 'Vietnam Sets New Shrimp Export Record, Surpassing $4.2B in H1 2026',
-    excerpt: "Southeast Asia's largest shrimp producer has posted record first-half revenues, fuelled by growing demand from European and North American buyers.",
-    author: 'FishMarketCap Research',
-    date: 'July 23, 2026',
-    readTime: '3 min read',
-    image: 'https://images.unsplash.com/photo-1565680018434-b513d5e5fd47?w=800&q=80',
-  },
-  {
-    slug: 'eu-seafood-labelling-2026',
-    category: 'Regulation',
-    categoryColor: 'bg-orange-50 text-orange-700',
-    title: 'EU Introduces Stricter Seafood Labelling Rules Starting January 2027',
-    excerpt: 'The European Commission has published new traceability requirements for all seafood sold in the EU, giving suppliers 18 months to comply.',
-    author: 'FishMarketCap Research',
-    date: 'July 21, 2026',
-    readTime: '5 min read',
-    image: 'https://images.unsplash.com/photo-1519708227418-c8fd9a32b7a2?w=800&q=80',
-  },
-  {
-    slug: 'tuna-msc-certification',
-    category: 'Sustainability',
-    categoryColor: 'bg-teal-50 text-teal-700',
-    title: 'Three Major Tuna Fisheries Receive MSC Certification in Pacific Waters',
-    excerpt: 'The Marine Stewardship Council has granted certified sustainable status to key Pacific tuna fisheries, unlocking new premium market access.',
-    author: 'FishMarketCap Research',
-    date: 'July 18, 2026',
-    readTime: '4 min read',
-    image: 'https://images.unsplash.com/photo-1535591273668-578e31182c4f?w=800&q=80',
-  },
-  {
-    slug: 'cod-north-sea-quotas',
-    category: 'Market Update',
-    categoryColor: 'bg-blue-50 text-[#022B96]',
-    title: 'North Sea Cod Quotas Reduced by 20% for 2027 Season',
-    excerpt: 'Fisheries management bodies across the UK, Norway, and Iceland have agreed to cut cod harvest quotas significantly to allow stock recovery.',
-    author: 'FishMarketCap Research',
-    date: 'July 15, 2026',
-    readTime: '3 min read',
-    image: 'https://images.unsplash.com/photo-1571748982800-fa51082c2224?w=800&q=80',
-  },
-]
+
 
 const DEFAULT_SUPPLIER_FEED: SupplierPostFeed[] = [
   {
@@ -132,9 +63,12 @@ const DEFAULT_SUPPLIER_FEED: SupplierPostFeed[] = [
 export default function NewsPage() {
   const [activeTab, setActiveTab] = useState<'market_feed' | 'all' | 'market_update' | 'trade'>('all')
   const [supplierPosts, setSupplierPosts] = useState<SupplierPostFeed[]>(DEFAULT_SUPPLIER_FEED)
+  const [articles, setArticles] = useState<NewsArticle[]>(DEFAULT_NEWS_ARTICLES)
 
-  // Load any local supplier posts created by users
+  // Load articles & local supplier posts
   useEffect(() => {
+    setArticles(getStoredNewsArticles())
+
     if (typeof window !== 'undefined') {
       try {
         const stored = JSON.parse(localStorage.getItem('supplier_posts') || '[]')
@@ -163,7 +97,8 @@ export default function NewsPage() {
     }
   }, [])
 
-  const [featured, ...restArticles] = NEWS_ARTICLES
+  const allArticles = articles.length > 0 ? articles : DEFAULT_NEWS_ARTICLES
+  const [featured, ...restArticles] = allArticles
 
   return (
     <main className="min-h-screen bg-transparent pb-16">
@@ -342,12 +277,12 @@ export default function NewsPage() {
             {/* Article Grid */}
             <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
               {restArticles
-                .filter((art) => {
+                .filter((art: NewsArticle) => {
                   if (activeTab === 'market_update') return art.category === 'Market Update'
                   if (activeTab === 'trade') return art.category === 'Trade' || art.category === 'Regulation'
                   return true
                 })
-                .map((article) => (
+                .map((article: NewsArticle) => (
                   <Link href={`/news/${article.slug}`} key={article.slug} className="group block">
                     <div className="border border-slate-200 rounded-3xl overflow-hidden hover:border-slate-300 hover:shadow-md transition-all duration-300 h-full flex flex-col bg-white">
                       <div className="h-44 overflow-hidden">

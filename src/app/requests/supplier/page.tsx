@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react'
 import Link from 'next/link'
-import { Plus, ArrowRight, Search, Anchor, Calendar } from 'lucide-react'
+import { Plus, ArrowRight, Search, Anchor, Calendar, Lock, ShieldAlert, Building2, Send, LogIn } from 'lucide-react'
 import { useUser } from '@/hooks/use-user'
 
 interface SupplierOffer {
@@ -52,7 +52,7 @@ const DEFAULT_OFFERS: SupplierOffer[] = [
 ]
 
 export default function SupplierRequestsPage() {
-  const { user, profile } = useUser()
+  const { user, profile, isLoading } = useUser()
   const [offers] = useState<SupplierOffer[]>(DEFAULT_OFFERS)
   const [searchTerm, setSearchTerm] = useState('')
 
@@ -61,6 +61,93 @@ export default function SupplierRequestsPage() {
     o.destPort.toLowerCase().includes(searchTerm.toLowerCase()) ||
     o.productAvailable.toLowerCase().includes(searchTerm.toLowerCase())
   )
+
+  // Loading spinner while checking auth status
+  if (isLoading) {
+    return (
+      <main className="min-h-screen bg-transparent py-16 flex items-center justify-center">
+        <div className="text-center space-y-3">
+          <div className="w-8 h-8 border-4 border-[#022B96] border-t-transparent rounded-full animate-spin mx-auto" />
+          <p className="text-xs text-slate-500 font-semibold">Verifying access permissions...</p>
+        </div>
+      </main>
+    )
+  }
+
+  // Gated Access Screen for Unauthenticated Visitors
+  if (!user) {
+    return (
+      <main className="min-h-screen bg-transparent pb-16">
+        <div className="border-b border-slate-200/80 bg-white/60 backdrop-blur-sm py-10">
+          <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div>
+              <h1 className="text-3xl font-extrabold text-slate-900 tracking-tight">Supplier Availability</h1>
+              <p className="mt-1 text-slate-500 text-sm">Active supplier cargo catalogs, stocks, and available shipping routes.</p>
+            </div>
+          </div>
+        </div>
+
+        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 pt-10">
+          <div className="bg-white rounded-3xl p-8 md:p-12 text-slate-900 shadow-xl border border-slate-200/80 relative overflow-hidden">
+            <div className="space-y-6">
+              <div>
+                <h2 className="text-2xl md:text-3xl font-extrabold text-slate-900 leading-tight">
+                  Supplier Product Stocks &amp; Offers are Restricted to Logged-in Users
+                </h2>
+                <p className="text-slate-600 text-sm md:text-base mt-2 leading-relaxed max-w-2xl">
+                  To protect wholesale trade pricing and supplier inventory availability, product stock catalogs and shipping routes are only visible to authenticated users.
+                </p>
+              </div>
+
+              {/* Value Proposition Highlights */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-2">
+                <div className="bg-slate-50/80 border border-slate-100 rounded-2xl p-5 text-left space-y-1.5">
+                  <div className="w-8 h-8 rounded-xl bg-blue-100 text-[#022B96] flex items-center justify-center font-bold text-sm mb-2 border border-blue-200">
+                    <ShieldAlert className="w-4 h-4" />
+                  </div>
+                  <h4 className="font-extrabold text-slate-900 text-sm">Wholesale Price Protection</h4>
+                  <p className="text-xs text-slate-500 leading-relaxed">
+                    Supplier pricing and volume terms are kept confidential from public web scraping.
+                  </p>
+                </div>
+
+                <div className="bg-slate-50/80 border border-slate-100 rounded-2xl p-5 text-left space-y-1.5">
+                  <div className="w-8 h-8 rounded-xl bg-amber-100 text-amber-800 flex items-center justify-center font-bold text-sm mb-2 border border-amber-200">
+                    <Anchor className="w-4 h-4" />
+                  </div>
+                  <h4 className="font-extrabold text-slate-900 text-sm">Verified Shipping Routes</h4>
+                  <p className="text-xs text-slate-500 leading-relaxed">
+                    Direct access to cargo availability, reefer container specs, and port departure schedules.
+                  </p>
+                </div>
+
+                <div className="bg-slate-50/80 border border-slate-100 rounded-2xl p-5 text-left space-y-1.5">
+                  <div className="w-8 h-8 rounded-xl bg-emerald-100 text-emerald-800 flex items-center justify-center font-bold text-sm mb-2 border border-emerald-200">
+                    <Send className="w-4 h-4" />
+                  </div>
+                  <h4 className="font-extrabold text-slate-900 text-sm">Direct Supplier RFQs</h4>
+                  <p className="text-xs text-slate-500 leading-relaxed">
+                    Connect directly with verified seafood suppliers and exporters to request custom quotes.
+                  </p>
+                </div>
+              </div>
+
+              {/* CTA Action Button */}
+              <div className="pt-4">
+                <Link href="/login?next=/requests/supplier">
+                  <button className="inline-flex items-center justify-center gap-2 px-8 py-3.5 bg-[#022B96] hover:bg-[#011a5e] text-white text-sm font-extrabold rounded-2xl shadow-md transition cursor-pointer">
+                    <LogIn className="w-4 h-4" />
+                    Log In to View Supplier Stock
+                  </button>
+                </Link>
+              </div>
+
+            </div>
+          </div>
+        </div>
+      </main>
+    )
+  }
 
   return (
     <main className="min-h-screen bg-transparent pb-16">
