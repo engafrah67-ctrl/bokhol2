@@ -1,0 +1,9 @@
+<svg viewBox="0 0 100 120" xmlns="http://www.w3.org/2000/svg">
+  <!-- The stem of the 'b' -->
+  <rect x="20" y="10" width="24" height="74" fill="black" />
+  <!-- The bowl of the 'b' -->
+  <circle cx="48" cy="56" r="16" stroke="black" stroke-width="24" fill="none" />
+  
+  <!-- The blue arc (smile) underneath -->
+  <path d="M 12 98 Q 48 120 84 98" stroke="#0044cc" stroke-width="14" fill="none" />
+</svg>

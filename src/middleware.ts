@@ -1,0 +1,71 @@
+import { NextResponse, type NextRequest } from 'next/server'
+import { createServerClient } from '@supabase/ssr'
+
+export async function middleware(request: NextRequest) {
+  const { pathname } = request.nextUrl
+
+  // 1. Create response object
+  let supabaseResponse = NextResponse.next({
+    request,
+  })
+
+  // 2. Safely initialize Supabase client
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://sfbixmrmdfignczavzbw.supabase.co'
+  const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'sb_publishable_CzLhV-083W6ru-INTER2-A_LxYLSxZC'
+
+  const supabase = createServerClient(supabaseUrl, supabaseAnonKey, {
+    cookies: {
+      getAll() {
+        return request.cookies.getAll()
+      },
+      setAll(cookiesToSet) {
+        cookiesToSet.forEach(({ name, value }) => request.cookies.set(name, value))
+        supabaseResponse = NextResponse.next({
+          request,
+        })
+        cookiesToSet.forEach(({ name, value, options }) =>
+          supabaseResponse.cookies.set(name, value, options)
+        )
+      },
+    },
+  })
+
+  // Check if any Supabase auth cookie is present in the request
+  const allCookies = request.cookies.getAll()
+  const hasAuthCookie = allCookies.some(
+    (c) => c.name.includes('sb-') || c.name.includes('auth-token') || c.name.includes('supabase')
+  )
+
+  let user = null
+  try {
+    const { data } = await supabase.auth.getUser()
+    user = data?.user || null
+  } catch (err) {
+    // If rate-limited (429) or network glitch, gracefully ignore error
+    console.warn('Middleware auth check warn:', err)
+  }
+
+  // 4. Protect routes:
+  // ONLY redirect to /login if there is NO user AND NO auth cookie present.
+  // If an auth cookie exists but getUser() failed (e.g. 429 rate limit), DO NOT log out!
+  if (!user && !hasAuthCookie && pathname.startsWith('/dashboard')) {
+    const redirectUrl = new URL('/login', request.url)
+    redirectUrl.searchParams.set('next', pathname)
+    return NextResponse.redirect(redirectUrl)
+  }
+
+  // 5. Protect Auth Pages (if logged in, redirect to dashboard)
+  const authPaths = ['/login', '/signup', '/forgot-password', '/reset-password', '/verify-email']
+  if (user && authPaths.some((p) => pathname.startsWith(p))) {
+    return NextResponse.redirect(new URL('/dashboard', request.url))
+  }
+
+  // 6. Return response to apply any refreshed cookies
+  return supabaseResponse
+}
+
+export const config = {
+  matcher: [
+    '/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
+  ],
+}
