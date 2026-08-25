@@ -80,44 +80,7 @@ function getFishImage(productName: string): string | null {
   return FISH_IMAGE_MAP[productName] || null
 }
 
-const DASHBOARD_BUYER_REQUESTS = [
-  {
-    id: 'req-sample-1',
-    productNeeded: 'Salmon',
-    quantity: '100 KG',
-    freshFrozen: 'Fresh / Frozen',
-    location: 'Amsterdam, Netherlands',
-    packagingProcessing: 'packing/pure',
-    deliveryDate: 'Friday',
-    targetPrice: '$6.20/kg',
-    additionalNotes: 'Need fresh or frozen salmon delivered by Friday morning at Amsterdam port warehouse.',
-    createdAt: new Date().toISOString(),
-  },
-  {
-    id: 'req-sample-2',
-    productNeeded: 'Atlantic Cod Fillets',
-    quantity: '500 KG',
-    freshFrozen: 'Frozen (IQF)',
-    location: 'Vigo, Spain',
-    packagingProcessing: 'Fillet (Skinless)',
-    deliveryDate: 'Next Tuesday',
-    targetPrice: '$4.80/kg',
-    additionalNotes: 'Grade A IQF cod fillets required for restaurant distributor.',
-    createdAt: new Date().toISOString(),
-  },
-  {
-    id: 'req-sample-3',
-    productNeeded: 'Yellowfin Tuna Loins',
-    quantity: '250 KG',
-    freshFrozen: 'Fresh',
-    location: 'Tokyo, Japan',
-    packagingProcessing: 'Vacuum Packed Loins',
-    deliveryDate: 'Thursday',
-    targetPrice: '$12.50/kg',
-    additionalNotes: 'Sashimi grade fresh yellowfin tuna loins.',
-    createdAt: new Date().toISOString(),
-  }
-]
+
 
 export default function SupplierDashboardPage() {
   const router = useRouter()
@@ -165,16 +128,12 @@ export default function SupplierDashboardPage() {
   const [userPhone, setUserPhone] = useState('')
 
   useEffect(() => {
-    // 1. Immediately load local supplier posts so UI has data right away
-    const initialPosts = getStoredSupplierPosts()
-    setSupplierPosts(initialPosts)
-
     let isMounted = true
 
-    // 2. Safety timer: Guarantee loading finishes in 1.2 seconds max
+    // Safety timer: Guarantee loading finishes in 1.5 seconds max
     const safetyTimer = setTimeout(() => {
       if (isMounted) setLoading(false)
-    }, 1200)
+    }, 1500)
 
     async function loadDashboardData() {
       try {
@@ -232,22 +191,65 @@ export default function SupplierDashboardPage() {
             setCompanyYearFounded(companyData.year_founded ? String(companyData.year_founded) : '')
             setCompanyEmployeeCount(companyData.employee_count || '')
             setCompanyLogoUrl(companyData.logo_url || '')
+
+            // 3. Fetch this supplier's real posts from DB
+            const { data: dbPosts } = await supabase
+              .from('supplier_posts')
+              .select('id, title, content, created_at, updated_at, is_published')
+              .eq('company_id', companyData.id)
+              .eq('is_published', true)
+              .order('created_at', { ascending: false })
+
+            if (dbPosts && isMounted) {
+              // Parse content JSON into SupplierPost shape
+              const normalized = dbPosts.map((row: any) => {
+                let details: any = {}
+                try { details = JSON.parse(row.content || '{}') } catch (_) {}
+                return {
+                  id: row.id,
+                  company_name: companyData.name || '',
+                  product_name: details.productName || row.title?.split(' —')[0] || 'Seafood Product',
+                  price_per_kg: parseFloat(details.pricePerKg || 0),
+                  currency: details.currency || 'EUR',
+                  country_of_origin: details.countryOfOrigin || 'Norway',
+                  fresh_frozen: details.freshFrozen || 'Frozen',
+                  size_weight: details.sizeWeight || 'Medium',
+                  packaging: details.packagingFillet || 'Standard',
+                  availability: details.availability || 'In Stock — Ready to Ship',
+                  location: details.location || '',
+                  supplier_info_extra: details.supplierInfoExtra || '',
+                  custom_image: details.customImage || null,
+                  created_at: row.created_at,
+                  updated_at: row.updated_at || row.created_at,
+                  status: 'active',
+                }
+              })
+              setSupplierPosts(normalized)
+            } else if (isMounted) {
+              // Fallback: localStorage for suppliers without DB posts yet
+              setSupplierPosts(getStoredSupplierPosts())
+            }
+          } else if (isMounted) {
+            // No company yet — use localStorage fallback
+            setSupplierPosts(getStoredSupplierPosts())
           }
         }
 
-        // 3. Fetch Countries
+        // 4. Fetch Countries (only featured seafood-exporting nations)
         const { data: countriesData } = await supabase
           .from('countries')
           .select('id, name, flag_emoji')
+          .eq('is_featured', true)
           .order('name')
         if (countriesData && isMounted) setCountries(countriesData)
 
-        // 4. Fetch Buyer Requests
+        // 5. Fetch Real Buyer Requests from DB
         const { data: requestsData } = await supabase
           .from('buyer_requests')
-          .select('id, title, created_at')
+          .select('id, title, description, quantity, quantity_unit, currency, target_price, destination, status, created_at')
+          .eq('status', 'open')
           .order('created_at', { ascending: false })
-          .limit(5)
+          .limit(10)
         if (requestsData && isMounted) setBuyerRequests(requestsData)
 
       } catch (err) {
@@ -266,22 +268,51 @@ export default function SupplierDashboardPage() {
     }
   }, [])
 
-  const handleSavePriceUpdate = (e: React.FormEvent) => {
+  const handleSavePriceUpdate = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!updatingPostModal) return
     const numPrice = parseFloat(updatePriceInput)
     if (isNaN(numPrice) || numPrice < 0) return
 
-    const updatedPosts = updateProductPrice(
-      updatingPostModal.id,
-      numPrice,
-      updateCurrencyInput,
-      updateAvailabilityInput
+    const postId = updatingPostModal.id
+    const now = new Date().toISOString()
+
+    // Update in DB if this is a real DB post (UUID format)
+    const isDbPost = /^[0-9a-f-]{36}$/.test(postId)
+    if (isDbPost && company?.id) {
+      // Fetch current content, update price fields, re-save
+      const { data: existingPost } = await supabase
+        .from('supplier_posts')
+        .select('content')
+        .eq('id', postId)
+        .maybeSingle()
+      if (existingPost) {
+        let details: any = {}
+        try { details = JSON.parse(existingPost.content || '{}') } catch (_) {}
+        details.pricePerKg = numPrice
+        details.currency = updateCurrencyInput
+        details.availability = updateAvailabilityInput
+        await supabase
+          .from('supplier_posts')
+          .update({ content: JSON.stringify(details) })
+          .eq('id', postId)
+      }
+    } else {
+      // Fallback: update localStorage
+      updateProductPrice(postId, numPrice, updateCurrencyInput, updateAvailabilityInput)
+    }
+
+    // Update local state
+    setSupplierPosts((prev: any[]) =>
+      prev.map((p: any) =>
+        p.id === postId
+          ? { ...p, price_per_kg: numPrice, currency: updateCurrencyInput, availability: updateAvailabilityInput, updated_at: now }
+          : p
+      )
     )
-    setSupplierPosts(updatedPosts)
     setMessage({
       type: 'success',
-      text: `Price for "${updatingPostModal.product_name || updatingPostModal.productName || 'Product'}" updated to ${updateCurrencyInput} ${numPrice.toFixed(2)}/kg!`,
+      text: `Price for "${updatingPostModal.product_name || 'Product'}" updated to ${updateCurrencyInput} ${numPrice.toFixed(2)}/kg!`,
     })
     setUpdatingPostModal(null)
   }
@@ -961,10 +992,19 @@ export default function SupplierDashboardPage() {
                             Update Price
                           </button>
                           <button
-                            onClick={() => {
-                              const updated = supplierPosts.filter((p: any) => p.id !== post.id)
-                              setSupplierPosts(updated)
-                              saveSupplierPosts(updated)
+                            onClick={async () => {
+                              const postId = post.id
+                              const isDbPost = /^[0-9a-f-]{36}$/.test(postId)
+                              if (isDbPost) {
+                                await supabase
+                                  .from('supplier_posts')
+                                  .update({ is_published: false })
+                                  .eq('id', postId)
+                              } else {
+                                const updated = supplierPosts.filter((p: any) => p.id !== postId)
+                                saveSupplierPosts(updated)
+                              }
+                              setSupplierPosts((prev: any[]) => prev.filter((p: any) => p.id !== postId))
                             }}
                             className="text-xs text-red-500 hover:underline cursor-pointer font-medium px-2 py-1"
                           >
@@ -1043,59 +1083,77 @@ export default function SupplierDashboardPage() {
               </Link>
             </div>
 
-            <div className="grid grid-cols-1 gap-4">
-              {DASHBOARD_BUYER_REQUESTS.map((req) => (
-                <div key={req.id} className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm hover:border-[#022B96]/30 transition space-y-4">
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-3">
-                    <div>
-                      <span className="inline-block text-[10px] font-black uppercase tracking-wider text-blue-700 bg-blue-50 px-2.5 py-0.5 rounded-md mb-1">
-                        Buyer Tender
-                      </span>
-                      <h3 className="text-lg font-extrabold text-slate-900">{req.productNeeded}</h3>
-                    </div>
-                    <div className="flex items-center gap-2 text-xs font-bold text-slate-700 bg-slate-100 px-3 py-1.5 rounded-xl self-start sm:self-auto">
-                      <span>Target: {req.targetPrice || 'Negotiable'}</span>
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
-                    <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-100">
-                      <span className="text-slate-400 block text-[10px] uppercase font-bold">Quantity Needed</span>
-                      <span className="font-extrabold text-slate-800">{req.quantity}</span>
-                    </div>
-                    <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-100">
-                      <span className="text-slate-400 block text-[10px] uppercase font-bold">State / Condition</span>
-                      <span className="font-semibold text-slate-800">{req.freshFrozen}</span>
-                    </div>
-                    <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-100">
-                      <span className="text-slate-400 block text-[10px] uppercase font-bold">Delivery Port</span>
-                      <span className="font-semibold text-slate-800">{req.location}</span>
-                    </div>
-                    <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-100">
-                      <span className="text-slate-400 block text-[10px] uppercase font-bold">Delivery Date</span>
-                      <span className="font-semibold text-slate-800">{req.deliveryDate}</span>
-                    </div>
-                  </div>
-
-                  {req.additionalNotes && (
-                    <p className="text-xs text-slate-600 bg-blue-50/50 p-3 rounded-xl border border-blue-100/60 leading-relaxed italic">
-                      "{req.additionalNotes}"
-                    </p>
-                  )}
-
-                  <div className="flex items-center justify-between pt-2 border-t border-slate-100">
-                    <span className="text-[11px] text-slate-400 font-medium flex items-center gap-1">
-                      <Clock className="w-3.5 h-3.5" /> Posted recently by verified buyer
-                    </span>
-                    <Link href="/requests/buyer">
-                      <Button className="bg-[#022B96] hover:bg-[#011a5e] text-white text-xs font-bold px-4 py-2 rounded-xl shadow-sm cursor-pointer flex items-center gap-1.5">
-                        <Send className="w-3.5 h-3.5" /> Send Quote to Buyer
-                      </Button>
-                    </Link>
-                  </div>
+            {buyerRequests.length === 0 ? (
+              <div className="bg-white border border-slate-200 rounded-2xl p-12 text-center">
+                <div className="h-16 w-16 rounded-2xl bg-blue-50 flex items-center justify-center mx-auto mb-4">
+                  <ShoppingBag className="h-8 w-8 text-blue-400" />
                 </div>
-              ))}
-            </div>
+                <h3 className="text-base font-bold text-slate-800 mb-1">No open buyer requests yet</h3>
+                <p className="text-sm text-slate-400">Check back soon — buyer tenders will appear here.</p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 gap-4">
+                {buyerRequests.map((req: any) => (
+                  <div key={req.id} className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm hover:border-[#022B96]/30 transition space-y-4">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-3">
+                      <div>
+                        <span className="inline-block text-[10px] font-black uppercase tracking-wider text-blue-700 bg-blue-50 px-2.5 py-0.5 rounded-md mb-1">
+                          Buyer Tender
+                        </span>
+                        <h3 className="text-lg font-extrabold text-slate-900">{req.title}</h3>
+                      </div>
+                      {req.target_price && (
+                        <div className="flex items-center gap-2 text-xs font-bold text-slate-700 bg-slate-100 px-3 py-1.5 rounded-xl self-start sm:self-auto">
+                          <span>Target: {req.currency || 'USD'} {Number(req.target_price).toFixed(2)}/kg</span>
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+                      {req.quantity && (
+                        <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-100">
+                          <span className="text-slate-400 block text-[10px] uppercase font-bold">Quantity Needed</span>
+                          <span className="font-extrabold text-slate-800">{req.quantity} {req.quantity_unit || 'kg'}</span>
+                        </div>
+                      )}
+                      {req.destination && (
+                        <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-100">
+                          <span className="text-slate-400 block text-[10px] uppercase font-bold">Delivery Port</span>
+                          <span className="font-semibold text-slate-800">{req.destination}</span>
+                        </div>
+                      )}
+                      <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-100">
+                        <span className="text-slate-400 block text-[10px] uppercase font-bold">Status</span>
+                        <span className="font-semibold text-slate-800 capitalize">{req.status || 'open'}</span>
+                      </div>
+                      <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-100">
+                        <span className="text-slate-400 block text-[10px] uppercase font-bold">Posted</span>
+                        <span className="font-semibold text-slate-800">
+                          {new Date(req.created_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}
+                        </span>
+                      </div>
+                    </div>
+
+                    {req.description && (
+                      <p className="text-xs text-slate-600 bg-blue-50/50 p-3 rounded-xl border border-blue-100/60 leading-relaxed italic">
+                        &ldquo;{req.description}&rdquo;
+                      </p>
+                    )}
+
+                    <div className="flex items-center justify-between pt-2 border-t border-slate-100">
+                      <span className="text-[11px] text-slate-400 font-medium flex items-center gap-1">
+                        <Clock className="w-3.5 h-3.5" /> Posted by verified buyer
+                      </span>
+                      <Link href="/requests/buyer">
+                        <Button className="bg-[#022B96] hover:bg-[#011a5e] text-white text-xs font-bold px-4 py-2 rounded-xl shadow-sm cursor-pointer flex items-center gap-1.5">
+                          <Send className="w-3.5 h-3.5" /> Send Quote to Buyer
+                        </Button>
+                      </Link>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         )}
       </main>

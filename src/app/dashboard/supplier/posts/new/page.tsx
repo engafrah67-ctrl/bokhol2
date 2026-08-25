@@ -237,7 +237,7 @@ export default function PostStockPage() {
     e.preventDefault()
     setSubmitting(true)
 
-    // Store all 9 fields explicitly in JSON and top level
+    // Build the content JSON with all 9 product fields
     const details = {
       productName: form.productName,
       pricePerKg: parseFloat(form.pricePerKg) || 0,
@@ -253,41 +253,66 @@ export default function PostStockPage() {
       createdAt: new Date().toISOString()
     }
 
-    const postPayload: any = {
-      id: 'post-' + Date.now(),
-      user_id: user?.id || 'supplier-user',
-      company_id: companyId,
-      category: 'product_availability',
-      title: `${form.productName} — ${form.currency} ${form.pricePerKg}/kg`,
-      content: JSON.stringify(details),
-      product_name: form.productName,
-      price_per_kg: parseFloat(form.pricePerKg) || null,
-      currency: form.currency,
-      country_of_origin: form.countryOfOrigin,
-      fresh_frozen: form.freshFrozen,
-      size_weight: form.sizeWeight,
-      packaging: form.packagingFillet,
-      availability: form.availability,
-      location: form.location,
-      supplier_info_extra: form.supplierInfoExtra,
-      status: 'active',
-      is_published: true,
-      created_at: new Date().toISOString(),
-    }
-
     if (companyId) {
+      // Save to Supabase — content JSON holds all 9 fields
       try {
-        await supabase.from('supplier_posts').insert({
-          company_id: companyId,
-          category: 'product_availability',
-          title: `${form.productName} — ${form.currency} ${form.pricePerKg}/kg`,
-          content: JSON.stringify(details),
-          is_published: true,
-        })
-      } catch (_) {}
-    }
+        const { data: newPost, error } = await supabase
+          .from('supplier_posts')
+          .insert({
+            company_id: companyId,
+            category: 'product_availability',
+            title: `${form.productName} — ${form.currency} ${form.pricePerKg}/kg`,
+            content: JSON.stringify(details),
+            is_published: true,
+          })
+          .select('id')
+          .maybeSingle()
 
-    addSupplierPost(postPayload)
+        if (error) {
+          console.error('Failed to save post to DB:', error)
+          // Fallback to localStorage
+          addSupplierPost({
+            id: 'post-' + Date.now(),
+            user_id: user?.id,
+            company_id: companyId,
+            ...details,
+            product_name: form.productName,
+            price_per_kg: parseFloat(form.pricePerKg) || 0,
+            currency: form.currency,
+            country_of_origin: form.countryOfOrigin,
+            fresh_frozen: form.freshFrozen,
+            size_weight: form.sizeWeight,
+            packaging: form.packagingFillet,
+            availability: form.availability,
+            location: form.location,
+            supplier_info_extra: form.supplierInfoExtra,
+            status: 'active',
+            created_at: new Date().toISOString(),
+          })
+        }
+        // Success — DB is the source of truth, no localStorage needed
+      } catch (err) {
+        console.error('Post submit error:', err)
+      }
+    } else {
+      // No company yet — save to localStorage as temporary fallback
+      addSupplierPost({
+        id: 'post-' + Date.now(),
+        user_id: user?.id || 'supplier-user',
+        product_name: form.productName,
+        price_per_kg: parseFloat(form.pricePerKg) || 0,
+        currency: form.currency,
+        country_of_origin: form.countryOfOrigin,
+        fresh_frozen: form.freshFrozen,
+        size_weight: form.sizeWeight,
+        packaging: form.packagingFillet,
+        availability: form.availability,
+        location: form.location,
+        supplier_info_extra: form.supplierInfoExtra,
+        status: 'active',
+        created_at: new Date().toISOString(),
+      })
+    }
 
     setSubmitting(false)
     setSubmitted(true)

@@ -78,96 +78,31 @@ export function getFishImageForProduct(name: string, customImage?: string): stri
   return '/salmon.png'
 }
 
-// Initial sample supplier posts to seed if empty
-const INITIAL_SUPPLIER_POSTS: SupplierPost[] = [
-  {
-    id: 'post-init-1',
-    company_name: 'Nordic Seafood AS',
-    product_name: 'Atlantic Salmon',
-    price_per_kg: 7.71,
-    currency: 'EUR',
-    country_of_origin: 'Norway',
-    fresh_frozen: 'Fresh',
-    size_weight: 'Medium (1-3 kg)',
-    packaging: 'Fillet (Skin On)',
-    availability: 'In Stock — Ready to Ship',
-    location: 'Bergen, Norway',
-    supplier_info_extra: 'Certified MSC & ASC global export standard.',
-    created_at: new Date(Date.now() - 86400000 * 2).toISOString(),
-    updated_at: new Date(Date.now() - 86400000 * 1).toISOString(),
-    status: 'active',
-  },
-  {
-    id: 'post-init-2',
-    company_name: 'Iberia Seafood SL',
-    product_name: 'Yellowfin Tuna',
-    price_per_kg: 6.11,
-    currency: 'EUR',
-    country_of_origin: 'Spain',
-    fresh_frozen: 'Frozen',
-    size_weight: 'Large (3-6 kg)',
-    packaging: 'Loin',
-    availability: 'In Stock — Ready to Ship',
-    location: 'Vigo, Spain',
-    supplier_info_extra: 'Deep frozen -60C sashimi grade.',
-    created_at: new Date(Date.now() - 86400000 * 4).toISOString(),
-    updated_at: new Date(Date.now() - 86400000 * 2).toISOString(),
-    status: 'active',
-  },
-  {
-    id: 'post-init-3',
-    company_name: 'Atlantic Fresh BV',
-    product_name: 'Mackerel',
-    price_per_kg: 5.31,
-    currency: 'EUR',
-    country_of_origin: 'Netherlands',
-    fresh_frozen: 'Fresh',
-    size_weight: 'Medium (1-3 kg)',
-    packaging: 'Whole Fish',
-    availability: 'In Stock — Ready to Ship',
-    location: 'Urk, Netherlands',
-    supplier_info_extra: 'Whole fresh catch, weekly delivery available.',
-    created_at: new Date(Date.now() - 86400000 * 5).toISOString(),
-    updated_at: new Date(Date.now() - 86400000 * 1).toISOString(),
-    status: 'active',
-  },
-  {
-    id: 'post-init-4',
-    company_name: 'Hellas Sea Farms',
-    product_name: 'European Sea Bass',
-    price_per_kg: 6.45,
-    currency: 'EUR',
-    country_of_origin: 'Greece',
-    fresh_frozen: 'Fresh',
-    size_weight: 'Medium (1-3 kg)',
-    packaging: 'Fillet (Skin On)',
-    availability: 'In Stock — Ready to Ship',
-    location: 'Piraeus, Greece',
-    supplier_info_extra: 'Farm fresh Mediterranean sea bass.',
-    created_at: new Date(Date.now() - 86400000 * 3).toISOString(),
-    updated_at: new Date(Date.now() - 86400000 * 1).toISOString(),
-    status: 'active',
-  },
-]
+// No seed data — new suppliers always start with 0 posts
 
-// Get all posts from localStorage
+// Get posts from localStorage (fallback for suppliers without a company yet)
 export function getStoredSupplierPosts(): SupplierPost[] {
-  if (typeof window === 'undefined') return INITIAL_SUPPLIER_POSTS
+  if (typeof window === 'undefined') return []
 
   try {
     const raw = localStorage.getItem('supplier_posts')
-    if (!raw) {
-      localStorage.setItem('supplier_posts', JSON.stringify(INITIAL_SUPPLIER_POSTS))
-      return INITIAL_SUPPLIER_POSTS
-    }
+    if (!raw) return []
     const parsed = JSON.parse(raw)
-    if (!Array.isArray(parsed) || parsed.length === 0) {
-      localStorage.setItem('supplier_posts', JSON.stringify(INITIAL_SUPPLIER_POSTS))
-      return INITIAL_SUPPLIER_POSTS
-    }
+    if (!Array.isArray(parsed)) return []
 
-    // Normalize posts if stored as raw JSON string content
-    return parsed.map((item: any) => {
+    // Purge old hardcoded seed posts (IDs like 'post-init-1' through 'post-init-4')
+    // These were fake demo data that should never appear for real supplier accounts
+    const withoutSeedData = parsed.filter(
+      (item: any) => !String(item.id || '').startsWith('post-init-')
+    )
+    // If we removed anything, persist the cleaned list immediately
+    if (withoutSeedData.length !== parsed.length) {
+      localStorage.setItem('supplier_posts', JSON.stringify(withoutSeedData))
+    }
+    if (withoutSeedData.length === 0) return []
+
+    // Normalize posts — handle both flat fields and content JSON
+    return withoutSeedData.map((item: any) => {
       if (typeof item.content === 'string') {
         try {
           const details = JSON.parse(item.content)
@@ -212,7 +147,7 @@ export function getStoredSupplierPosts(): SupplierPost[] {
     })
   } catch (err) {
     console.error('Error loading stored supplier posts:', err)
-    return INITIAL_SUPPLIER_POSTS
+    return []
   }
 }
 
