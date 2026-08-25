@@ -209,7 +209,7 @@ CREATE TABLE market_history (
 -- TABLE: news
 -- Industry news articles
 -- ============================================================
-CREATE TABLE news (
+CREATE TABLE IF NOT EXISTS news (
   id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   author_id       UUID REFERENCES users(id) ON DELETE SET NULL,
   title           TEXT NOT NULL,

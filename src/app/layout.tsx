@@ -6,6 +6,8 @@ import { Navbar } from '@/components/navbar'
 import { Footer } from '@/components/footer'
 import { LanguageProvider } from '@/contexts/language-context'
 
+import { SupportWidget } from '@/components/support-widget'
+
 const plusJakartaSans = Plus_Jakarta_Sans({
   variable: '--font-sans',
   subsets: ['latin'],
@@ -42,6 +44,7 @@ export default function RootLayout({
               {children}
             </main>
             <Footer />
+            <SupportWidget />
           </ThemeProvider>
         </LanguageProvider>
       </body>

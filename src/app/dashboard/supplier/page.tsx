@@ -32,7 +32,9 @@ import {
   ShoppingBag,
   Send,
   Lock,
+  LogOut,
 } from 'lucide-react'
+import { performSignOut } from '@/lib/auth-helpers'
 import Link from 'next/link'
 import {
   getStoredSupplierPosts,
@@ -454,6 +456,16 @@ export default function SupplierDashboardPage() {
               )}
             </button>
           ))}
+
+          <div className="pt-4 mt-4 border-t border-slate-100">
+            <button
+              onClick={() => performSignOut('/login')}
+              className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-bold text-red-600 hover:bg-red-50 transition cursor-pointer"
+            >
+              <LogOut className="h-4 w-4 text-red-500" />
+              <span>Sign Out</span>
+            </button>
+          </div>
         </nav>
       </aside>
 

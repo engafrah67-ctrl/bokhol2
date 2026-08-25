@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { Calendar, Clock, ArrowRight, Tag, Rss, Building2, Package, MapPin, CheckCircle2, ShieldAlert } from 'lucide-react'
-import { getStoredNewsArticles, NewsArticle, DEFAULT_NEWS_ARTICLES } from '@/lib/data/news-data'
+import { getStoredNewsArticles, fetchNewsArticles, NewsArticle, DEFAULT_NEWS_ARTICLES } from '@/lib/data/news-data'
 
 interface SupplierPostFeed {
   id: string
@@ -67,7 +67,22 @@ export default function NewsPage() {
 
   // Load articles & local supplier posts
   useEffect(() => {
+    // Synchronous initial load
     setArticles(getStoredNewsArticles())
+
+    // Asynchronous load from database
+    fetchNewsArticles().then((data) => {
+      if (data && data.length > 0) setArticles(data)
+    })
+
+    const handleNewsUpdate = () => {
+      fetchNewsArticles().then((data) => {
+        if (data && data.length > 0) setArticles(data)
+      })
+    }
+
+    window.addEventListener('news-articles-updated', handleNewsUpdate)
+    window.addEventListener('storage', handleNewsUpdate)
 
     if (typeof window !== 'undefined') {
       try {
@@ -94,6 +109,11 @@ export default function NewsPage() {
           setSupplierPosts([...formatted, ...DEFAULT_SUPPLIER_FEED])
         }
       } catch (_) {}
+    }
+
+    return () => {
+      window.removeEventListener('news-articles-updated', handleNewsUpdate)
+      window.removeEventListener('storage', handleNewsUpdate)
     }
   }, [])
 

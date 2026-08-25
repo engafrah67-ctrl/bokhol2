@@ -165,11 +165,12 @@ export default function BuyerRequestsPage() {
     e.preventDefault()
     if (!selectedRequest) return
 
+    const supplierDisplayName = profile?.full_name || user?.user_metadata?.full_name || 'Verified Seafood Supplier'
     const newReply: SupplierReply = {
       id: 'reply-' + Date.now(),
       requestId: selectedRequest.id,
-      supplierName: profile?.full_name ? `${profile.full_name} (Verified Supplier)` : 'Verified Seafood Supplier',
-      pricePerKg: replyPrice.includes('/kg') || replyPrice.includes('€') || replyPrice.includes('$') ? replyPrice : `$${replyPrice}/kg`,
+      supplierName: supplierDisplayName,
+      pricePerKg: replyPrice.includes('/kg') || replyPrice.includes('€') || replyPrice.includes('$') ? replyPrice : `€${replyPrice} / kg`,
       deliveryItem: replyDelivery,
       message: replyMessage,
       createdAt: 'Just now'
@@ -185,6 +186,24 @@ export default function BuyerRequestsPage() {
     if (typeof window !== 'undefined') {
       try {
         localStorage.setItem('supplier_replies', JSON.stringify(updatedReplies))
+
+        // Also add directly to Buyer Dashboard Notifications (Private to Buyer)
+        const existingOffers = JSON.parse(localStorage.getItem('buyer_supplier_offers_list') || '[]')
+        const newOfferForBuyer = {
+          id: 'offer-' + Date.now(),
+          requestId: selectedRequest.id,
+          requestTitle: `${selectedRequest.quantity} ${selectedRequest.productNeeded} — ${selectedRequest.location}`,
+          supplierName: supplierDisplayName,
+          supplierEmail: user?.email || 'supplier@bokhol.nl',
+          supplierPhone: '+31684033593',
+          pricePerKg: newReply.pricePerKg,
+          deliveryTerms: replyDelivery,
+          message: replyMessage,
+          createdAt: 'Just now',
+          isRead: false,
+          supplierCountry: 'Netherlands',
+        }
+        localStorage.setItem('buyer_supplier_offers_list', JSON.stringify([newOfferForBuyer, ...existingOffers]))
       } catch (_) {}
     }
 
@@ -380,22 +399,45 @@ export default function BuyerRequestsPage() {
                       </div>
                     )}
 
-                    {/* Supplier Replies List */}
-                    {reqReplies.length > 0 && (
+                    {/* Supplier Replies Status (Confidential Privacy Protection) */}
+                    {reqReplies.length > 0 ? (
                       <div className="pt-3 border-t border-slate-100 space-y-2">
-                        <p className="text-[10px] font-black uppercase tracking-wider text-slate-400">
-                          Supplier Replies ({reqReplies.length})
-                        </p>
-                        {reqReplies.map((rep) => (
-                          <div key={rep.id} className="p-3.5 bg-blue-50/60 border border-blue-100 rounded-2xl text-xs space-y-1">
-                            <div className="flex items-center justify-between font-extrabold text-slate-900">
-                              <span>{rep.supplierName}</span>
-                              <span className="text-[#022B96] font-black">{rep.pricePerKg}</span>
+                        {user?.email === 'admin@gmail.com' ? (
+                          /* Admin View: Full Details */
+                          <>
+                            <p className="text-[10px] font-black uppercase tracking-wider text-slate-400">
+                              Supplier Replies ({reqReplies.length}) — Admin View
+                            </p>
+                            {reqReplies.map((rep) => (
+                              <div key={rep.id} className="p-3.5 bg-blue-50/60 border border-blue-100 rounded-2xl text-xs space-y-1">
+                                <div className="flex items-center justify-between font-extrabold text-slate-900">
+                                  <span>{rep.supplierName}</span>
+                                  <span className="text-[#022B96] font-black">{rep.pricePerKg}</span>
+                                </div>
+                                <p className="text-slate-600 font-semibold">📦 {rep.deliveryItem}</p>
+                                {rep.message && <p className="text-slate-500 italic">&quot;{rep.message}&quot;</p>}
+                              </div>
+                            ))}
+                          </>
+                        ) : (
+                          /* Public / Supplier View: Protected Confidential Quote Notice */
+                          <div className="p-3 bg-slate-50 border border-slate-200/80 rounded-2xl flex items-center justify-between text-xs">
+                            <div className="flex items-center gap-2 text-slate-600 font-bold">
+                              <Lock className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                              <span>{reqReplies.length} Supplier Quote{reqReplies.length > 1 ? 's' : ''} Submitted</span>
                             </div>
-                            <p className="text-slate-600 font-semibold">📦 {rep.deliveryItem}</p>
-                            {rep.message && <p className="text-slate-500 italic">&quot;{rep.message}&quot;</p>}
+                            <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-400 bg-white px-2 py-0.5 rounded-md border border-slate-200">
+                              Confidential to Buyer
+                            </span>
                           </div>
-                        ))}
+                        )}
+                      </div>
+                    ) : (
+                      <div className="pt-3 border-t border-slate-100">
+                        <span className="text-[11px] font-medium text-slate-400 flex items-center gap-1.5">
+                          <Clock className="w-3.5 h-3.5" />
+                          Awaiting quotes from certified suppliers
+                        </span>
                       </div>
                     )}
 

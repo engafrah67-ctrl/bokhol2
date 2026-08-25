@@ -1,31 +1,34 @@
 'use client'
 
-import React from 'react'
-import Image from 'next/image'
-
-export interface Partner {
-  name: string
-  logo: string
-}
-
-const BUYER_PARTNERS: Partner[] = [
-  { name: 'Van der Valk', logo: '/partners/buyers/van-der-valk.png' },
-  { name: 'Tasty Food', logo: '/partners/buyers/tasty-food.png' },
-  { name: 'Horeca Club Antwerpen', logo: '/partners/buyers/horeca-club.png' },
-  { name: 'CPH Hotels', logo: '/partners/buyers/cph-hotels.png' },
-  { name: 'Klüt Hotel Hameln', logo: '/partners/buyers/klut-hotel.png' },
-  { name: 'NH Hotels', logo: '/partners/buyers/nh-hotels.png' },
-  { name: 'Alexander Hotel', logo: '/partners/buyers/alexander-hotel.png' },
-  { name: 'Hokkai', logo: '/partners/buyers/hokkai.png' },
-  { name: 'NLG Restaurant', logo: '/partners/buyers/nlg-restaurant.png' },
-]
+import React, { useState, useEffect } from 'react'
+import { getStoredPartnerBuyers, PartnerBuyer } from '@/lib/data/partner-buyers-data'
 
 export function PartnersSection() {
-  const marqueePartners = [
-    ...BUYER_PARTNERS,
-    ...BUYER_PARTNERS,
-    ...BUYER_PARTNERS,
-  ]
+  const [partnerBuyers, setPartnerBuyers] = useState<PartnerBuyer[]>([])
+
+  useEffect(() => {
+    // Initial load
+    setPartnerBuyers(getStoredPartnerBuyers())
+
+    // Listen for live updates from Admin panel
+    const handleUpdate = () => {
+      setPartnerBuyers(getStoredPartnerBuyers())
+    }
+
+    window.addEventListener('partner-buyers-updated', handleUpdate)
+    window.addEventListener('storage', handleUpdate)
+
+    return () => {
+      window.removeEventListener('partner-buyers-updated', handleUpdate)
+      window.removeEventListener('storage', handleUpdate)
+    }
+  }, [])
+
+  if (partnerBuyers.length === 0) return null
+
+  // Ensure there are enough items for a smooth continuous marquee animation
+  const repeatCount = partnerBuyers.length < 6 ? 4 : partnerBuyers.length < 12 ? 3 : 2
+  const marqueePartners = Array(repeatCount).fill(partnerBuyers).flat()
 
   return (
     <section className="relative w-full py-10 bg-slate-50/50 dark:bg-slate-950/50 border-y border-slate-200/50 dark:border-slate-800/50 overflow-hidden">
@@ -48,15 +51,14 @@ export function PartnersSection() {
         <div className="flex w-max animate-marquee space-x-12 sm:space-x-20 items-center py-2 px-6">
           {marqueePartners.map((partner, idx) => (
             <div
-              key={`${partner.name}-${idx}`}
+              key={`${partner.id || partner.name}-${idx}`}
               className="flex-none flex items-center justify-center transition-all duration-300 hover:scale-105"
             >
-              <Image
+              <img
                 src={partner.logo}
                 alt={`${partner.name} logo`}
-                width={200}
-                height={70}
-                className="h-12 sm:h-16 w-auto object-contain rounded-md mix-blend-multiply dark:invert"
+                className="h-12 sm:h-16 w-auto max-w-[180px] object-contain rounded-md mix-blend-multiply dark:invert"
+                loading="lazy"
               />
             </div>
           ))}
@@ -65,3 +67,4 @@ export function PartnersSection() {
     </section>
   )
 }
+

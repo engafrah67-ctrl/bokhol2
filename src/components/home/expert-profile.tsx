@@ -1,6 +1,6 @@
 'use client'
 
-import { MapPin, CheckCircle2 } from 'lucide-react'
+import { MapPin, CheckCircle2, Mail } from 'lucide-react'
 
 const AREAS = [
   'Supplier Discovery',
@@ -52,6 +52,14 @@ export function ExpertProfile() {
                 Contact Hassan
               </a>
 
+              <a
+                id="expert-email-btn"
+                href="mailto:h.bokhol@outlook.com"
+                className="w-full inline-flex items-center justify-center gap-2 bg-slate-50 hover:bg-slate-100 text-foreground border border-border text-xs font-semibold px-4 py-2 rounded-xl transition-all duration-200 shadow-sm active:scale-[0.98]"
+              >
+                <Mail className="h-3.5 w-3.5 text-[#022B96] shrink-0" />
+                Send Email
+              </a>
             </div>
           </div>
 
@@ -74,9 +82,18 @@ export function ExpertProfile() {
                 Market Research Specialist
               </p>
 
-              <div className="flex items-center gap-1.5 mt-1.5 text-xs text-muted-foreground font-medium">
-                <MapPin className="h-3.5 w-3.5 shrink-0" />
-                Netherlands · Belgium · Germany
+              <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 mt-1.5 text-xs text-muted-foreground font-medium">
+                <div className="flex items-center gap-1.5">
+                  <MapPin className="h-3.5 w-3.5 shrink-0" />
+                  <span>Netherlands · Belgium · Germany</span>
+                </div>
+                <a
+                  href="mailto:h.bokhol@outlook.com"
+                  className="flex items-center gap-1.5 text-foreground/80 hover:text-[#022B96] transition-colors"
+                >
+                  <Mail className="h-3.5 w-3.5 shrink-0 text-[#022B96]" />
+                  <span>h.bokhol@outlook.com</span>
+                </a>
               </div>
             </div>
 

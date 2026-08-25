@@ -1,3 +1,5 @@
+import { createClient } from '@/lib/supabase/client'
+
 export interface NewsArticle {
   id: string
   slug: string
@@ -77,15 +79,60 @@ export const DEFAULT_NEWS_ARTICLES: NewsArticle[] = [
   },
 ]
 
+const STORAGE_KEY = 'admin_news_articles'
+
 export function getStoredNewsArticles(): NewsArticle[] {
   if (typeof window === 'undefined') return DEFAULT_NEWS_ARTICLES
   try {
-    const stored = JSON.parse(localStorage.getItem('admin_news_articles') || '[]')
+    const stored = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]')
     if (Array.isArray(stored) && stored.length > 0) {
       return [...stored, ...DEFAULT_NEWS_ARTICLES]
     }
   } catch (_) {}
   return DEFAULT_NEWS_ARTICLES
+}
+
+export async function fetchNewsArticles(): Promise<NewsArticle[]> {
+  try {
+    const supabase = createClient()
+    const { data, error } = await supabase
+      .from('news')
+      .select('*')
+      .order('published_at', { ascending: false })
+
+    if (!error && data && data.length > 0) {
+      const categoryColors: Record<string, string> = {
+        'Market Update': 'bg-blue-50 text-[#022B96]',
+        'Trade': 'bg-emerald-50 text-emerald-700',
+        'Regulation': 'bg-orange-50 text-orange-700',
+        'Sustainability': 'bg-teal-50 text-teal-700',
+      }
+
+      const dbArticles: NewsArticle[] = data.map((item: any) => ({
+        id: item.id,
+        slug: item.slug || item.id,
+        category: (item.category as any) || 'Market Update',
+        categoryColor: categoryColors[item.category] || 'bg-blue-50 text-[#022B96]',
+        title: item.title,
+        excerpt: item.summary || item.content || '',
+        author: item.author || 'Bokhol Research',
+        date: item.published_at
+          ? new Date(item.published_at).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })
+          : 'Recent',
+        readTime: '3 min read',
+        image: item.cover_image_url || 'https://images.unsplash.com/photo-1544551763-46a013bb70d5?w=800&q=80',
+        created_at: item.created_at,
+      }))
+
+      // Merge with local storage unique by slug or id
+      const local = getStoredNewsArticles()
+      const seen = new Set(dbArticles.map((a) => a.slug))
+      const extraLocal = local.filter((a) => !seen.has(a.slug))
+      return [...dbArticles, ...extraLocal]
+    }
+  } catch (_) {}
+
+  return getStoredNewsArticles()
 }
 
 export function addNewsArticle(article: Omit<NewsArticle, 'id'>): NewsArticle {
@@ -96,9 +143,33 @@ export function addNewsArticle(article: Omit<NewsArticle, 'id'>): NewsArticle {
 
   if (typeof window !== 'undefined') {
     try {
-      const stored = JSON.parse(localStorage.getItem('admin_news_articles') || '[]')
+      const stored = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]')
       const updated = [newArticle, ...stored]
-      localStorage.setItem('admin_news_articles', JSON.stringify(updated))
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(updated))
+      window.dispatchEvent(new Event('news-articles-updated'))
+    } catch (_) {}
+
+    // Asynchronously insert to Supabase database if online
+    try {
+      const supabase = createClient()
+      supabase
+        .from('news')
+        .insert({
+          title: article.title,
+          slug: article.slug,
+          summary: article.excerpt,
+          content: article.excerpt,
+          category: article.category,
+          cover_image_url: article.image,
+          is_published: true,
+          published_at: new Date().toISOString(),
+        })
+        .then(({ error }) => {
+          if (error) {
+            console.warn('Supabase news insert warning:', error.message)
+          }
+        })
+        .catch(() => {})
     } catch (_) {}
   }
 
@@ -108,9 +179,21 @@ export function addNewsArticle(article: Omit<NewsArticle, 'id'>): NewsArticle {
 export function deleteNewsArticle(id: string): void {
   if (typeof window !== 'undefined') {
     try {
-      const stored: NewsArticle[] = JSON.parse(localStorage.getItem('admin_news_articles') || '[]')
-      const updated = stored.filter(a => a.id !== id)
-      localStorage.setItem('admin_news_articles', JSON.stringify(updated))
+      const stored: NewsArticle[] = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]')
+      const updated = stored.filter((a) => a.id !== id)
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(updated))
+      window.dispatchEvent(new Event('news-articles-updated'))
+    } catch (_) {}
+
+    // Asynchronously delete from Supabase database
+    try {
+      const supabase = createClient()
+      supabase
+        .from('news')
+        .delete()
+        .or(`id.eq.${id},slug.eq.${id}`)
+        .then(() => {})
+        .catch(() => {})
     } catch (_) {}
   }
 }

@@ -25,7 +25,15 @@ import {
   DollarSign,
   Newspaper,
   Plus,
+  Handshake,
+  Upload,
+  Trash2,
+  Edit3,
+  Globe,
+  ImageIcon,
+  LogOut,
 } from 'lucide-react'
+import { performSignOut } from '@/lib/auth-helpers'
 import {
   CompanyProfile,
   getStoredCompanies,
@@ -44,6 +52,13 @@ import {
   deleteNewsArticle,
   NewsArticle,
 } from '@/lib/data/news-data'
+import {
+  PartnerBuyer,
+  getStoredPartnerBuyers,
+  addPartnerBuyer,
+  updatePartnerBuyer,
+  deletePartnerBuyer,
+} from '@/lib/data/partner-buyers-data'
 
 export default function AdminDashboardPage() {
   const router = useRouter()
@@ -52,7 +67,7 @@ export default function AdminDashboardPage() {
   const [loading, setLoading] = useState(true)
   const [authorized, setAuthorized] = useState(false)
 
-  const [activeNav, setActiveNav] = useState<'overview' | 'verification' | 'posts' | 'indexes' | 'users' | 'news'>('verification')
+  const [activeNav, setActiveNav] = useState<'overview' | 'verification' | 'posts' | 'indexes' | 'users' | 'news' | 'partners'>('verification')
 
   const [stats, setStats] = useState({
     totalUsers: 0,
@@ -64,6 +79,18 @@ export default function AdminDashboardPage() {
   const [companies, setCompanies] = useState<CompanyProfile[]>([])
   const [supplierPosts, setSupplierPosts] = useState<SupplierPost[]>([])
   const [newsArticles, setNewsArticles] = useState<NewsArticle[]>([])
+  const [partnerBuyers, setPartnerBuyers] = useState<PartnerBuyer[]>([])
+
+  // Partner Buyer Modal & Form states
+  const [showPartnerModal, setShowPartnerModal] = useState(false)
+  const [editingPartner, setEditingPartner] = useState<PartnerBuyer | null>(null)
+  const [partnerName, setPartnerName] = useState('')
+  const [partnerLogo, setPartnerLogo] = useState('')
+  const [partnerCountry, setPartnerCountry] = useState('')
+  const [partnerWebsite, setPartnerWebsite] = useState('')
+  const [partnerSearchQuery, setPartnerSearchQuery] = useState('')
+  const [partnerSuccessMsg, setPartnerSuccessMsg] = useState<string | null>(null)
+  const [partnerFormError, setPartnerFormError] = useState<string | null>(null)
 
   // Publish News Modal states
   const [showAddNewsModal, setShowAddNewsModal] = useState(false)
@@ -73,6 +100,24 @@ export default function AdminDashboardPage() {
   const [newsExcerpt, setNewsExcerpt] = useState('')
   const [newsImageUrl, setNewsImageUrl] = useState('https://images.unsplash.com/photo-1544551763-46a013bb70d5?w=800&q=80')
   const [newsAuthor, setNewsAuthor] = useState('Bokhol Research')
+  const [newsFormError, setNewsFormError] = useState<string | null>(null)
+
+  const handleNewsImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    if (file.size > 5 * 1024 * 1024) {
+      setNewsFormError('Image file is too large (max 5MB)')
+      return
+    }
+    setNewsFormError(null)
+    const reader = new FileReader()
+    reader.onload = (event) => {
+      if (event.target?.result) {
+        setNewsImageUrl(event.target.result as string)
+      }
+    }
+    reader.readAsDataURL(file)
+  }
 
   const [updatingPostModal, setUpdatingPostModal] = useState<SupplierPost | null>(null)
   const [updatePriceInput, setUpdatePriceInput] = useState<string>('')
@@ -139,6 +184,7 @@ export default function AdminDashboardPage() {
           reloadCompanies()
           setSupplierPosts(getStoredSupplierPosts())
           setNewsArticles(getStoredNewsArticles())
+          setPartnerBuyers(getStoredPartnerBuyers())
         }
 
         // Fetch stats in non-blocking background
@@ -193,6 +239,87 @@ export default function AdminDashboardPage() {
     if (selectedCompanyModal?.id === companyId) setSelectedCompanyModal(null)
   }
 
+  // ── Partner Buyer Handlers ──
+  const openAddPartnerModal = () => {
+    setEditingPartner(null)
+    setPartnerName('')
+    setPartnerLogo('')
+    setPartnerCountry('')
+    setPartnerWebsite('')
+    setPartnerFormError(null)
+    setShowPartnerModal(true)
+  }
+
+  const openEditPartnerModal = (partner: PartnerBuyer) => {
+    setEditingPartner(partner)
+    setPartnerName(partner.name)
+    setPartnerLogo(partner.logo)
+    setPartnerCountry(partner.country || '')
+    setPartnerWebsite(partner.website || '')
+    setPartnerFormError(null)
+    setShowPartnerModal(true)
+  }
+
+  const handleLogoFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    if (file.size > 5 * 1024 * 1024) {
+      setPartnerFormError('Logo image file is too large (max 5MB)')
+      return
+    }
+    setPartnerFormError(null)
+    const reader = new FileReader()
+    reader.onload = (event) => {
+      if (event.target?.result) {
+        setPartnerLogo(event.target.result as string)
+      }
+    }
+    reader.readAsDataURL(file)
+  }
+
+  const handleSavePartner = (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!partnerName.trim()) {
+      setPartnerFormError('Buyer Name is required.')
+      return
+    }
+    if (!partnerLogo.trim()) {
+      setPartnerFormError('Buyer Logo is required. Please upload a file or provide an image path.')
+      return
+    }
+
+    if (editingPartner) {
+      updatePartnerBuyer(editingPartner.id, {
+        name: partnerName.trim(),
+        logo: partnerLogo.trim(),
+        country: partnerCountry.trim() || undefined,
+        website: partnerWebsite.trim() || undefined,
+      })
+      setPartnerSuccessMsg(`Partner Buyer "${partnerName}" updated successfully!`)
+    } else {
+      addPartnerBuyer({
+        name: partnerName.trim(),
+        logo: partnerLogo.trim(),
+        country: partnerCountry.trim() || undefined,
+        website: partnerWebsite.trim() || undefined,
+      })
+      setPartnerSuccessMsg(`New Partner Buyer "${partnerName}" added to the Home Screen ticker!`)
+    }
+
+    setPartnerBuyers(getStoredPartnerBuyers())
+    setShowPartnerModal(false)
+    setTimeout(() => setPartnerSuccessMsg(null), 5000)
+  }
+
+  const handleDeletePartner = (id: string, name: string) => {
+    if (confirm(`Are you sure you want to remove "${name}" from the Partner Buyers list?`)) {
+      deletePartnerBuyer(id)
+      setPartnerBuyers(getStoredPartnerBuyers())
+      setPartnerSuccessMsg(`Partner Buyer "${name}" was removed.`)
+      setTimeout(() => setPartnerSuccessMsg(null), 4000)
+    }
+  }
+
   const pendingClaims = companies.filter((c) => c.status === 'claim_requested')
   const claimedCompanies = companies.filter((c) => c.status === 'claimed')
   const rejectedClaims = companies.filter((c) => c.status === 'rejected')
@@ -213,6 +340,16 @@ export default function AdminDashboardPage() {
     return true
   })
 
+  const filteredPartnerBuyers = partnerBuyers.filter((p) => {
+    if (!partnerSearchQuery.trim()) return true
+    const q = partnerSearchQuery.toLowerCase()
+    return (
+      p.name.toLowerCase().includes(q) ||
+      (p.country?.toLowerCase().includes(q) ?? false) ||
+      (p.website?.toLowerCase().includes(q) ?? false)
+    )
+  })
+
   if (loading || !authorized) {
     return (
       <div className="min-h-[75vh] flex items-center justify-center bg-slate-50">
@@ -227,6 +364,7 @@ export default function AdminDashboardPage() {
   const SIDEBAR_ITEMS = [
     { key: 'overview', label: 'Dashboard', icon: LayoutDashboard },
     { key: 'verification', label: 'Verification', icon: ShieldCheck, badge: pendingClaims.length },
+    { key: 'partners', label: 'Partner Buyers', icon: Handshake, badge: partnerBuyers.length },
     { key: 'posts', label: 'Product Offers', icon: Fish, badge: supplierPosts.length },
     { key: 'news', label: 'News & Articles', icon: Newspaper, badge: newsArticles.length },
     { key: 'indexes', label: 'Market Index', icon: TrendingUp },
@@ -277,9 +415,19 @@ export default function AdminDashboardPage() {
             </nav>
           </div>
 
-          <div className="pt-6 border-t border-blue-400/20 text-[11px] text-blue-200 font-medium">
-            <p className="font-bold text-white">Bokhol FishMarketCap</p>
-            <p className="text-[10px] opacity-75 mt-0.5">Admin Security Console v2.4</p>
+          <div className="pt-4 border-t border-blue-400/20 space-y-3">
+            <button
+              onClick={() => performSignOut('/login')}
+              className="w-full flex items-center gap-3 px-3 py-2 rounded-xl text-xs font-bold text-red-200 hover:text-white hover:bg-red-500/20 transition cursor-pointer"
+            >
+              <LogOut className="w-4 h-4 text-red-300" />
+              <span>Sign Out</span>
+            </button>
+
+            <div className="text-[11px] text-blue-200 font-medium">
+              <p className="font-bold text-white">Bokhol FishMarketCap</p>
+              <p className="text-[10px] opacity-75 mt-0.5">Admin Security Console v2.4</p>
+            </div>
           </div>
         </aside>
 
@@ -668,6 +816,142 @@ export default function AdminDashboardPage() {
               </div>
             )}
 
+            {/* VIEW 7: PARTNER BUYERS MANAGEMENT */}
+            {activeNav === 'partners' && (
+              <div className="space-y-6">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                  <div>
+                    <h1 className="text-2xl font-black text-slate-900 tracking-tight">EU Partner Buyers</h1>
+                    <p className="text-xs text-slate-500 mt-1 font-medium">
+                      Manage buyer partners &amp; brand logos displayed in the Home Screen ticker.
+                    </p>
+                  </div>
+                  <button
+                    onClick={openAddPartnerModal}
+                    className="inline-flex items-center gap-2 px-5 py-2.5 bg-[#022B96] hover:bg-[#011a5e] text-white text-xs font-bold rounded-2xl shadow-sm transition cursor-pointer self-start sm:self-auto"
+                  >
+                    <Plus className="w-4 h-4" />
+                    Add Partner Buyer
+                  </button>
+                </div>
+
+                {/* Success Banner */}
+                {partnerSuccessMsg && (
+                  <div className="flex items-center justify-between p-4 bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-2xl text-xs font-bold animate-in fade-in">
+                    <div className="flex items-center gap-2">
+                      <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                      <span>{partnerSuccessMsg}</span>
+                    </div>
+                    <button
+                      onClick={() => setPartnerSuccessMsg(null)}
+                      className="text-emerald-500 hover:text-emerald-800 p-1"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                )}
+
+                {/* Info & Search Bar */}
+                <div className="flex flex-col sm:flex-row gap-3 items-stretch sm:items-center justify-between">
+                  <div className="relative flex-1 max-w-md">
+                    <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                    <input
+                      type="text"
+                      placeholder="Search partner buyers by name, country..."
+                      value={partnerSearchQuery}
+                      onChange={(e) => setPartnerSearchQuery(e.target.value)}
+                      className="w-full pl-9 pr-4 py-2 bg-white border border-slate-200 rounded-xl text-xs text-slate-900 placeholder:text-slate-400 outline-none focus:border-[#022B96] focus:ring-2 focus:ring-[#022B96]/10 transition"
+                    />
+                  </div>
+                  <div className="flex items-center gap-2 text-xs font-semibold text-slate-500">
+                    <span className="inline-block h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
+                    <span>Live on Home Screen ({partnerBuyers.length} partners)</span>
+                  </div>
+                </div>
+
+                {/* Partner Buyers Grid */}
+                {filteredPartnerBuyers.length > 0 ? (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {filteredPartnerBuyers.map((partner) => (
+                      <div
+                        key={partner.id}
+                        className="bg-white border border-slate-200 rounded-2xl p-4 shadow-xs hover:shadow-md hover:border-[#022B96]/30 transition flex flex-col justify-between group"
+                      >
+                        <div>
+                          {/* Logo container */}
+                          <div className="h-24 w-full bg-slate-50 rounded-xl border border-slate-100 flex items-center justify-center p-3 mb-3 overflow-hidden">
+                            <img
+                              src={partner.logo}
+                              alt={`${partner.name} logo`}
+                              className="max-h-full max-w-full object-contain mix-blend-multiply group-hover:scale-105 transition-transform"
+                            />
+                          </div>
+
+                          {/* Info */}
+                          <div className="space-y-1">
+                            <h3 className="font-extrabold text-slate-900 text-sm tracking-tight truncate">
+                              {partner.name}
+                            </h3>
+                            <div className="flex flex-wrap items-center gap-2 text-[11px] text-slate-500 font-medium">
+                              {partner.country && (
+                                <span className="bg-slate-100 px-2 py-0.5 rounded-md text-slate-700">
+                                  {partner.country}
+                                </span>
+                              )}
+                              {partner.website && (
+                                <a
+                                  href={partner.website.startsWith('http') ? partner.website : `https://${partner.website}`}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="text-[#022B96] hover:underline inline-flex items-center gap-1"
+                                >
+                                  <Globe className="w-3 h-3" />
+                                  Website
+                                </a>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Actions */}
+                        <div className="flex items-center justify-end gap-2 pt-3 mt-3 border-t border-slate-100">
+                          <button
+                            onClick={() => openEditPartnerModal(partner)}
+                            className="inline-flex items-center gap-1 px-3 py-1.5 border border-slate-200 hover:bg-slate-50 text-slate-700 text-xs font-bold rounded-xl transition cursor-pointer"
+                          >
+                            <Edit3 className="w-3.5 h-3.5 text-slate-500" />
+                            Edit
+                          </button>
+                          <button
+                            onClick={() => handleDeletePartner(partner.id, partner.name)}
+                            className="inline-flex items-center gap-1 px-3 py-1.5 border border-rose-200 text-rose-600 hover:bg-rose-50 text-xs font-bold rounded-xl transition cursor-pointer"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                            Delete
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="text-center py-16 bg-white border border-slate-200 rounded-2xl space-y-3">
+                    <Handshake className="h-10 w-10 text-slate-300 mx-auto" />
+                    <h3 className="text-base font-bold text-slate-800">No Partner Buyers Found</h3>
+                    <p className="text-xs text-slate-500 max-w-sm mx-auto">
+                      Add seafood buyers, restaurant chains, and European hospitality partners to showcase them on the Bokhol homepage.
+                    </p>
+                    <button
+                      onClick={openAddPartnerModal}
+                      className="inline-flex items-center gap-1.5 px-4 py-2 bg-[#022B96] text-white text-xs font-bold rounded-xl shadow-sm transition hover:bg-[#011a5e]"
+                    >
+                      <Plus className="w-4 h-4" />
+                      Add First Partner Buyer
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+
           </div>
 
           {/* Footer */}
@@ -865,10 +1149,20 @@ export default function AdminDashboardPage() {
               </button>
             </div>
 
+            {newsFormError && (
+              <div className="mx-6 mt-4 p-3 bg-rose-50 border border-rose-200 text-rose-700 rounded-xl text-xs font-semibold flex items-center gap-2">
+                <AlertCircle className="w-4 h-4 shrink-0" />
+                <span>{newsFormError}</span>
+              </div>
+            )}
+
             <form
               onSubmit={(e) => {
                 e.preventDefault()
-                if (!newsTitle.trim() || !newsExcerpt.trim()) return
+                if (!newsTitle.trim() || !newsExcerpt.trim()) {
+                  setNewsFormError('Please provide both a Title and a Summary.')
+                  return
+                }
 
                 const slug = newsTitle
                   .toLowerCase()
@@ -898,6 +1192,8 @@ export default function AdminDashboardPage() {
                 setShowAddNewsModal(false)
                 setNewsTitle('')
                 setNewsExcerpt('')
+                setNewsImageUrl('https://images.unsplash.com/photo-1544551763-46a013bb70d5?w=800&q=80')
+                setNewsFormError(null)
               }}
               className="px-6 py-5 space-y-4"
             >
@@ -915,6 +1211,67 @@ export default function AdminDashboardPage() {
                   onChange={(e) => setNewsTitle(e.target.value)}
                   className="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-sm text-slate-900 font-medium outline-none focus:border-[#022B96] focus:ring-2 focus:ring-[#022B96]/10 transition placeholder:text-slate-300"
                 />
+              </div>
+
+              {/* Cover Image Upload Section */}
+              <div className="space-y-2">
+                <label className="block text-[11px] font-bold uppercase tracking-widest text-slate-500">
+                  Article Cover Image
+                </label>
+
+                {newsImageUrl ? (
+                  <div className="relative border border-slate-200 rounded-xl p-3 bg-slate-50 flex items-center justify-between">
+                    <div className="flex items-center gap-3 min-w-0">
+                      <div className="h-14 w-20 rounded-lg overflow-hidden bg-slate-200 border border-slate-300 shrink-0">
+                        <img
+                          src={newsImageUrl}
+                          alt="Cover preview"
+                          className="h-full w-full object-cover"
+                        />
+                      </div>
+                      <div className="text-xs min-w-0">
+                        <p className="font-bold text-slate-800 truncate">Cover Image Selected</p>
+                        <p className="text-[10px] text-slate-400">Featured on news page &amp; feeds</p>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setNewsImageUrl('')}
+                      className="px-2.5 py-1 text-xs text-rose-600 hover:bg-rose-50 rounded-lg font-bold transition cursor-pointer shrink-0"
+                    >
+                      Change
+                    </button>
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    <label className="flex flex-col items-center justify-center border-2 border-dashed border-slate-200 hover:border-[#022B96] rounded-2xl p-4 bg-slate-50/50 hover:bg-blue-50/20 cursor-pointer transition text-center group">
+                      <Upload className="w-6 h-6 text-slate-400 group-hover:text-[#022B96] mb-1.5 transition" />
+                      <span className="text-xs font-bold text-slate-700 group-hover:text-[#022B96]">
+                        Click to upload cover photo
+                      </span>
+                      <span className="text-[10px] text-slate-400 mt-0.5">
+                        PNG, JPG, WebP (max 5MB)
+                      </span>
+                      <input
+                        type="file"
+                        accept="image/*"
+                        onChange={handleNewsImageUpload}
+                        className="hidden"
+                      />
+                    </label>
+
+                    <div className="text-center">
+                      <span className="text-[10px] uppercase font-bold text-slate-400">or paste image URL</span>
+                    </div>
+                    <input
+                      type="text"
+                      placeholder="e.g. https://images.unsplash.com/..."
+                      value={newsImageUrl}
+                      onChange={(e) => setNewsImageUrl(e.target.value)}
+                      className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-900 outline-none focus:border-[#022B96]"
+                    />
+                  </div>
+                )}
               </div>
 
               {/* Category + Read Time */}
@@ -959,7 +1316,6 @@ export default function AdminDashboardPage() {
                 />
               </div>
 
-
               {/* Actions */}
               <div className="flex gap-2.5 pt-1">
                 <button
@@ -975,6 +1331,162 @@ export default function AdminDashboardPage() {
                 >
                   <Newspaper className="w-3.5 h-3.5" />
                   Publish Article
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ══ ADD / EDIT PARTNER BUYER MODAL ════════════════════════════════ */}
+      {showPartnerModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4 overflow-y-auto">
+          <div className="bg-white rounded-2xl border border-slate-200 max-w-md w-full shadow-2xl overflow-hidden animate-in fade-in">
+            {/* Header */}
+            <div className="flex items-center justify-between px-6 pt-6 pb-4 border-b border-slate-100">
+              <div>
+                <h3 className="text-base font-extrabold text-slate-900 tracking-tight">
+                  {editingPartner ? 'Edit Partner Buyer' : 'Add New Partner Buyer'}
+                </h3>
+                <p className="text-xs text-slate-400 mt-0.5 font-medium">
+                  Logo will automatically appear on the Home Screen ticker
+                </p>
+              </div>
+              <button
+                onClick={() => setShowPartnerModal(false)}
+                className="w-8 h-8 flex items-center justify-center rounded-xl hover:bg-slate-100 text-slate-400 hover:text-slate-700 transition cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {partnerFormError && (
+              <div className="mx-6 mt-4 p-3 bg-rose-50 border border-rose-200 text-rose-700 rounded-xl text-xs font-semibold flex items-center gap-2">
+                <AlertCircle className="w-4 h-4 shrink-0" />
+                <span>{partnerFormError}</span>
+              </div>
+            )}
+
+            <form onSubmit={handleSavePartner} className="px-6 py-5 space-y-4">
+              {/* Partner Name */}
+              <div className="space-y-1.5">
+                <label className="block text-[11px] font-bold uppercase tracking-widest text-slate-500">
+                  Buyer Company Name <span className="text-rose-400">*</span>
+                </label>
+                <input
+                  type="text"
+                  required
+                  autoFocus
+                  placeholder="e.g. Van der Valk, Hilton, Tasty Food"
+                  value={partnerName}
+                  onChange={(e) => setPartnerName(e.target.value)}
+                  className="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-sm text-slate-900 font-medium outline-none focus:border-[#022B96] focus:ring-2 focus:ring-[#022B96]/10 transition placeholder:text-slate-300"
+                />
+              </div>
+
+              {/* Logo Upload Section */}
+              <div className="space-y-2">
+                <label className="block text-[11px] font-bold uppercase tracking-widest text-slate-500">
+                  Buyer Logo <span className="text-rose-400">*</span>
+                </label>
+
+                {partnerLogo ? (
+                  <div className="relative border border-slate-200 rounded-xl p-3 bg-slate-50 flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className="h-14 w-24 bg-white border border-slate-200 rounded-lg p-1 flex items-center justify-center overflow-hidden">
+                        <img
+                          src={partnerLogo}
+                          alt="Logo preview"
+                          className="max-h-full max-w-full object-contain mix-blend-multiply"
+                        />
+                      </div>
+                      <span className="text-xs font-semibold text-slate-700">Logo selected</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setPartnerLogo('')}
+                      className="px-2.5 py-1 text-xs text-rose-600 hover:bg-rose-50 rounded-lg font-bold transition cursor-pointer"
+                    >
+                      Change
+                    </button>
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    {/* File Upload Box */}
+                    <label className="flex flex-col items-center justify-center border-2 border-dashed border-slate-200 hover:border-[#022B96] rounded-2xl p-4 bg-slate-50/50 hover:bg-blue-50/20 cursor-pointer transition text-center group">
+                      <Upload className="w-6 h-6 text-slate-400 group-hover:text-[#022B96] mb-1.5 transition" />
+                      <span className="text-xs font-bold text-slate-700 group-hover:text-[#022B96]">
+                        Click to upload logo image
+                      </span>
+                      <span className="text-[10px] text-slate-400 mt-0.5">
+                        PNG, JPG, SVG, WebP (max 5MB)
+                      </span>
+                      <input
+                        type="file"
+                        accept="image/*"
+                        onChange={handleLogoFileUpload}
+                        className="hidden"
+                      />
+                    </label>
+
+                    {/* Or URL fallback */}
+                    <div className="text-center">
+                      <span className="text-[10px] uppercase font-bold text-slate-400">or paste image URL / path</span>
+                    </div>
+                    <input
+                      type="text"
+                      placeholder="e.g. /partners/buyers/custom.png or https://..."
+                      value={partnerLogo}
+                      onChange={(e) => setPartnerLogo(e.target.value)}
+                      className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-900 outline-none focus:border-[#022B96]"
+                    />
+                  </div>
+                )}
+              </div>
+
+              {/* Country + Website */}
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <label className="block text-[11px] font-bold uppercase tracking-widest text-slate-500">
+                    Country (Optional)
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="e.g. Netherlands"
+                    value={partnerCountry}
+                    onChange={(e) => setPartnerCountry(e.target.value)}
+                    className="w-full border border-slate-200 rounded-xl px-3.5 py-2 text-xs text-slate-900 outline-none focus:border-[#022B96] focus:ring-2 focus:ring-[#022B96]/10 transition"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="block text-[11px] font-bold uppercase tracking-widest text-slate-500">
+                    Website (Optional)
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="e.g. https://domain.com"
+                    value={partnerWebsite}
+                    onChange={(e) => setPartnerWebsite(e.target.value)}
+                    className="w-full border border-slate-200 rounded-xl px-3.5 py-2 text-xs text-slate-900 outline-none focus:border-[#022B96] focus:ring-2 focus:ring-[#022B96]/10 transition"
+                  />
+                </div>
+              </div>
+
+              {/* Actions */}
+              <div className="flex gap-2.5 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setShowPartnerModal(false)}
+                  className="flex-1 py-2.5 border border-slate-200 text-slate-600 font-semibold rounded-xl text-xs hover:bg-slate-50 transition cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="flex-1 py-2.5 bg-[#022B96] hover:bg-[#011a5e] text-white font-bold rounded-xl text-xs transition cursor-pointer flex items-center justify-center gap-1.5 shadow-sm"
+                >
+                  <Handshake className="w-3.5 h-3.5" />
+                  {editingPartner ? 'Update Partner' : 'Add to Home Screen'}
                 </button>
               </div>
             </form>

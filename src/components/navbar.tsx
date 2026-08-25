@@ -12,6 +12,7 @@ import { useLanguage } from '@/contexts/language-context'
 import { LOCALES, type Locale } from '@/lib/i18n/translations'
 import ReactCountryFlag from 'react-country-flag'
 import { createClient } from '@/lib/supabase/client'
+import { performSignOut } from '@/lib/auth-helpers'
 
 const ROLE_BADGE: Record<string, { label: string; color: string }> = {
   buyer:    { label: 'Buyer',    color: 'bg-sky-500/10 text-sky-600 dark:text-sky-400 border border-sky-500/20' },
@@ -65,11 +66,7 @@ export function Navbar() {
   const currentLocale = LOCALES.find(l => l.code === locale)!
 
   const handleSignOut = async () => {
-    try {
-      const supabase = createClient()
-      await supabase.auth.signOut()
-    } catch (_) {}
-    window.location.href = '/'
+    await performSignOut('/login')
   }
 
   return (
@@ -200,10 +197,10 @@ export function Navbar() {
                   </span>
                 )}
                 {activeRole === 'buyer' ? (
-                  <Link href="/requests/buyer/new">
-                    <Button size="sm" className="gap-2 cursor-pointer font-semibold rounded-lg bg-[#022B96] hover:bg-[#011a5e] text-white">
-                      <Plus className="h-4 w-4" />
-                      {t('nav_create_post')}
+                  <Link href="/dashboard/buyer">
+                    <Button variant="ghost" size="sm" className="gap-2 cursor-pointer font-semibold rounded-lg hover:bg-muted text-slate-800">
+                      <LayoutDashboard className="h-4 w-4 text-[#022B96]" />
+                      Buyer Dashboard
                     </Button>
                   </Link>
                 ) : (
@@ -324,21 +321,15 @@ export function Navbar() {
           <div className="border-t border-border pt-4 flex flex-col gap-2">
             {user ? (
               <>
-                {profile?.role === 'buyer' ? (
-                  <Link href="/requests/buyer/new" onClick={() => setIsOpen(false)}>
-                    <Button className="w-full gap-2 cursor-pointer bg-[#022B96] hover:bg-[#011a5e] text-white">
-                      <Plus className="h-4 w-4" />
-                      {t('nav_create_post')}
-                    </Button>
-                  </Link>
-                ) : (
-                  <Link href="/dashboard" onClick={() => setIsOpen(false)}>
-                    <Button variant="outline" className="w-full gap-2 cursor-pointer">
-                      <LayoutDashboard className="h-4 w-4" />
-                      {t('nav_dashboard')}
-                    </Button>
-                  </Link>
-                )}
+                <Link
+                  href={activeRole === 'buyer' ? '/dashboard/buyer' : activeRole === 'admin' ? '/dashboard/admin' : '/dashboard'}
+                  onClick={() => setIsOpen(false)}
+                >
+                  <Button variant="outline" className="w-full gap-2 cursor-pointer">
+                    <LayoutDashboard className="h-4 w-4" />
+                    {activeRole === 'admin' ? 'Admin Panel' : activeRole === 'buyer' ? 'Buyer Dashboard' : t('nav_dashboard')}
+                  </Button>
+                </Link>
                 <Button
                   type="button"
                   onClick={() => { setIsOpen(false); handleSignOut() }}
