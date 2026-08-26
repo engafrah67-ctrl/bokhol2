@@ -48,13 +48,20 @@ export const INITIAL_COMPANIES: CompanyProfile[] = [
     description: 'Amacore specializes in sourcing, importing, and distributing high-quality frozen fish products globally. Trusted supplier of Sea bass, Cod, Plaice, and Tuna.',
     logoUrl: '/partners/amacore.png',
     bannerColor: '#022B96',
-    status: 'unclaimed',
+    status: 'claimed',
     isVerified: true,
     isFoundingMember: true,
     isPublicListing: true,
     completenessScore: 100,
     species: ['Sea bass', 'Cod', 'Plaice', 'Yellowfin Tuna', 'Salmon'],
     tags: ['WHOLESALER', 'FRESH', 'FROZEN'],
+    claimRequest: {
+      fullName: 'Jan van der Berg',
+      businessEmail: 'jan@amacore.nl',
+      jobTitle: 'Managing Director',
+      phone: '+31 321 330 025',
+      requestedAt: '2026-08-01T10:00:00.000Z',
+    },
   },
   {
     id: 'comp-2',
@@ -72,13 +79,20 @@ export const INITIAL_COMPANIES: CompanyProfile[] = [
     description: 'Premium North Sea supplier specializing in fresh flatfish, sea bass, turbot, and cod.',
     logoUrl: '/partners/ant-seafood.png',
     bannerColor: '#022B96',
-    status: 'unclaimed',
+    status: 'claimed',
     isVerified: true,
     isFoundingMember: true,
     isPublicListing: true,
     completenessScore: 95,
     species: ['Sea Bass', 'Cod', 'Plaice', 'Turbot'],
     tags: ['WHOLESALER', 'FRESH', 'FROZEN'],
+    claimRequest: {
+      fullName: 'Ahmed Taha',
+      businessEmail: 'a.taha@antseafood.nl',
+      jobTitle: 'CEO',
+      phone: '+31 527 68 99 00',
+      requestedAt: '2026-08-05T09:30:00.000Z',
+    },
   },
   {
     id: 'comp-3',
@@ -96,13 +110,20 @@ export const INITIAL_COMPANIES: CompanyProfile[] = [
     description: 'Premium fresh seafood supplier specializing in flatfish, turbot, sole, and custom filleting services for European wholesalers.',
     logoUrl: '/partners/atl-seafood.png',
     bannerColor: '#1d4ed8',
-    status: 'unclaimed',
+    status: 'claim_requested',
     isVerified: true,
     isFoundingMember: false,
     isPublicListing: true,
     completenessScore: 92,
     species: ['Turbot', 'Plaice', 'Dover Sole', 'Sea Bass'],
     tags: ['SUPPLIER', 'FRESH', 'PREMIUM'],
+    claimRequest: {
+      fullName: 'Lotte de Vries',
+      businessEmail: 'l.devries@atlseafood.com',
+      jobTitle: 'Export Manager',
+      phone: '+31 224 561 289',
+      requestedAt: '2026-08-20T14:22:00.000Z',
+    },
   },
   {
     id: 'comp-4',
@@ -312,7 +333,7 @@ export const INITIAL_COMPANIES: CompanyProfile[] = [
   }
 ]
 
-const STORAGE_KEY = 'bokhol_fishmarketcap_companies_v4'
+const STORAGE_KEY = 'bokhol_fishmarketcap_companies_v5'
 
 export function getStoredCompanies(): CompanyProfile[] {
   if (typeof window === 'undefined') return INITIAL_COMPANIES

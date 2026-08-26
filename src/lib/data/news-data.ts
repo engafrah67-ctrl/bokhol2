@@ -121,7 +121,7 @@ export function addNewsArticle(article: Omit<NewsArticle, 'id'>): NewsArticle {
           is_published: true,
           published_at: new Date().toISOString(),
         })
-        .then(({ error }) => {
+        .then(({ error }: { error: { message: string } | null }) => {
           if (error) console.warn('Supabase news insert warning:', error.message)
         })
         .catch(() => {})
