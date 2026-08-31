@@ -48,20 +48,13 @@ export const INITIAL_COMPANIES: CompanyProfile[] = [
     description: 'Amacore specializes in sourcing, importing, and distributing high-quality frozen fish products globally. Trusted supplier of Sea bass, Cod, Plaice, and Tuna.',
     logoUrl: '/partners/amacore.png',
     bannerColor: '#022B96',
-    status: 'claimed',
+    status: 'unclaimed',
     isVerified: true,
     isFoundingMember: true,
     isPublicListing: true,
     completenessScore: 100,
     species: ['Sea bass', 'Cod', 'Plaice', 'Yellowfin Tuna', 'Salmon'],
     tags: ['WHOLESALER', 'FRESH', 'FROZEN'],
-    claimRequest: {
-      fullName: 'Jan van der Berg',
-      businessEmail: 'jan@amacore.nl',
-      jobTitle: 'Managing Director',
-      phone: '+31 321 330 025',
-      requestedAt: '2026-08-01T10:00:00.000Z',
-    },
   },
   {
     id: 'comp-2',
@@ -79,20 +72,13 @@ export const INITIAL_COMPANIES: CompanyProfile[] = [
     description: 'Premium North Sea supplier specializing in fresh flatfish, sea bass, turbot, and cod.',
     logoUrl: '/partners/ant-seafood.png',
     bannerColor: '#022B96',
-    status: 'claimed',
+    status: 'unclaimed',
     isVerified: true,
     isFoundingMember: true,
     isPublicListing: true,
     completenessScore: 95,
     species: ['Sea Bass', 'Cod', 'Plaice', 'Turbot'],
     tags: ['WHOLESALER', 'FRESH', 'FROZEN'],
-    claimRequest: {
-      fullName: 'Ahmed Taha',
-      businessEmail: 'a.taha@antseafood.nl',
-      jobTitle: 'CEO',
-      phone: '+31 527 68 99 00',
-      requestedAt: '2026-08-05T09:30:00.000Z',
-    },
   },
   {
     id: 'comp-3',
@@ -110,20 +96,13 @@ export const INITIAL_COMPANIES: CompanyProfile[] = [
     description: 'Premium fresh seafood supplier specializing in flatfish, turbot, sole, and custom filleting services for European wholesalers.',
     logoUrl: '/partners/atl-seafood.png',
     bannerColor: '#1d4ed8',
-    status: 'claim_requested',
+    status: 'unclaimed',
     isVerified: true,
     isFoundingMember: false,
     isPublicListing: true,
     completenessScore: 92,
     species: ['Turbot', 'Plaice', 'Dover Sole', 'Sea Bass'],
     tags: ['SUPPLIER', 'FRESH', 'PREMIUM'],
-    claimRequest: {
-      fullName: 'Lotte de Vries',
-      businessEmail: 'l.devries@atlseafood.com',
-      jobTitle: 'Export Manager',
-      phone: '+31 224 561 289',
-      requestedAt: '2026-08-20T14:22:00.000Z',
-    },
   },
   {
     id: 'comp-4',
@@ -190,150 +169,16 @@ export const INITIAL_COMPANIES: CompanyProfile[] = [
     logoUrl: '/partners/am-fish.png',
     bannerColor: '#0066cc',
     status: 'unclaimed',
-    isVerified: false,
+    isVerified: true,
     isFoundingMember: false,
     isPublicListing: true,
     completenessScore: 85,
     species: ['Atlantic Salmon', 'Prawns', 'Mackerel', 'Squid', 'Cod'],
     tags: ['SUPPLIER', 'FROZEN', 'EXPORT'],
-  },
-  {
-    id: 'comp-7',
-    rank: 7,
-    name: 'Scanimex Seafood A/S',
-    slug: 'scanimex',
-    category: 'SEAFOOD IMPORTER',
-    country: 'Denmark',
-    countryCode: 'DK',
-    address: 'Fiskehavnsgade 12, 6700 Esbjerg, Denmark',
-    website: 'https://scanimex.dk',
-    email: 'contact@scanimex.dk',
-    phone: '+45 75 12 34 56',
-    domain: 'scanimex.dk',
-    description: 'Nordic seafood specialist focusing on sustainable coldwater shrimp, cod, haddock, and salmon sourcing from North Atlantic waters.',
-    logoUrl: '/partners/blue-world-seafood.png',
-    bannerColor: '#0f766e',
-    status: 'unclaimed',
-    isVerified: false,
-    isFoundingMember: false,
-    isPublicListing: true,
-    completenessScore: 78,
-    species: ['Coldwater Prawns', 'Atlantic Cod', 'Haddock', 'Saithe'],
-    tags: ['IMPORTER', 'NORDIC', 'FROZEN'],
-  },
-  {
-    id: 'comp-8',
-    rank: 8,
-    name: '14 De Julio S.A.',
-    slug: '14-de-julio',
-    category: 'SEAFOOD SUPPLIER',
-    country: 'Spain',
-    countryCode: 'ES',
-    address: 'Puerto de Vigo, Muelle de Reparaciones, 36202 Vigo, Spain',
-    website: 'https://14dejulio.es',
-    email: 'info@14dejulio.es',
-    phone: '+34 986 44 22 11',
-    domain: '14dejulio.es',
-    description: 'Atlantic ocean fishing company operating longliners and trawlers specializing in hake, squid, and octopus.',
-    status: 'unclaimed',
-    isVerified: false,
-    isFoundingMember: false,
-    isPublicListing: true,
-    completenessScore: 10,
-    species: ['Octopus', 'Squid', 'Hake', 'Mussels'],
-    tags: ['SUPPLIER', 'FROZEN'],
-  },
-  {
-    id: 'comp-9',
-    rank: 9,
-    name: '3D Brand Communication Seafood',
-    slug: '3d-brand-seafood',
-    category: 'SEAFOOD SUPPLIER',
-    country: 'Spain',
-    countryCode: 'ES',
-    address: 'Avenida de Beiramar 140, Vigo, Spain',
-    website: 'https://3dseafood.es',
-    email: 'contact@3dseafood.es',
-    phone: '+34 986 11 33 55',
-    domain: '3dseafood.es',
-    description: 'Integrated marketing and distribution platform for Galician seafood producers.',
-    status: 'unclaimed',
-    isVerified: false,
-    isFoundingMember: false,
-    isPublicListing: true,
-    completenessScore: 10,
-    species: ['Sea Bass', 'Sea Bream', 'Sardines'],
-    tags: ['SUPPLIER'],
-  },
-  {
-    id: 'comp-10',
-    rank: 10,
-    name: '68°Noord - Seafood Passion',
-    slug: '68noord-seafood',
-    category: 'SEAFOOD WHOLESALER',
-    country: 'Norway',
-    countryCode: 'NO',
-    address: 'Svolvær Quay 4, 8300 Svolvær, Lofoten, Norway',
-    website: 'https://68noord.no',
-    email: 'post@68noord.no',
-    phone: '+47 76 07 80 00',
-    domain: '68noord.no',
-    description: 'Lofoten-based salmon and cod exporter known for high-grade air-flown salmon and artisan stockfish.',
-    status: 'unclaimed',
-    isVerified: true,
-    isFoundingMember: false,
-    isPublicListing: true,
-    completenessScore: 54,
-    species: ['Atlantic Salmon', 'Cod', 'Mussels'],
-    tags: ['WHOLESALER', 'FROZEN', 'NORWAY'],
-  },
-  {
-    id: 'comp-11',
-    rank: 11,
-    name: '8F Asset Management Seafood PTE Ltd.',
-    slug: '8f-asset-seafood',
-    category: 'AQUACULTURE FARM',
-    country: 'Singapore',
-    countryCode: 'SG',
-    address: 'Marina Bay Financial Centre Tower 1, Singapore',
-    website: 'https://8fseafood.com',
-    email: 'invest@8fseafood.com',
-    phone: '+65 6812 7800',
-    domain: '8fseafood.com',
-    description: 'Pioneering sustainable land-based recirculating aquaculture systems (RAS) for Atlantic Salmon.',
-    status: 'unclaimed',
-    isVerified: false,
-    isFoundingMember: false,
-    isPublicListing: true,
-    completenessScore: 30,
-    species: ['Atlantic Salmon'],
-    tags: ['AQUACULTURE', 'FRESH', 'SUSTAINABLE'],
-  },
-  {
-    id: 'comp-12',
-    rank: 12,
-    name: 'Mariscos del Mar S.L.',
-    slug: 'mariscos-del-mar',
-    category: 'SEAFOOD WHOLESALER',
-    country: 'Spain',
-    countryCode: 'ES',
-    address: 'Mercamadrid Naves 4-6, 28053 Madrid, Spain',
-    website: 'https://mariscosdelmar.es',
-    email: 'ventas@mariscosdelmar.es',
-    phone: '+34 91 785 4321',
-    domain: 'mariscosdelmar.es',
-    description: 'Leading Spanish wholesaler distributing fresh shellfish, shrimp, octopus, and Mediterranean finfish.',
-    status: 'unclaimed',
-    isVerified: true,
-    isFoundingMember: false,
-    isPublicListing: true,
-    completenessScore: 88,
-    species: ['Octopus', 'Red Shrimp', 'Squid', 'Sea Bass', 'Sea Bream'],
-    tags: ['WHOLESALER', 'FRESH', 'SPAIN'],
   }
 ]
 
-const STORAGE_KEY = 'bokhol_fishmarketcap_companies_v5'
+const STORAGE_KEY = 'bokhol_fishmarket_companies_v10'
 
 export function getStoredCompanies(): CompanyProfile[] {
   if (typeof window === 'undefined') return INITIAL_COMPANIES
@@ -343,7 +188,12 @@ export function getStoredCompanies(): CompanyProfile[] {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(INITIAL_COMPANIES))
       return INITIAL_COMPANIES
     }
-    return JSON.parse(raw)
+    const parsed = JSON.parse(raw)
+    if (!Array.isArray(parsed) || parsed.length === 0) {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(INITIAL_COMPANIES))
+      return INITIAL_COMPANIES
+    }
+    return parsed
   } catch (_) {
     return INITIAL_COMPANIES
   }
@@ -427,5 +277,13 @@ export function rejectProfileClaim(companyId: string, reason?: string): boolean 
   }
 
   saveCompanies(companies)
+  return true
+}
+
+export function deleteCompany(companyId: string): boolean {
+  const companies = getStoredCompanies()
+  const filtered = companies.filter((c) => c.id !== companyId)
+  if (filtered.length === companies.length) return false
+  saveCompanies(filtered)
   return true
 }

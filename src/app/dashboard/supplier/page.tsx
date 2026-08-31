@@ -43,6 +43,7 @@ import {
   saveSupplierPosts,
   SupplierPost,
 } from '@/lib/data/products-data'
+import { getStoredCompanies, CompanyProfile } from '@/lib/data/companies-data'
 
 /* ─── Fish category image map (for My Posts display) ─── */
 const FISH_IMAGE_MAP: Record<string, string> = {
@@ -230,7 +231,35 @@ export default function SupplierDashboardPage() {
               setSupplierPosts(getStoredSupplierPosts())
             }
           } else if (isMounted) {
-            // No company yet — use localStorage fallback
+            // Check stored company profiles from claim
+            const userCompanyId = currentUser.user_metadata?.company_id || userProfile?.company_id
+            const storedCompanies = getStoredCompanies()
+            const matchedCompany = storedCompanies.find(
+              (c) => c.id === userCompanyId || (c.claimRequest?.businessEmail && c.claimRequest.businessEmail.toLowerCase() === currentUser.email?.toLowerCase())
+            )
+
+            if (matchedCompany) {
+              setCompany({
+                id: matchedCompany.id,
+                name: matchedCompany.name,
+                description: matchedCompany.description,
+                website: matchedCompany.website,
+                email: matchedCompany.email,
+                phone: matchedCompany.phone,
+                address: matchedCompany.address,
+                city: matchedCompany.country,
+                logo_url: matchedCompany.logoUrl,
+                status: matchedCompany.status,
+                is_verified: matchedCompany.isVerified,
+              })
+              setCompanyName(matchedCompany.name)
+              setCompanyDescription(matchedCompany.description || '')
+              setCompanyWebsite(matchedCompany.website || '')
+              setCompanyEmail(matchedCompany.email || '')
+              setCompanyPhone(matchedCompany.phone || '')
+              setCompanyAddress(matchedCompany.address || '')
+              setCompanyLogoUrl(matchedCompany.logoUrl || '')
+            }
             setSupplierPosts(getStoredSupplierPosts())
           }
         }
@@ -549,6 +578,21 @@ export default function SupplierDashboardPage() {
                 </Link>
               </div>
             </div>
+
+            {/* Claim Pending Verification Notice */}
+            {company?.status === 'claim_requested' && (
+              <div className="bg-amber-50 border border-amber-200/90 rounded-2xl p-5 flex items-start gap-3.5 shadow-xs">
+                <div className="w-10 h-10 rounded-xl bg-amber-100 text-amber-700 flex items-center justify-center shrink-0">
+                  <Clock className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-amber-900 text-sm">Profile Claim Verification in Progress</h3>
+                  <p className="text-xs text-amber-700 mt-1 leading-relaxed">
+                    Your claim for <strong>{company.name}</strong> has been received and is currently being verified by the Bokhol Admin team. Once approved by the administrator, your verified badge and full buyer trust status will be activated.
+                  </p>
+                </div>
+              </div>
+            )}
 
             {/* Metric Cards */}
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">

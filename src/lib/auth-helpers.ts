@@ -7,7 +7,9 @@ import { createClient } from '@/lib/supabase/client'
 export async function performSignOut(redirectTo = '/login') {
   try {
     // 1. Call server API to clear HTTP-only session cookies
-    await fetch('/api/auth/signout', { method: 'POST' }).catch(() => {})
+    if (typeof window !== 'undefined') {
+      await fetch('/api/auth/signout', { method: 'POST' }).catch(() => {})
+    }
   } catch (_) {}
 
   try {
@@ -21,7 +23,7 @@ export async function performSignOut(redirectTo = '/login') {
     if (typeof window !== 'undefined') {
       localStorage.clear()
       sessionStorage.clear()
-      
+
       // Clear accessible cookies
       document.cookie.split(';').forEach((c) => {
         document.cookie = c

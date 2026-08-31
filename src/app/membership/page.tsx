@@ -2,9 +2,9 @@ import { SubscriptionSection } from '@/components/home/subscription-section'
 import type { Metadata } from 'next'
 
 export const metadata: Metadata = {
-  title: 'Membership — Bokhol FishMarketCap',
+  title: 'Membership',
   description:
-    'Join the Bokhol FishMarketCap seafood network. Free membership for buyers and suppliers across the Netherlands, Belgium and Germany.',
+    'Join the Bokhol Fish Market seafood network. Free membership for buyers and suppliers across the Netherlands, Belgium and Germany.',
 }
 
 export default function MembershipPage() {

@@ -15,10 +15,18 @@ const plusJakartaSans = Plus_Jakarta_Sans({
 })
 
 export const metadata: Metadata = {
-  title: 'FishMarketCap | Seafood Market Intelligence & Supplier Directory',
+  title: {
+    default: 'Bokhol Fish Market',
+    template: '%s | Bokhol Fish Market',
+  },
   description:
-    'Track global seafood price indexes, discover certified suppliers, post buying requests, and read market news. The CoinMarketCap for Seafood.',
-  keywords: 'seafood market, seafood index, supplier discovery, marine trade, seafood pricing',
+    'Track global seafood price indexes, discover certified suppliers, post buying requests, and read market news.',
+  keywords: 'bokhol fish market, seafood market, seafood index, supplier discovery, marine trade, seafood pricing',
+  icons: {
+    icon: '/app-icon.png?v=5',
+    shortcut: '/app-icon.png?v=5',
+    apple: '/app-icon.png?v=5',
+  },
 }
 
 export default function RootLayout({
@@ -28,6 +36,11 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" suppressHydrationWarning>
+      <head>
+        <link rel="icon" href="/app-icon.png?v=5" type="image/png" />
+        <link rel="shortcut icon" href="/app-icon.png?v=5" type="image/png" />
+        <link rel="apple-touch-icon" href="/app-icon.png?v=5" />
+      </head>
       <body
         suppressHydrationWarning
         className={`${plusJakartaSans.variable} font-sans antialiased min-h-screen flex flex-col bg-background text-foreground`}

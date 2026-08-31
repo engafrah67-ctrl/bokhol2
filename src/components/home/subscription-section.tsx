@@ -1,7 +1,6 @@
 'use client'
 
-import { CheckSquare, ArrowRight, Sparkles } from 'lucide-react'
-import Link from 'next/link'
+import { CheckSquare, Sparkles } from 'lucide-react'
 
 const BUYER_FEATURES = [
   'Discover suppliers',
@@ -18,7 +17,7 @@ const SUPPLIER_FEATURES = [
   'Increase business visibility',
   'Connect with buyers & sponsorship',
   'Receive market updates',
-  'Join the Bokhol FishMarketCap network',
+  'Join the Bokhol Fish Market network',
 ]
 
 function FeatureItem({ text, dark }: { text: string; dark?: boolean }) {
@@ -92,13 +91,6 @@ export function SubscriptionSection() {
                 <FeatureItem key={f} text={f} />
               ))}
             </ul>
-            <Link
-              href="/register"
-              className="mt-5 w-full inline-flex items-center justify-center gap-1 bg-[#022B96] hover:bg-[#022B96]/90 text-white font-bold text-[11px] px-3 py-2 rounded-lg transition-all duration-200 shadow-xs hover:shadow-sm active:scale-[0.98]"
-            >
-              Sign Up Free
-              <ArrowRight className="h-3 w-3" />
-            </Link>
           </div>
         </div>
 
@@ -134,13 +126,6 @@ export function SubscriptionSection() {
                 <FeatureItem key={f} text={f} dark />
               ))}
             </ul>
-            <Link
-              href="/register"
-              className="mt-5 w-full inline-flex items-center justify-center gap-1 bg-white hover:bg-slate-100 text-[#022B96] font-bold text-[11px] px-3 py-2 rounded-lg transition-all duration-200 shadow-xs hover:shadow-sm active:scale-[0.98]"
-            >
-              Join Free
-              <ArrowRight className="h-3 w-3" />
-            </Link>
           </div>
         </div>
 

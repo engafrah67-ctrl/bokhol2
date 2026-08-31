@@ -45,7 +45,9 @@ import {
   getStoredCompanies,
   approveProfileClaim,
   rejectProfileClaim,
+  deleteCompany,
 } from '@/lib/data/companies-data'
+import ReactCountryFlag from 'react-country-flag'
 import {
   getStoredSupplierPosts,
   updateProductPrice,
@@ -106,10 +108,22 @@ export default function AdminDashboardPage() {
     totalBuyerRequests: 0,
   })
 
-  const [companies, setCompanies] = useState<CompanyProfile[]>([])
-  const [supplierPosts, setSupplierPosts] = useState<SupplierPost[]>([])
-  const [newsArticles, setNewsArticles] = useState<NewsArticle[]>([])
-  const [partnerBuyers, setPartnerBuyers] = useState<PartnerBuyer[]>([])
+  const [companies, setCompanies] = useState<CompanyProfile[]>(() => {
+    if (typeof window !== 'undefined') return getStoredCompanies()
+    return []
+  })
+  const [supplierPosts, setSupplierPosts] = useState<SupplierPost[]>(() => {
+    if (typeof window !== 'undefined') return getStoredSupplierPosts()
+    return []
+  })
+  const [newsArticles, setNewsArticles] = useState<NewsArticle[]>(() => {
+    if (typeof window !== 'undefined') return getStoredNewsArticles()
+    return []
+  })
+  const [partnerBuyers, setPartnerBuyers] = useState<PartnerBuyer[]>(() => {
+    if (typeof window !== 'undefined') return getStoredPartnerBuyers()
+    return []
+  })
 
   // Partner Buyer Modal & Form states
   const [showPartnerModal, setShowPartnerModal] = useState(false)
@@ -168,11 +182,21 @@ export default function AdminDashboardPage() {
   useEffect(() => {
     let isMounted = true
 
+    // Immediately load storage on mount
+    reloadCompanies()
+    setSupplierPosts(getStoredSupplierPosts())
+    setNewsArticles(getStoredNewsArticles())
+    setPartnerBuyers(getStoredPartnerBuyers())
+
     // Safety timeout: Guarantee loading finishes in max 1 second
     const timer = setTimeout(() => {
       if (isMounted) {
         setAuthorized(true)
         setLoading(false)
+        reloadCompanies()
+        setSupplierPosts(getStoredSupplierPosts())
+        setNewsArticles(getStoredNewsArticles())
+        setPartnerBuyers(getStoredPartnerBuyers())
       }
     }, 1000)
 
@@ -269,6 +293,14 @@ export default function AdminDashboardPage() {
     if (selectedCompanyModal?.id === companyId) setSelectedCompanyModal(null)
   }
 
+  const handleDeleteCompany = (companyId: string, companyName: string) => {
+    if (confirm(`Are you sure you want to permanently delete "${companyName}"?`)) {
+      deleteCompany(companyId)
+      reloadCompanies()
+      if (selectedCompanyModal?.id === companyId) setSelectedCompanyModal(null)
+    }
+  }
+
   // ── Partner Buyer Handlers ──
   const openAddPartnerModal = () => {
     setEditingPartner(null)
@@ -350,14 +382,16 @@ export default function AdminDashboardPage() {
     }
   }
 
+  const allClaimRequests = companies.filter((c) => !!c.claimRequest || c.status === 'claim_requested')
   const pendingClaims = companies.filter((c) => c.status === 'claim_requested')
+  const approvedClaims = companies.filter((c) => c.status === 'claimed' && !!c.claimRequest)
+  const rejectedClaims = companies.filter((c) => c.status === 'rejected' && !!c.claimRequest)
   const claimedCompanies = companies.filter((c) => c.status === 'claimed')
-  const rejectedClaims = companies.filter((c) => c.status === 'rejected')
 
-  const filteredClaims = companies.filter((c) => {
+  const filteredClaims = allClaimRequests.filter((c) => {
     if (claimFilter === 'pending' && c.status !== 'claim_requested') return false
-    if (claimFilter === 'claimed' && c.status !== 'claimed') return false
-    if (claimFilter === 'rejected' && c.status !== 'rejected') return false
+    if (claimFilter === 'claimed' && (c.status !== 'claimed' || !c.claimRequest)) return false
+    if (claimFilter === 'rejected' && (c.status !== 'rejected' || !c.claimRequest)) return false
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase()
       return (
@@ -457,7 +491,7 @@ export default function AdminDashboardPage() {
             </button>
 
             <div className="text-[11px] text-blue-200 font-medium">
-              <p className="font-bold text-white">Bokhol FishMarketCap</p>
+              <p className="font-bold text-white">Bokhol Fish Market</p>
               <p className="text-[10px] opacity-75 mt-0.5">Admin Security Console v2.4</p>
             </div>
           </div>
@@ -470,11 +504,16 @@ export default function AdminDashboardPage() {
             {/* VIEW: CLAIMED PROFILES */}
             {activeNav === 'claimed-profiles' && (
               <div className="space-y-6">
-                <div>
-                  <h1 className="text-2xl font-black text-slate-900 tracking-tight">✅ Claimed Profiles</h1>
-                  <p className="text-xs text-slate-500 mt-1 font-medium">
-                    Suppliers who have successfully claimed their company profile on Bokhol
-                  </p>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h1 className="text-2xl font-black text-slate-900 tracking-tight">Claimed Profiles</h1>
+                    <p className="text-xs text-slate-500 mt-1 font-medium">
+                      Verified suppliers with active company profiles on Bokhol
+                    </p>
+                  </div>
+                  <span className="text-xs font-bold bg-emerald-50 text-emerald-700 px-3 py-1 rounded-full border border-emerald-200/60">
+                    {claimedCompanies.length} Active
+                  </span>
                 </div>
 
                 {claimedCompanies.length === 0 ? (
@@ -484,35 +523,93 @@ export default function AdminDashboardPage() {
                     <p className="text-xs text-slate-400 mt-1">No supplier has claimed their profile yet. Claims appear here once approved.</p>
                   </div>
                 ) : (
-                  <div className="space-y-3">
-                    <div className="hidden md:grid grid-cols-12 gap-4 px-5 py-2 text-[10px] font-extrabold uppercase tracking-wider text-slate-400">
-                      <div className="col-span-4">Company</div>
-                      <div className="col-span-3">Contact Email</div>
-                      <div className="col-span-2">Country</div>
-                      <div className="col-span-3 text-right">Action</div>
-                    </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
                     {claimedCompanies.map((company) => (
-                      <div key={company.id} className="bg-white border border-emerald-200/80 rounded-2xl px-5 py-4 grid grid-cols-1 md:grid-cols-12 gap-3 items-center">
-                        <div className="col-span-4 flex items-center gap-3">
-                          <div className="w-10 h-10 rounded-xl bg-emerald-600 text-white font-black text-sm flex items-center justify-center shrink-0">
-                            {company.name.slice(0, 2).toUpperCase()}
+                      <div
+                        key={company.id}
+                        className="bg-white border border-slate-200/90 hover:border-slate-300 rounded-2xl p-5 flex flex-col justify-between shadow-xs hover:shadow-md transition-all duration-200"
+                      >
+                        <div>
+                          {/* Top Country Badge */}
+                          <div className="flex items-center justify-end mb-2">
+                            <div className="flex items-center gap-1.5 bg-slate-50 border border-slate-200/70 px-2.5 py-1 rounded-lg text-xs font-bold text-slate-700">
+                              {company.countryCode ? (
+                                <ReactCountryFlag
+                                  countryCode={company.countryCode}
+                                  svg
+                                  style={{ width: '15px', height: '11px' }}
+                                />
+                              ) : null}
+                              <span>{company.countryCode || company.country}</span>
+                            </div>
                           </div>
-                          <div>
-                            <p className="font-bold text-slate-900 text-sm">{company.name}</p>
-                            <span className="inline-flex items-center gap-1 text-[10px] font-extrabold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full">
-                              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-                              Verified & Claimed
+
+                          {/* Logo & Info */}
+                          <div className="flex items-center gap-3.5 my-2">
+                            {company.logoUrl ? (
+                              <div className="w-14 h-14 rounded-2xl bg-white border border-slate-200/90 shadow-xs p-1.5 flex items-center justify-center shrink-0 overflow-hidden">
+                                <img
+                                  src={company.logoUrl}
+                                  alt={company.name}
+                                  className="w-full h-full object-contain"
+                                />
+                              </div>
+                            ) : (
+                              <div
+                                className="w-14 h-14 rounded-2xl text-white font-black text-lg flex items-center justify-center shrink-0 shadow-xs border border-white/20"
+                                style={{
+                                  background: company.bannerColor
+                                    ? `linear-gradient(135deg, ${company.bannerColor}, #022B96)`
+                                    : 'linear-gradient(135deg, #022B96, #1e3a8a)',
+                                }}
+                              >
+                                {company.name.slice(0, 2).toUpperCase()}
+                              </div>
+                            )}
+
+                            <div className="overflow-hidden">
+                              <h3 className="text-base font-black text-slate-900 truncate">
+                                {company.name}
+                              </h3>
+                              <span className="text-[11px] font-extrabold uppercase tracking-wider text-[#022B96] block mt-0.5">
+                                {company.category}
+                              </span>
+                            </div>
+                          </div>
+
+                          {/* Species & Products */}
+                          <div className="mt-4 pt-3 border-t border-slate-100">
+                            <span className="text-[10px] font-extrabold uppercase text-slate-400 tracking-wider block mb-2">
+                              SPECIES & PRODUCTS
                             </span>
+                            <div className="flex flex-wrap gap-1.5">
+                              {company.species?.slice(0, 5).map((sp) => (
+                                <span
+                                  key={sp}
+                                  className="bg-[#022B96]/5 text-[#022B96] border border-[#022B96]/15 text-[11px] font-semibold px-2.5 py-1 rounded-lg"
+                                >
+                                  {sp}
+                                </span>
+                              ))}
+                            </div>
                           </div>
                         </div>
-                        <div className="col-span-3 text-xs text-slate-500 font-medium">{company.claimRequest?.businessEmail || company.email || '—'}</div>
-                        <div className="col-span-2 text-xs font-semibold text-slate-700">{company.country}</div>
-                        <div className="col-span-3 flex justify-end gap-2">
-                          <button
-                            onClick={() => { handleRejectClaim(company.id); reloadCompanies() }}
-                            className="px-4 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-600 text-xs font-bold rounded-xl border border-rose-200 transition cursor-pointer"
+
+                        {/* Card Actions */}
+                        <div className="pt-4 border-t border-slate-100 mt-4 flex items-center gap-2">
+                          <Link
+                            href={`/suppliers/${company.slug}`}
+                            target="_blank"
+                            className="flex-1 text-center bg-slate-50 hover:bg-slate-100 text-slate-700 font-bold text-xs rounded-xl py-2.5 border border-slate-200/80 transition"
                           >
-                            Revoke Claim
+                            View Profile
+                          </Link>
+                          <button
+                            onClick={() => handleDeleteCompany(company.id, company.name)}
+                            className="p-2.5 rounded-xl border border-rose-200 text-rose-600 hover:bg-rose-50 transition cursor-pointer shrink-0"
+                            title="Delete Supplier"
+                          >
+                            <Trash2 className="w-4 h-4" />
                           </button>
                         </div>
                       </div>
@@ -525,11 +622,16 @@ export default function AdminDashboardPage() {
             {/* VIEW: UNCLAIMED PROFILES */}
             {activeNav === 'unclaimed-profiles' && (
               <div className="space-y-6">
-                <div>
-                  <h1 className="text-2xl font-black text-slate-900 tracking-tight">🔓 Unclaimed Profiles</h1>
-                  <p className="text-xs text-slate-500 mt-1 font-medium">
-                    Supplier profiles that have not yet been claimed — including pending requests awaiting review
-                  </p>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h1 className="text-2xl font-black text-slate-900 tracking-tight">Unclaimed Profiles</h1>
+                    <p className="text-xs text-slate-500 mt-1 font-medium">
+                      Supplier directory listings awaiting ownership claim by verified business owners
+                    </p>
+                  </div>
+                  <span className="text-xs font-bold bg-slate-100 text-slate-700 px-3 py-1 rounded-full border border-slate-200/60">
+                    {companies.filter(c => c.status !== 'claimed').length} Profiles
+                  </span>
                 </div>
 
                 {companies.filter(c => c.status !== 'claimed').length === 0 ? (
@@ -539,56 +641,96 @@ export default function AdminDashboardPage() {
                     <p className="text-xs text-slate-400 mt-1">Every supplier profile on Bokhol has been claimed by a verified company.</p>
                   </div>
                 ) : (
-                  <div className="space-y-3">
-                    <div className="hidden md:grid grid-cols-12 gap-4 px-5 py-2 text-[10px] font-extrabold uppercase tracking-wider text-slate-400">
-                      <div className="col-span-4">Company</div>
-                      <div className="col-span-3">Country</div>
-                      <div className="col-span-2">Status</div>
-                      <div className="col-span-3 text-right">Action</div>
-                    </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
                     {companies.filter(c => c.status !== 'claimed').map((company) => {
                       const isPending = company.status === 'claim_requested'
                       return (
-                        <div key={company.id} className={`bg-white border rounded-2xl px-5 py-4 grid grid-cols-1 md:grid-cols-12 gap-3 items-center ${
-                          isPending ? 'border-amber-300/80 bg-amber-50/30' : 'border-slate-200/80'
-                        }`}>
-                          <div className="col-span-4 flex items-center gap-3">
-                            <div className="w-10 h-10 rounded-xl bg-slate-700 text-white font-black text-sm flex items-center justify-center shrink-0">
-                              {company.name.slice(0, 2).toUpperCase()}
+                        <div
+                          key={company.id}
+                          className="bg-white border border-slate-200/90 hover:border-slate-300 rounded-2xl p-5 flex flex-col justify-between shadow-xs hover:shadow-md transition-all duration-200"
+                        >
+                          <div>
+                            {/* Top Country Badge */}
+                            <div className="flex items-center justify-end mb-2">
+                              <div className="flex items-center gap-1.5 bg-slate-50 border border-slate-200/70 px-2.5 py-1 rounded-lg text-xs font-bold text-slate-700">
+                                {company.countryCode ? (
+                                  <ReactCountryFlag
+                                    countryCode={company.countryCode}
+                                    svg
+                                    style={{ width: '15px', height: '11px' }}
+                                  />
+                                ) : null}
+                                <span>{company.countryCode || company.country}</span>
+                              </div>
                             </div>
-                            <div>
-                              <p className="font-bold text-slate-900 text-sm">{company.name}</p>
-                              {isPending && <p className="text-[10px] text-amber-700 font-semibold">{company.claimRequest?.businessEmail}</p>}
+
+                            {/* Logo & Info */}
+                            <div className="flex items-center gap-3.5 my-2">
+                              {company.logoUrl ? (
+                                <div className="w-14 h-14 rounded-2xl bg-white border border-slate-200/90 shadow-xs p-1.5 flex items-center justify-center shrink-0 overflow-hidden">
+                                  <img
+                                    src={company.logoUrl}
+                                    alt={company.name}
+                                    className="w-full h-full object-contain"
+                                  />
+                                </div>
+                              ) : (
+                                <div
+                                  className="w-14 h-14 rounded-2xl text-white font-black text-lg flex items-center justify-center shrink-0 shadow-xs border border-white/20"
+                                  style={{
+                                    background: company.bannerColor
+                                      ? `linear-gradient(135deg, ${company.bannerColor}, #022B96)`
+                                      : 'linear-gradient(135deg, #022B96, #1e3a8a)',
+                                  }}
+                                >
+                                  {company.name.slice(0, 2).toUpperCase()}
+                                </div>
+                              )}
+
+                              <div className="overflow-hidden">
+                                <h3 className="text-base font-black text-slate-900 truncate">
+                                  {company.name}
+                                </h3>
+                                <span className="text-[11px] font-extrabold uppercase tracking-wider text-[#022B96] block mt-0.5">
+                                  {company.category}
+                                </span>
+                              </div>
+                            </div>
+
+                            {/* Species & Products */}
+                            <div className="mt-4 pt-3 border-t border-slate-100">
+                              <span className="text-[10px] font-extrabold uppercase text-slate-400 tracking-wider block mb-2">
+                                SPECIES & PRODUCTS
+                              </span>
+                              <div className="flex flex-wrap gap-1.5">
+                                {company.species?.slice(0, 5).map((sp) => (
+                                  <span
+                                    key={sp}
+                                    className="bg-[#022B96]/5 text-[#022B96] border border-[#022B96]/15 text-[11px] font-semibold px-2.5 py-1 rounded-lg"
+                                  >
+                                    {sp}
+                                  </span>
+                                ))}
+                              </div>
                             </div>
                           </div>
-                          <div className="col-span-3 text-xs font-semibold text-slate-600">{company.country}</div>
-                          <div className="col-span-2">
-                            <span className={`inline-flex items-center gap-1.5 text-[10px] font-extrabold px-2.5 py-1 rounded-full ${
-                              isPending ? 'bg-amber-100 text-amber-800' : 'bg-slate-100 text-slate-600'
-                            }`}>
-                              <span className={`w-1.5 h-1.5 rounded-full ${isPending ? 'bg-amber-500 animate-pulse' : 'bg-slate-400'}`} />
-                              {isPending ? 'Pending Review' : 'Unclaimed'}
-                            </span>
-                          </div>
-                          <div className="col-span-3 flex justify-end gap-2">
-                            {isPending ? (
-                              <>
-                                <button
-                                  onClick={() => handleApproveClaim(company.id)}
-                                  className="px-4 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl transition cursor-pointer"
-                                >
-                                  ✓ Approve
-                                </button>
-                                <button
-                                  onClick={() => handleRejectClaim(company.id)}
-                                  className="px-4 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-600 text-xs font-bold rounded-xl border border-rose-200 transition cursor-pointer"
-                                >
-                                  ✕ Reject
-                                </button>
-                              </>
-                            ) : (
-                              <span className="text-[10px] text-slate-400 font-medium italic">Awaiting claim</span>
-                            )}
+
+                          {/* Card Actions */}
+                          <div className="pt-4 border-t border-slate-100 mt-4 flex items-center gap-2">
+                            <Link
+                              href={`/suppliers/${company.slug}`}
+                              target="_blank"
+                              className="flex-1 text-center bg-slate-50 hover:bg-slate-100 text-slate-700 font-bold text-xs rounded-xl py-2.5 border border-slate-200/80 transition"
+                            >
+                              View Profile
+                            </Link>
+                            <button
+                              onClick={() => handleDeleteCompany(company.id, company.name)}
+                              className="p-2.5 rounded-xl border border-rose-200 text-rose-600 hover:bg-rose-50 transition cursor-pointer shrink-0"
+                              title="Delete Supplier"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
                           </div>
                         </div>
                       )
@@ -771,9 +913,9 @@ export default function AdminDashboardPage() {
                   <div className="flex items-center gap-6">
                     {[
                       { key: 'pending', label: 'Pending', count: pendingClaims.length },
-                      { key: 'claimed', label: 'Approved', count: claimedCompanies.length },
+                      { key: 'claimed', label: 'Approved', count: approvedClaims.length },
                       { key: 'rejected', label: 'Rejected', count: rejectedClaims.length },
-                      { key: 'all', label: 'All', count: companies.length },
+                      { key: 'all', label: 'All', count: allClaimRequests.length },
                     ].map(({ key, label, count }) => (
                       <button
                         key={key}
@@ -795,12 +937,14 @@ export default function AdminDashboardPage() {
                 </div>
 
                 {filteredClaims.length === 0 ? (
-                  <div className="bg-white border border-slate-200 rounded-2xl p-12 text-center space-y-2 shadow-xs">
-                    <div className="w-12 h-12 rounded-2xl bg-slate-100 text-slate-400 flex items-center justify-center mx-auto">
-                      <CheckCircle2 className="w-6 h-6" />
+                  <div className="bg-white border border-slate-200/90 rounded-2xl p-14 text-center space-y-3 shadow-xs">
+                    <div className="w-12 h-12 rounded-2xl bg-blue-50 text-[#022B96] flex items-center justify-center mx-auto">
+                      <ShieldCheck className="w-6 h-6" />
                     </div>
-                    <h3 className="text-sm font-bold text-slate-800">No requests found</h3>
-                    <p className="text-xs text-slate-400">No verification requests match your query or filter.</p>
+                    <h3 className="text-base font-bold text-slate-900">No Verification Requests</h3>
+                    <p className="text-xs text-slate-500 max-w-md mx-auto leading-relaxed">
+                      No claims are currently pending. When a supplier clicks <strong>&quot;Claim Profile&quot;</strong> and submits their business email, their application will appear here for your review and approval.
+                    </p>
                   </div>
                 ) : (
                   <div className="space-y-3">
@@ -824,11 +968,7 @@ export default function AdminDashboardPage() {
                       return (
                         <div
                           key={company.id}
-                          className={`grid grid-cols-1 md:grid-cols-12 gap-4 px-6 py-4 rounded-2xl border transition-all duration-200 items-center ${
-                            isPending ? 'bg-amber-50/40 border-amber-200/80 shadow-xs hover:border-amber-300'
-                            : isClaimed ? 'bg-white border-slate-200/80 hover:border-slate-300'
-                            : 'bg-slate-50 border-slate-200/60 opacity-85'
-                          }`}
+                          className="grid grid-cols-1 md:grid-cols-12 gap-4 px-6 py-4 rounded-2xl border border-slate-200/80 bg-white hover:border-slate-300 shadow-xs transition-all duration-200 items-center"
                         >
                           <div className="col-span-3 flex items-center gap-3">
                             <div className="w-9 h-9 rounded-xl bg-slate-900 text-white font-black text-xs flex items-center justify-center shrink-0">
@@ -853,8 +993,8 @@ export default function AdminDashboardPage() {
 
                           <div className="col-span-2">
                             {req ? (
-                              <span className={`inline-flex items-center gap-1 text-[10px] font-bold px-2.5 py-1 rounded-full ${domainMatches ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-900'}`}>
-                                {domainMatches ? <Check className="w-3 h-3 text-emerald-600" /> : <AlertCircle className="w-3 h-3 text-amber-600" />}
+                              <span className={`inline-flex items-center gap-1 text-[10px] font-bold px-2.5 py-1 rounded-full ${domainMatches ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-700'}`}>
+                                {domainMatches ? <Check className="w-3 h-3 text-emerald-600" /> : <AlertCircle className="w-3 h-3 text-slate-500" />}
                                 {domainMatches ? 'Match' : 'Mismatch'}
                               </span>
                             ) : (
@@ -863,37 +1003,71 @@ export default function AdminDashboardPage() {
                           </div>
 
                           <div className="col-span-2">
-                            <span className={`inline-flex items-center gap-1.5 text-xs font-extrabold ${isPending ? 'text-amber-600' : isClaimed ? 'text-emerald-600' : 'text-rose-600'}`}>
-                              <span className={`h-2 w-2 rounded-full ${isPending ? 'bg-amber-500 animate-pulse' : isClaimed ? 'bg-emerald-500' : 'bg-rose-500'}`} />
-                              {isPending ? 'Pending' : isClaimed ? 'Approved' : 'Rejected'}
-                            </span>
+                            {isPending && (
+                              <span className="inline-flex items-center gap-1.5 text-xs font-black text-blue-700 bg-blue-50 border border-blue-200/80 px-2.5 py-1 rounded-full">
+                                <span className="h-2 w-2 rounded-full bg-blue-500 animate-pulse" />
+                                Pending Review
+                              </span>
+                            )}
+                            {isClaimed && (
+                              <span className="inline-flex items-center gap-1.5 text-xs font-black text-emerald-700 bg-emerald-50 border border-emerald-200/80 px-2.5 py-1 rounded-full">
+                                <span className="h-2 w-2 rounded-full bg-emerald-500" />
+                                Approved
+                              </span>
+                            )}
+                            {isRejected && (
+                              <span className="inline-flex items-center gap-1.5 text-xs font-black text-rose-700 bg-rose-50 border border-rose-200/80 px-2.5 py-1 rounded-full">
+                                <span className="h-2 w-2 rounded-full bg-rose-500" />
+                                Rejected
+                              </span>
+                            )}
+                            {!isPending && !isClaimed && !isRejected && (
+                              <span className="inline-flex items-center gap-1.5 text-xs font-bold text-slate-600 bg-slate-100 px-2.5 py-1 rounded-full">
+                                <span className="h-2 w-2 rounded-full bg-slate-400" />
+                                Unclaimed
+                              </span>
+                            )}
                           </div>
 
-                          <div className="col-span-2 flex items-center justify-end gap-1.5">
+                          <div className="col-span-2 flex items-center justify-end gap-2">
+                            {isPending ? (
+                              <>
+                                <button
+                                  onClick={() => handleApproveClaim(company.id)}
+                                  className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl shadow-xs transition cursor-pointer"
+                                >
+                                  ✓ Approve
+                                </button>
+                                <button
+                                  onClick={() => handleRejectClaim(company.id)}
+                                  className="px-3 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-600 font-bold text-xs rounded-xl border border-rose-200 transition cursor-pointer"
+                                  title="Reject Claim"
+                                >
+                                  ✕ Reject
+                                </button>
+                              </>
+                            ) : isClaimed ? (
+                              <button
+                                onClick={() => handleRejectClaim(company.id)}
+                                className="px-3 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-600 font-bold text-xs rounded-xl border border-rose-200 transition cursor-pointer"
+                              >
+                                Revoke
+                              </button>
+                            ) : (
+                              <button
+                                onClick={() => handleApproveClaim(company.id)}
+                                className="px-3.5 py-1.5 bg-[#022B96] hover:bg-[#011a5e] text-white font-bold text-xs rounded-xl shadow-xs transition cursor-pointer"
+                              >
+                                Approve
+                              </button>
+                            )}
                             <button
                               onClick={() => setSelectedCompanyModal(company)}
-                              className="p-2 text-slate-500 hover:text-slate-900 hover:bg-slate-200/60 rounded-xl transition"
+                              className="p-1.5 text-slate-400 hover:text-slate-800 hover:bg-slate-100 rounded-xl transition cursor-pointer"
                               title="View Details"
                             >
                               <Eye className="w-4 h-4" />
                             </button>
-                            {isPending && (
-                              <>
-                                <button
-                                  onClick={() => handleApproveClaim(company.id)}
-                                  className="px-3 py-1.5 bg-[#022B96] hover:bg-[#022B96]/90 text-white font-bold text-xs rounded-xl shadow-xs transition"
-                                >
-                                  Approve
-                                </button>
-                                <button
-                                  onClick={() => handleRejectClaim(company.id)}
-                                  className="p-1.5 text-rose-600 hover:bg-rose-50 rounded-xl transition"
-                                  title="Reject Claim"
-                                >
-                                  <XCircle className="w-4 h-4" />
-                                </button>
-                              </>
-                            )}
                           </div>
                         </div>
                       )
@@ -1036,21 +1210,6 @@ export default function AdminDashboardPage() {
                       <p className="text-xl font-black text-slate-900 mt-2">{item.price}</p>
                     </div>
                   ))}
-                </div>
-              </div>
-            )}
-
-            {/* VIEW 5: USER DIRECTORY */}
-            {activeNav === 'users' && (
-              <div className="space-y-6">
-                <div>
-                  <h1 className="text-2xl font-black text-slate-900 tracking-tight">User Accounts</h1>
-                  <p className="text-xs text-slate-500 mt-1 font-medium">{stats.totalUsers} registered users in database</p>
-                </div>
-                <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-xs">
-                  <p className="text-xs text-slate-500 font-medium">
-                    Total Buyers: <strong className="text-[#022B96]">{stats.totalBuyers}</strong> · Total Suppliers: <strong className="text-emerald-600">{stats.totalSuppliers}</strong>
-                  </p>
                 </div>
               </div>
             )}

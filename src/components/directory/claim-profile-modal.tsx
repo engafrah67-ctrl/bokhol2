@@ -1,9 +1,10 @@
 'use client'
 
 import React, { useState } from 'react'
-import { X, CheckCircle2, ShieldCheck, Mail, User, Briefcase, Phone, Lock, AlertTriangle } from 'lucide-react'
+import { X, CheckCircle2, ShieldCheck, Mail, User, Briefcase, Lock, AlertTriangle, Eye, EyeOff } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { CompanyProfile, requestProfileClaim } from '@/lib/data/companies-data'
+import { createClient } from '@/lib/supabase/client'
 
 interface ClaimProfileModalProps {
   company: CompanyProfile | null
@@ -16,8 +17,8 @@ export function ClaimProfileModal({ company, isOpen, onClose, onSuccess }: Claim
   const [fullName, setFullName] = useState('')
   const [businessEmail, setBusinessEmail] = useState('')
   const [jobTitle, setJobTitle] = useState('')
-  const [phone, setPhone] = useState('')
   const [password, setPassword] = useState('')
+  const [showPassword, setShowPassword] = useState(false)
 
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -28,47 +29,87 @@ export function ClaimProfileModal({ company, isOpen, onClose, onSuccess }: Claim
   // Extract expected domain e.g. amacore.nl
   const expectedDomain = company.domain || company.email.split('@')[1] || ''
 
-  function handleSubmit(e: React.FormEvent) {
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     if (!company) return
     setError(null)
 
-    if (!fullName.trim() || !businessEmail.trim() || !jobTitle.trim() || !phone.trim() || !password) {
+    if (!fullName.trim() || !businessEmail.trim() || !jobTitle.trim() || !password) {
       setError('Please fill in all required fields.')
       return
     }
 
-    // Email domain validation check
-    const emailDomain = businessEmail.split('@')[1]?.toLowerCase() || ''
-    const freeDomains = ['gmail.com', 'yahoo.com', 'hotmail.com', 'outlook.com', 'icloud.com']
-    if (freeDomains.includes(emailDomain)) {
-      setError(`Please use your company business email (e.g. name@${expectedDomain || 'company.com'}). Personal emails like @${emailDomain} are not allowed.`)
+    if (password.length < 6) {
+      setError('Password must be at least 6 characters long.')
       return
     }
 
     setLoading(true)
     const companyId = company.id
 
-    setTimeout(() => {
+    try {
+      // 1. Immediately record pending claim in local/state database
       const res = requestProfileClaim(companyId, {
         fullName: fullName.trim(),
         businessEmail: businessEmail.trim(),
         jobTitle: jobTitle.trim(),
-        phone: phone.trim(),
+        phone: '',
       })
 
-      setLoading(false)
-      if (res.success) {
-        setSubmitted(true)
-        setTimeout(() => {
-          onSuccess()
-          onClose()
-          setSubmitted(false)
-        }, 2200)
-      } else {
+      if (!res.success) {
+        setLoading(false)
         setError(res.error || 'Failed to submit claim request. Please try again.')
+        return
       }
-    }, 600)
+
+      // 2. Attempt Supabase Auth account creation with safety timeout (max 1.5s so it never hangs)
+      try {
+        const supabase = createClient()
+        const authAction = async () => {
+          const { data: authData } = await supabase.auth.signUp({
+            email: businessEmail.trim(),
+            password: password,
+            options: {
+              data: {
+                role: 'supplier',
+                full_name: fullName.trim(),
+                company_id: companyId,
+                company_name: company.name,
+                job_title: jobTitle.trim(),
+                claim_status: 'pending',
+              },
+            },
+          })
+
+          if (authData?.user) {
+            try {
+              await supabase.from('users').upsert({
+                id: authData.user.id,
+                role: 'supplier',
+                full_name: fullName.trim(),
+                company_id: companyId,
+              })
+            } catch (_) {}
+          }
+        }
+
+        const timeout = new Promise((resolve) => setTimeout(resolve, 1500))
+        await Promise.race([authAction(), timeout])
+      } catch (authErr) {
+        console.warn('Auth registration notice:', authErr)
+      }
+
+      setLoading(false)
+      setSubmitted(true)
+      setTimeout(() => {
+        onSuccess()
+        onClose()
+        setSubmitted(false)
+      }, 3000)
+    } catch (err: any) {
+      setLoading(false)
+      setError(err?.message || 'Failed to submit claim request. Please try again.')
+    }
   }
 
   return (
@@ -119,18 +160,21 @@ export function ClaimProfileModal({ company, isOpen, onClose, onSuccess }: Claim
               <CheckCircle2 className="w-10 h-10" />
             </div>
             <h3 className="text-xl font-bold text-slate-900">Claim Submitted Successfully</h3>
-            <p className="text-xs text-slate-600 max-w-xs mx-auto leading-relaxed">
-              Your claim request for <strong>{company.name}</strong> has been received. Our admin team will verify your business email (<code>{businessEmail}</code>) and approve access shortly.
+            <p className="text-xs text-slate-600 max-w-sm mx-auto leading-relaxed">
+              Your claim for <strong>{company.name}</strong> is now pending admin review.
             </p>
-            <div className="bg-amber-50 border border-amber-200 text-amber-900 rounded-xl p-3 text-xs font-medium">
-              Status: <strong>Claim Pending Verification</strong>
+            <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 text-xs text-left space-y-1.5">
+              <p className="font-bold text-slate-800">Your Login Credentials:</p>
+              <p className="text-slate-600">Email: <strong className="text-[#022B96]">{businessEmail}</strong></p>
+              <p className="text-slate-600">Password: <strong className="text-slate-800">••••••••</strong></p>
+              <p className="text-[11px] text-emerald-700 font-semibold pt-1">
+                Once the admin clicks Approve in the Admin Panel, you can sign in at <strong>/login</strong> using this email and password.
+              </p>
             </div>
           </div>
         ) : (
           <form onSubmit={handleSubmit} className="p-6 space-y-4">
             
-
-
             {error && (
               <div className="flex items-center gap-2 bg-rose-50 border border-rose-200 text-rose-700 p-3.5 rounded-xl text-xs">
                 <AlertTriangle className="w-4 h-4 shrink-0" />
@@ -167,7 +211,7 @@ export function ClaimProfileModal({ company, isOpen, onClose, onSuccess }: Claim
                   <input
                     type="text"
                     required
-                    placeholder="e.g. Sales Manager"
+                    placeholder="e.g. Sales Manager / CEO"
                     value={jobTitle}
                     onChange={(e) => setJobTitle(e.target.value)}
                     className="w-full pl-9 pr-3 py-2 border border-slate-200 rounded-xl text-xs focus:ring-2 focus:ring-[#022B96]/20 focus:border-[#022B96] outline-none transition"
@@ -176,10 +220,10 @@ export function ClaimProfileModal({ company, isOpen, onClose, onSuccess }: Claim
               </div>
             </div>
 
-            {/* Business Email */}
+            {/* Login Email Address */}
             <div>
               <label className="block text-xs font-semibold text-slate-700 mb-1">
-                Business Email <span className="text-rose-500">*</span>
+                Login Email Address <span className="text-rose-500">*</span>
               </label>
               <div className="relative">
                 <Mail className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
@@ -192,45 +236,36 @@ export function ClaimProfileModal({ company, isOpen, onClose, onSuccess }: Claim
                   className="w-full pl-9 pr-3 py-2 border border-slate-200 rounded-xl text-xs focus:ring-2 focus:ring-[#022B96]/20 focus:border-[#022B96] outline-none transition"
                 />
               </div>
-              <p className="text-[11px] text-slate-500 mt-1">Must use company email domain (e.g. sales@{expectedDomain || 'company.com'}).</p>
+              <p className="text-[11px] text-slate-500 mt-1">
+                You will use this email address to log in to your Supplier Dashboard.
+              </p>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              {/* Phone Number */}
-              <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">
-                  Phone Number <span className="text-rose-500">*</span>
-                </label>
-                <div className="relative">
-                  <Phone className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
-                  <input
-                    type="tel"
-                    required
-                    placeholder="+31 6 12345678"
-                    value={phone}
-                    onChange={(e) => setPhone(e.target.value)}
-                    className="w-full pl-9 pr-3 py-2 border border-slate-200 rounded-xl text-xs focus:ring-2 focus:ring-[#022B96]/20 focus:border-[#022B96] outline-none transition"
-                  />
-                </div>
+            {/* Password with View Toggle */}
+            <div>
+              <label className="block text-xs font-semibold text-slate-700 mb-1">
+                Account Password <span className="text-rose-500">*</span>
+              </label>
+              <div className="relative">
+                <Lock className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
+                <input
+                  type={showPassword ? 'text' : 'password'}
+                  required
+                  placeholder="••••••••"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  className="w-full pl-9 pr-10 py-2 border border-slate-200 rounded-xl text-xs focus:ring-2 focus:ring-[#022B96]/20 focus:border-[#022B96] outline-none transition"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-3 top-2.5 text-slate-400 hover:text-slate-700 transition cursor-pointer"
+                  title={showPassword ? 'Hide password' : 'Show password'}
+                >
+                  {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
               </div>
-
-              {/* Password */}
-              <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">
-                  Account Password <span className="text-rose-500">*</span>
-                </label>
-                <div className="relative">
-                  <Lock className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
-                  <input
-                    type="password"
-                    required
-                    placeholder="••••••••"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    className="w-full pl-9 pr-3 py-2 border border-slate-200 rounded-xl text-xs focus:ring-2 focus:ring-[#022B96]/20 focus:border-[#022B96] outline-none transition"
-                  />
-                </div>
-              </div>
+              <p className="text-[11px] text-slate-400 mt-1">Minimum 6 characters. You will use this password to sign in.</p>
             </div>
 
             {/* Actions */}

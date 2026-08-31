@@ -1,57 +1,48 @@
 import { NextResponse } from 'next/server'
+import { cookies } from 'next/headers'
 import { createClient } from '@/lib/supabase/server'
 
 export async function POST() {
   try {
     const supabase = await createClient()
-    await supabase.auth.signOut({ scope: 'global' })
-  } catch (error) {
-    console.error('Sign out error:', error)
+    await supabase.auth.signOut()
+  } catch (_) {
+    // Ignore sign out errors if already signed out
   }
 
   const response = NextResponse.json({ success: true })
 
-  // Clear ALL cookies that may contain Supabase session data
-  // Supabase SSR uses sb-<project-ref>-auth-token pattern
-  const response2 = new NextResponse(JSON.stringify({ success: true }), {
-    status: 200,
-    headers: { 'Content-Type': 'application/json' },
-  })
+  try {
+    const cookieStore = await cookies()
+    const allCookies = cookieStore.getAll()
+    allCookies.forEach((c) => {
+      response.cookies.set(c.name, '', { maxAge: 0, path: '/' })
+    })
+  } catch (_) {}
 
-  // Wipe every cookie by setting it expired
-  response2.headers.set(
-    'Set-Cookie',
-    [
-      'sb-access-token=; Max-Age=0; Path=/; HttpOnly',
-      'sb-refresh-token=; Max-Age=0; Path=/; HttpOnly',
-      'sb-sfbixmrmdfignczavzbw-auth-token=; Max-Age=0; Path=/; HttpOnly',
-      'sb-sfbixmrmdfignczavzbw-auth-token-code-verifier=; Max-Age=0; Path=/; HttpOnly',
-    ].join(', ')
-  )
-
-  return response2
+  return response
 }
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
     const supabase = await createClient()
-    await supabase.auth.signOut({ scope: 'global' })
-  } catch (error) {
-    console.error('Sign out error:', error)
-  }
+    await supabase.auth.signOut()
+  } catch (_) {}
 
-  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000'
-  const redirectResponse = NextResponse.redirect(new URL('/login', siteUrl))
+  let origin = 'https://www.bokhol.nl'
+  try {
+    origin = new URL(request.url).origin
+  } catch (_) {}
 
-  // Clear cookies on GET redirect too
-  ;[
-    'sb-access-token',
-    'sb-refresh-token',
-    'sb-sfbixmrmdfignczavzbw-auth-token',
-    'sb-sfbixmrmdfignczavzbw-auth-token-code-verifier',
-  ].forEach((name) => {
-    redirectResponse.cookies.set(name, '', { maxAge: 0, path: '/' })
-  })
+  const response = NextResponse.redirect(`${origin}/login`)
 
-  return redirectResponse
+  try {
+    const cookieStore = await cookies()
+    const allCookies = cookieStore.getAll()
+    allCookies.forEach((c) => {
+      response.cookies.set(c.name, '', { maxAge: 0, path: '/' })
+    })
+  } catch (_) {}
+
+  return response
 }
