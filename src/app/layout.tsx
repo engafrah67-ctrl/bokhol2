@@ -23,9 +23,9 @@ export const metadata: Metadata = {
     'Track global seafood price indexes, discover certified suppliers, post buying requests, and read market news.',
   keywords: 'bokhol fish market, seafood market, seafood index, supplier discovery, marine trade, seafood pricing',
   icons: {
-    icon: '/app-icon.png?v=5',
-    shortcut: '/app-icon.png?v=5',
-    apple: '/app-icon.png?v=5',
+    icon: '/app-icon.png?v=6',
+    shortcut: '/app-icon.png?v=6',
+    apple: '/app-icon.png?v=6',
   },
 }
 
@@ -37,9 +37,9 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning>
       <head>
-        <link rel="icon" href="/app-icon.png?v=5" type="image/png" />
-        <link rel="shortcut icon" href="/app-icon.png?v=5" type="image/png" />
-        <link rel="apple-touch-icon" href="/app-icon.png?v=5" />
+        <link rel="icon" href="/app-icon.png?v=6" type="image/png" />
+        <link rel="shortcut icon" href="/app-icon.png?v=6" type="image/png" />
+        <link rel="apple-touch-icon" href="/app-icon.png?v=6" />
       </head>
       <body
         suppressHydrationWarning

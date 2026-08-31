@@ -267,7 +267,7 @@ export function SupportWidget() {
           <div className="px-4 py-3 bg-white dark:bg-slate-900 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between">
             <div className="flex items-center gap-2">
               <div className="h-5 w-5 relative">
-                <img src="/app-icon.png" alt="Bokhol Icon" className="w-full h-full object-contain" />
+                <img src="/app-icon.png?v=3" alt="Bokhol Icon" className="w-full h-full object-contain" />
               </div>
               <span className="text-[11px] font-bold text-slate-700 dark:text-slate-300">
                 Bokhol Network
@@ -320,7 +320,7 @@ export function SupportWidget() {
             <div className="h-9 w-9 sm:h-10 sm:w-10 relative flex items-center justify-center p-0.5 transition-transform duration-200 group-hover:scale-110">
               {/* Bokhol Logo Mark (Same as hero icon) */}
               <img
-                src="/app-icon.png"
+                src="/app-icon.png?v=3"
                 alt="Bokhol Icon"
                 className="w-full h-full object-contain"
               />
