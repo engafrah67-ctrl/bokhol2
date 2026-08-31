@@ -161,24 +161,45 @@ export default function SupplierDashboardPage() {
         if (isMounted && currentUser) {
           setUser(currentUser)
 
-          // 1. Fetch User Profile
-          const { data: userProfile } = await supabase
-            .from('users')
-            .select('*')
-            .eq('id', currentUser.id)
-            .maybeSingle()
+          // Fetch User Profile, Company, Countries, and Buyer Requests in parallel
+          const [userProfileRes, companyRes, countriesRes, requestsRes] = await Promise.all([
+            supabase
+              .from('users')
+              .select('*')
+              .eq('id', currentUser.id)
+              .maybeSingle(),
+            supabase
+              .from('companies')
+              .select('*')
+              .eq('owner_id', currentUser.id)
+              .maybeSingle(),
+            supabase
+              .from('countries')
+              .select('id, name, flag_emoji')
+              .eq('is_featured', true)
+              .order('name'),
+            supabase
+              .from('buyer_requests')
+              .select('id, title, description, quantity, quantity_unit, currency, target_price, destination, status, created_at')
+              .eq('status', 'open')
+              .order('created_at', { ascending: false })
+              .limit(10),
+          ])
+
+          // 1. Set User Profile
+          const userProfile = userProfileRes.data
           if (userProfile && isMounted) {
             setProfile(userProfile)
             setUserFullName(userProfile.full_name || '')
             setUserPhone(userProfile.phone || '')
           }
 
-          // 2. Fetch Company Profile
-          const { data: companyData } = await supabase
-            .from('companies')
-            .select('*')
-            .eq('owner_id', currentUser.id)
-            .maybeSingle()
+          // 2. Set Countries & Requests
+          if (countriesRes.data && isMounted) setCountries(countriesRes.data)
+          if (requestsRes.data && isMounted) setBuyerRequests(requestsRes.data)
+
+          // 3. Set Company & Posts
+          const companyData = companyRes.data
           if (companyData && isMounted) {
             setCompany(companyData)
             setCompanyName(companyData.name || '')
@@ -193,7 +214,7 @@ export default function SupplierDashboardPage() {
             setCompanyEmployeeCount(companyData.employee_count || '')
             setCompanyLogoUrl(companyData.logo_url || '')
 
-            // 3. Fetch this supplier's real posts from DB
+            // Fetch this supplier's real posts from DB
             const { data: dbPosts } = await supabase
               .from('supplier_posts')
               .select('id, title, content, created_at, updated_at, is_published')
@@ -202,7 +223,6 @@ export default function SupplierDashboardPage() {
               .order('created_at', { ascending: false })
 
             if (dbPosts && isMounted) {
-              // Parse content JSON into SupplierPost shape
               const normalized = dbPosts.map((row: any) => {
                 let details: any = {}
                 try { details = JSON.parse(row.content || '{}') } catch (_) {}
@@ -227,7 +247,6 @@ export default function SupplierDashboardPage() {
               })
               setSupplierPosts(normalized)
             } else if (isMounted) {
-              // Fallback: localStorage for suppliers without DB posts yet
               setSupplierPosts(getStoredSupplierPosts())
             }
           } else if (isMounted) {
@@ -263,23 +282,6 @@ export default function SupplierDashboardPage() {
             setSupplierPosts(getStoredSupplierPosts())
           }
         }
-
-        // 4. Fetch Countries (only featured seafood-exporting nations)
-        const { data: countriesData } = await supabase
-          .from('countries')
-          .select('id, name, flag_emoji')
-          .eq('is_featured', true)
-          .order('name')
-        if (countriesData && isMounted) setCountries(countriesData)
-
-        // 5. Fetch Real Buyer Requests from DB
-        const { data: requestsData } = await supabase
-          .from('buyer_requests')
-          .select('id, title, description, quantity, quantity_unit, currency, target_price, destination, status, created_at')
-          .eq('status', 'open')
-          .order('created_at', { ascending: false })
-          .limit(10)
-        if (requestsData && isMounted) setBuyerRequests(requestsData)
 
       } catch (err) {
         console.error('Supplier dashboard load warning:', err)

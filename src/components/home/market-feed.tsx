@@ -46,20 +46,34 @@ export function MarketFeed({ news }: MarketFeedProps) {
     async function loadFeedData() {
       const supabase = createClient()
 
-      // 1. Fetch latest real supplier post
       try {
-        const { data: posts } = await supabase
-          .from('supplier_posts')
-          .select(`
-            id, title, content, created_at,
-            companies(name, slug, city)
-          `)
-          .eq('is_published', true)
-          .order('created_at', { ascending: false })
-          .limit(1)
+        const [postsRes, requestsRes, newsRes] = await Promise.allSettled([
+          supabase
+            .from('supplier_posts')
+            .select(`
+              id, title, content, created_at,
+              companies(name, slug, city)
+            `)
+            .eq('is_published', true)
+            .order('created_at', { ascending: false })
+            .limit(1),
+          supabase
+            .from('buyer_requests')
+            .select('id, title, quantity, quantity_unit, destination, description, created_at')
+            .eq('status', 'open')
+            .order('created_at', { ascending: false })
+            .limit(1),
+          supabase
+            .from('news')
+            .select('title, summary, slug, published_at')
+            .eq('is_published', true)
+            .order('published_at', { ascending: false })
+            .limit(1),
+        ])
 
-        if (posts && posts.length > 0) {
-          const p = posts[0]
+        // 1. Process supplier post
+        if (postsRes.status === 'fulfilled' && postsRes.value.data && postsRes.value.data.length > 0) {
+          const p = postsRes.value.data[0]
           let details: any = {}
           try { details = JSON.parse(p.content || '{}') } catch (_) {}
           const company = Array.isArray(p.companies) ? p.companies[0] : p.companies
@@ -74,19 +88,10 @@ export function MarketFeed({ news }: MarketFeedProps) {
             createdAt: p.created_at,
           })
         }
-      } catch (_) {}
 
-      // 2. Fetch latest real buyer request
-      try {
-        const { data: requests } = await supabase
-          .from('buyer_requests')
-          .select('id, title, quantity, quantity_unit, destination, description, created_at')
-          .eq('status', 'open')
-          .order('created_at', { ascending: false })
-          .limit(1)
-
-        if (requests && requests.length > 0) {
-          const req = requests[0]
+        // 2. Process buyer request
+        if (requestsRes.status === 'fulfilled' && requestsRes.value.data && requestsRes.value.data.length > 0) {
+          const req = requestsRes.value.data[0]
           setLatestRequest({
             title: req.title,
             quantity: req.quantity ? `${req.quantity} ${req.quantity_unit || 'kg'}` : 'Bulk Quantity',
@@ -95,18 +100,10 @@ export function MarketFeed({ news }: MarketFeedProps) {
             createdAt: req.created_at,
           })
         }
-      } catch (_) {}
 
-      // 3. Fetch latest real news
-      try {
-        const { data: dbNews } = await supabase
-          .from('news')
-          .select('title, summary, slug, published_at')
-          .eq('is_published', true)
-          .order('published_at', { ascending: false })
-          .limit(1)
-
-        if (dbNews && dbNews.length > 0) {
+        // 3. Process news
+        if (newsRes.status === 'fulfilled' && newsRes.value.data && newsRes.value.data.length > 0) {
+          const dbNews = newsRes.value.data
           setTopStory({
             title: dbNews[0].title,
             summary: dbNews[0].summary || '',

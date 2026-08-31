@@ -106,13 +106,22 @@ export async function signIn(
     const { email, password } = parsed.data
     const supabase = await createClient()
 
-    const { error } = await supabase.auth.signInWithPassword({ email, password })
+    const { data, error } = await supabase.auth.signInWithPassword({ email, password })
 
     if (error) {
       return { error: error.message || 'Invalid login credentials' }
     }
 
-    revalidatePath('/', 'layout')
+    const user = data?.user
+    const role = user?.email === 'admin@gmail.com' ? 'admin' : (user?.user_metadata?.role as string) || null
+
+    if (role === 'admin') {
+      redirect('/dashboard/admin')
+    } else if (role === 'supplier') {
+      redirect('/dashboard/supplier')
+    } else if (role === 'buyer') {
+      redirect('/dashboard/buyer')
+    }
   } catch (err: unknown) {
     if (isNextRedirectError(err)) throw err
     return { error: err instanceof Error ? err.message : 'An unexpected error occurred' }

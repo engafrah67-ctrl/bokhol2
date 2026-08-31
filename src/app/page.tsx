@@ -1,4 +1,4 @@
-import { createClient } from '@/lib/supabase/server'
+import { createPublicServerClient } from '@/lib/supabase/server'
 import { HeroSection } from '@/components/home/hero-section'
 import { PartnersSection } from '@/components/home/partners-section'
 import { SeafoodIndexCard } from '@/components/home/seafood-index'
@@ -12,22 +12,25 @@ import { Product, NewsArticle } from '@/types/database'
 export const revalidate = 60 // revalidate page every 60s
 
 export default async function HomePage() {
-  const supabase = await createClient()
+  const supabase = createPublicServerClient()
 
-  // Fetch top products
-  const { data: products } = await supabase
-    .from('products')
-    .select('*')
-    .order('is_featured', { ascending: false })
-    .limit(5)
+  // Fetch top products and latest news in parallel
+  const [productsRes, newsRes] = await Promise.all([
+    supabase
+      .from('products')
+      .select('*')
+      .order('is_featured', { ascending: false })
+      .limit(5),
+    supabase
+      .from('news')
+      .select('*')
+      .eq('is_published', true)
+      .order('published_at', { ascending: false })
+      .limit(3),
+  ])
 
-  // Fetch latest news
-  const { data: news } = await supabase
-    .from('news')
-    .select('*')
-    .eq('is_published', true)
-    .order('published_at', { ascending: false })
-    .limit(3)
+  const products = productsRes.data
+  const news = newsRes.data
 
   return (
     <div>

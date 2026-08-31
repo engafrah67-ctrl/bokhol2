@@ -21,56 +21,108 @@ interface UseUserReturn {
   isAuthenticated: boolean
 }
 
+// Module-level cache for instant client-side transitions
+let cachedUser: User | null = null
+let cachedProfile: UserProfile | null = null
+let cachedLoading = true
+let profileFetchPromise: Promise<UserProfile | null> | null = null
+
 export function useUser(): UseUserReturn {
-  const [user, setUser] = useState<User | null>(null)
-  const [profile, setProfile] = useState<UserProfile | null>(null)
-  const [isLoading, setIsLoading] = useState(true)
+  const [user, setUser] = useState<User | null>(cachedUser)
+  const [profile, setProfile] = useState<UserProfile | null>(cachedProfile)
+  const [isLoading, setIsLoading] = useState<boolean>(cachedLoading && !cachedUser)
   const supabase = createClient()
 
   useEffect(() => {
     let isMounted = true
 
-    const safetyTimer = setTimeout(() => {
-      if (isMounted) setIsLoading(false)
-    }, 1200)
+    async function fetchProfile(currentUser: User): Promise<UserProfile> {
+      if (profileFetchPromise && cachedUser?.id === currentUser.id) {
+        const p = await profileFetchPromise
+        if (p) return p
+      }
 
-    async function initSession() {
-      try {
-        const { data: { session } } = await supabase.auth.getSession()
-        if (isMounted) {
-          if (session?.user) {
-            setUser(session.user)
-            await fetchProfile(session.user)
+      profileFetchPromise = (async () => {
+        try {
+          const { data } = await supabase
+            .from('users')
+            .select('id, role, full_name, avatar_url, company_id')
+            .eq('id', currentUser.id)
+            .maybeSingle()
+
+          const isAdmin = currentUser.email === 'admin@gmail.com'
+
+          let finalProfile: UserProfile
+          if (data) {
+            finalProfile = {
+              ...data,
+              role: isAdmin ? 'admin' : data.role,
+            }
           } else {
-            setUser(null)
-            setProfile(null)
-            setIsLoading(false)
+            const fallbackRole = isAdmin ? 'admin' : (currentUser.user_metadata?.role as UserRole) || 'buyer'
+            finalProfile = {
+              id: currentUser.id,
+              role: fallbackRole,
+              full_name: currentUser.user_metadata?.full_name || currentUser.email || 'User',
+              avatar_url: null,
+              company_id: null,
+            }
           }
+          cachedProfile = finalProfile
+          return finalProfile
+        } catch (_) {
+          const isAdmin = currentUser.email === 'admin@gmail.com'
+          const fallbackRole = isAdmin ? 'admin' : (currentUser.user_metadata?.role as UserRole) || 'buyer'
+          const fallbackProfile: UserProfile = {
+            id: currentUser.id,
+            role: fallbackRole,
+            full_name: currentUser.user_metadata?.full_name || currentUser.email || 'User',
+            avatar_url: null,
+            company_id: null,
+          }
+          cachedProfile = fallbackProfile
+          return fallbackProfile
+        } finally {
+          profileFetchPromise = null
         }
-      } catch (_) {
+      })()
+
+      return profileFetchPromise as Promise<UserProfile>
+    }
+
+    async function syncUserSession(currentUser: User | null) {
+      if (!isMounted) return
+      if (currentUser) {
+        cachedUser = currentUser
+        setUser(currentUser)
+        const userProf = await fetchProfile(currentUser)
         if (isMounted) {
+          setProfile(userProf)
           setIsLoading(false)
+          cachedLoading = false
         }
-      } finally {
-        clearTimeout(safetyTimer)
+      } else {
+        cachedUser = null
+        cachedProfile = null
+        cachedLoading = false
+        setUser(null)
+        setProfile(null)
+        setIsLoading(false)
       }
     }
 
-    initSession()
+    // Check current session
+    supabase.auth.getSession().then((res: any) => {
+      const session = res?.data?.session
+      syncUserSession(session?.user ?? null)
+    }).catch(() => {
+      if (isMounted) setIsLoading(false)
+    })
 
-    // Subscribe to auth state changes.
+    // Subscribe to auth state changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (event: string, session: any) => {
-        const currentUser = session?.user ?? null
-
-        if (currentUser && isMounted) {
-          setUser(currentUser)
-          await fetchProfile(currentUser)
-        } else if (isMounted) {
-          setUser(null)
-          setProfile(null)
-          setIsLoading(false)
-        }
+      (_event: string, session: any) => {
+        syncUserSession(session?.user ?? null)
       }
     )
 
@@ -80,46 +132,6 @@ export function useUser(): UseUserReturn {
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
-
-  async function fetchProfile(currentUser: User) {
-    try {
-      const { data } = await supabase
-        .from('users')
-        .select('id, role, full_name, avatar_url, company_id')
-        .eq('id', currentUser.id)
-        .maybeSingle()
-
-      const isAdmin = currentUser.email === 'admin@gmail.com'
-
-      if (data) {
-        setProfile({
-          ...data,
-          role: isAdmin ? 'admin' : data.role,
-        })
-      } else {
-        const fallbackRole = isAdmin ? 'admin' : (currentUser.user_metadata?.role as UserRole) || 'buyer'
-        setProfile({
-          id: currentUser.id,
-          role: fallbackRole,
-          full_name: currentUser.user_metadata?.full_name || currentUser.email || 'User',
-          avatar_url: null,
-          company_id: null,
-        })
-      }
-    } catch (_) {
-      const isAdmin = currentUser.email === 'admin@gmail.com'
-      const fallbackRole = isAdmin ? 'admin' : (currentUser.user_metadata?.role as UserRole) || 'buyer'
-      setProfile({
-        id: currentUser.id,
-        role: fallbackRole,
-        full_name: currentUser.user_metadata?.full_name || currentUser.email || 'User',
-        avatar_url: null,
-        company_id: null,
-      })
-    } finally {
-      setIsLoading(false)
-    }
-  }
 
   const effectiveRole: UserRole | null =
     user?.email === 'admin@gmail.com'
@@ -134,3 +146,4 @@ export function useUser(): UseUserReturn {
     isAuthenticated: !!user,
   }
 }
+
