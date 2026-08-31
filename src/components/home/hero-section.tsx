@@ -17,8 +17,8 @@ export function HeroSection() {
         {/* Centered Icon */}
         <div className="mb-8 flex items-center justify-center">
           <Image 
-            src="/icon.png" 
-            alt="FishMarketCap Icon" 
+            src="/logo-icon.png" 
+            alt="Bokhol Logo Icon" 
             width={72} 
             height={72} 
             className="object-contain"
