@@ -10,7 +10,7 @@ import { StatsBar } from '@/components/home/stats-bar'
 import { NewsArticle } from '@/types/database'
 import { getLiveMarketData } from '@/lib/data/market-data'
 
-export const revalidate = 60 // revalidate page every 60s
+export const revalidate = 10 // revalidate page every 10s for fast live updates
 
 export default async function HomePage() {
   const supabase = createPublicServerClient()

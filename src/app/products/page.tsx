@@ -2,7 +2,7 @@ import { createPublicServerClient } from '@/lib/supabase/server'
 import { getFishImageForProduct } from '@/lib/data/products-data'
 import { ProductsClient, ProductCard } from '@/components/products/products-client'
 
-export const revalidate = 60 // Cache statically and revalidate every 60 seconds
+export const revalidate = 10 // Cache statically and revalidate every 10 seconds
 
 function getCategory(name: string): string {
   const lower = name.toLowerCase()
