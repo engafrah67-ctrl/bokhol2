@@ -47,65 +47,79 @@ export function TopProducts({ topProducts }: TopProductsProps) {
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-            {productsList.map((p) => (
-              <tr key={p.slug} className="hover:bg-slate-50 dark:hover:bg-slate-900/50 transition-colors group cursor-pointer">
-                {/* 1. Image */}
-                <td className="py-4 px-4">
-                  <div className="h-16 w-20 flex items-center justify-center shrink-0">
-                    {p.imageUrl ? (
-                      <img 
-                        src={p.imageUrl} 
-                        alt={p.name} 
-                        className="h-full w-full object-contain mix-blend-multiply dark:invert dark:mix-blend-screen hover:scale-110 transition-transform duration-300" 
-                        style={{ filter: 'brightness(1.05) contrast(1.1)' }}
-                      />
-                    ) : (
-                      <Fish className="h-8 w-8 text-slate-400" />
-                    )}
-                  </div>
-                </td>
+            {productsList.length > 0 ? (
+              productsList.map((p) => (
+                <tr key={p.slug} className="hover:bg-slate-50 dark:hover:bg-slate-900/50 transition-colors group cursor-pointer">
+                  {/* 1. Image */}
+                  <td className="py-4 px-4">
+                    <div className="h-16 w-20 flex items-center justify-center shrink-0">
+                      {p.imageUrl ? (
+                        <img 
+                          src={p.imageUrl} 
+                          alt={p.name} 
+                          className="h-full w-full object-contain mix-blend-multiply dark:invert dark:mix-blend-screen hover:scale-110 transition-transform duration-300" 
+                          style={{ filter: 'brightness(1.05) contrast(1.1)' }}
+                        />
+                      ) : (
+                        <Fish className="h-8 w-8 text-slate-400" />
+                      )}
+                    </div>
+                  </td>
 
-                {/* 2. Name */}
-                <td className="py-4 px-4 font-bold text-slate-900 dark:text-white group-hover:text-[#022B96] dark:group-hover:text-blue-400 text-base transition-colors">
-                  <Link href={`/products/${p.slug}`} className="hover:underline">
-                    {p.name}
-                  </Link>
-                </td>
+                  {/* 2. Name */}
+                  <td className="py-4 px-4 font-bold text-slate-900 dark:text-white group-hover:text-[#022B96] dark:group-hover:text-blue-400 text-base transition-colors">
+                    <Link href={`/products/${p.slug}`} className="hover:underline">
+                      {p.name}
+                    </Link>
+                  </td>
 
-                {/* 3. Country with flag image */}
-                <td className="py-4 px-4 font-medium text-slate-700 dark:text-slate-300">
-                  <div className="flex items-center gap-2">
-                    {COUNTRY_FLAGS[p.origin] ? (
-                      <img
-                        src={COUNTRY_FLAGS[p.origin]}
-                        alt={p.origin}
-                        className="h-3.5 w-5 object-cover rounded-xs shadow-xs"
-                      />
-                    ) : (
-                      <span className="text-xs">🌍</span>
-                    )}
-                    <span>{p.origin}</span>
-                  </div>
-                </td>
+                  {/* 3. Country with flag image */}
+                  <td className="py-4 px-4 font-medium text-slate-700 dark:text-slate-300">
+                    <div className="flex items-center gap-2">
+                      {COUNTRY_FLAGS[p.origin] ? (
+                        <img
+                          src={COUNTRY_FLAGS[p.origin]}
+                          alt={p.origin}
+                          className="h-3.5 w-5 object-cover rounded-xs shadow-xs"
+                        />
+                      ) : (
+                        <span className="text-xs">🌍</span>
+                      )}
+                      <span>{p.origin}</span>
+                    </div>
+                  </td>
 
-                {/* 4. Avg Price */}
-                <td className="py-4 px-4 font-bold text-slate-900 dark:text-white">
-                  <BlurGate>
-                    <span>{p.avgPrice} / kg</span>
-                  </BlurGate>
-                </td>
-
-                {/* 5. Suppliers */}
-                <td className="py-4 px-4 text-right">
-                  <span className="inline-flex items-center text-xs font-semibold text-slate-600 dark:text-slate-400 bg-slate-100 dark:bg-slate-800 px-3 py-1.5 rounded-full">
+                  {/* 4. Avg Price */}
+                  <td className="py-4 px-4 font-bold text-slate-900 dark:text-white">
                     <BlurGate>
-                      <span>{p.suppliersCount}</span>
+                      <span>{p.avgPrice} / kg</span>
                     </BlurGate>
-                    <span className="ml-1">Offer{p.suppliersCount > 1 ? 's' : ''}</span>
-                  </span>
+                  </td>
+
+                  {/* 5. Suppliers */}
+                  <td className="py-4 px-4 text-right">
+                    <span className="inline-flex items-center text-xs font-semibold text-slate-600 dark:text-slate-400 bg-slate-100 dark:bg-slate-800 px-3 py-1.5 rounded-full">
+                      <BlurGate>
+                        <span>{p.suppliersCount}</span>
+                      </BlurGate>
+                      <span className="ml-1">Offer{p.suppliersCount > 1 ? 's' : ''}</span>
+                    </span>
+                  </td>
+                </tr>
+              ))
+            ) : (
+              <tr>
+                <td colSpan={5} className="py-12 text-center text-slate-400 text-sm">
+                  <div className="text-2xl mb-2">🐟</div>
+                  No active supplier offers posted yet.
+                  <div className="mt-1">
+                    <Link href="/products" className="text-[#022B96] dark:text-blue-400 font-semibold hover:underline">
+                      Browse all seafood catalog →
+                    </Link>
+                  </div>
                 </td>
               </tr>
-            ))}
+            )}
           </tbody>
         </table>
       </div>

@@ -163,6 +163,9 @@ export function parseSupplierPostsToMarketData(posts: any[]): {
     if (customImg) entry.images.push(customImg)
   }
 
+  // Track which keys actually have real published supplier posts
+  const keysWithRealPosts = new Set(productMap.keys())
+
   // Ensure primary benchmark species are always represented
   const baselineKeys = ['yellowfin-tuna', 'atlantic-salmon', 'bluefin-tuna', 'atlantic-cod', 'mackerel', 'shrimp']
   for (const bKey of baselineKeys) {
@@ -219,7 +222,7 @@ export function parseSupplierPostsToMarketData(posts: any[]): {
       weekLow,
       change,
       color: SPECIES_COLORS[slug] || '#0284c7',
-      suppliersCount: Math.max(1, item.prices.length),
+      suppliersCount: keysWithRealPosts.has(slug) ? item.prices.length : 0,
       topOrigin,
       imageUrl: item.images[0] || getFishImageForProduct(item.name),
       data: trendPoints,
@@ -277,20 +280,23 @@ export function parseSupplierPostsToMarketData(posts: any[]): {
     }
   })
 
-  // Build Top Products List for Home Page table (corresponding 1:1 to real products)
-  const topProducts: TopMarketProduct[] = allEuropeSpecies.slice(0, 6).map(sp => {
-    const symbol = sp.currency === 'USD' ? '$' : sp.currency === 'GBP' ? '£' : '€'
-    return {
-      name: sp.label,
-      slug: sp.slug,
-      origin: sp.topOrigin.replace('Holland (Netherlands)', 'Netherlands'),
-      avgPrice: `${symbol}${sp.latest.toFixed(2)}`,
-      avgPriceNum: sp.latest,
-      suppliersCount: sp.suppliersCount,
-      imageUrl: sp.imageUrl,
-      category: 'Finfish',
-    }
-  })
+  // Build Top Products List for Home Page table (only include species that have active supplier posts)
+  const topProducts: TopMarketProduct[] = allEuropeSpecies
+    .filter(sp => keysWithRealPosts.has(sp.slug))
+    .slice(0, 6)
+    .map(sp => {
+      const symbol = sp.currency === 'USD' ? '$' : sp.currency === 'GBP' ? '£' : '€'
+      return {
+        name: sp.label,
+        slug: sp.slug,
+        origin: sp.topOrigin.replace('Holland (Netherlands)', 'Netherlands'),
+        avgPrice: `${symbol}${sp.latest.toFixed(2)}`,
+        avgPriceNum: sp.latest,
+        suppliersCount: sp.suppliersCount,
+        imageUrl: sp.imageUrl,
+        category: 'Finfish',
+      }
+    })
 
   return {
     countryData,
