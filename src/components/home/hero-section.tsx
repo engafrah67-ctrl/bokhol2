@@ -17,7 +17,7 @@ export function HeroSection() {
         {/* Centered Icon */}
         <div className="mb-8 flex items-center justify-center">
           <Image 
-            src="/logo-icon.png" 
+            src="/logo-icon.png?v=3" 
             alt="Bokhol Logo Icon" 
             width={72} 
             height={72} 
