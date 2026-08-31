@@ -76,7 +76,7 @@ export function Navbar() {
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
         <div className="flex h-16 items-center justify-between">
           {/* Logo */}
-          <Link href="/" className="flex items-center hover:opacity-90 transition-opacity">
+          <Link href="/" prefetch={true} className="flex items-center hover:opacity-90 transition-opacity">
             <Logo size="sm" />
           </Link>
 
@@ -88,6 +88,7 @@ export function Navbar() {
                 <Link
                   key={item.href} 
                   href={item.href}
+                  prefetch={true}
                   className={`relative text-sm font-semibold transition-all duration-300 py-1 
                     ${isActive ? 'text-[#022B96]' : 'text-foreground/75 hover:text-[#022B96]'}
                     after:content-[''] after:absolute after:-bottom-1 after:left-0 after:w-full after:h-[2px] 
@@ -121,6 +122,7 @@ export function Navbar() {
                   <Link
                     key={item.href}
                     href={item.href}
+                    prefetch={true}
                     onClick={() => setRequestsOpen(false)}
                     className={`flex items-center justify-between px-4 py-3 text-sm font-medium transition-colors hover:bg-slate-50 hover:text-[#022B96] border-b border-slate-100 last:border-0 ${
                       pathname === item.href ? 'text-[#022B96] bg-blue-50' : 'text-slate-700'
@@ -197,14 +199,14 @@ export function Navbar() {
                   </span>
                 )}
                 {activeRole === 'buyer' ? (
-                  <Link href="/dashboard/buyer">
+                  <Link href="/dashboard/buyer" prefetch={true}>
                     <Button variant="ghost" size="sm" className="gap-2 cursor-pointer font-semibold rounded-lg hover:bg-muted text-slate-800">
                       <LayoutDashboard className="h-4 w-4 text-[#022B96]" />
                       Buyer Dashboard
                     </Button>
                   </Link>
                 ) : (
-                  <Link href={activeRole === 'admin' ? '/dashboard/admin' : '/dashboard'}>
+                  <Link href={activeRole === 'admin' ? '/dashboard/admin' : '/dashboard'} prefetch={true}>
                     <Button variant="ghost" size="sm" className="gap-2 cursor-pointer font-semibold rounded-lg hover:bg-muted">
                       <LayoutDashboard className="h-4 w-4" />
                       {activeRole === 'admin' ? 'Admin Panel' : t('nav_dashboard')}
@@ -264,6 +266,7 @@ export function Navbar() {
                 <Link
                   key={item.href}
                   href={item.href}
+                  prefetch={true}
                   onClick={() => setIsOpen(false)}
                   className={`block py-2 text-base font-medium transition-colors ${
                     isActive ? 'text-[#022B96]' : 'text-foreground/80 hover:text-[#022B96]'
@@ -281,6 +284,7 @@ export function Navbar() {
                 <Link
                   key={item.href}
                   href={item.href}
+                  prefetch={true}
                   onClick={() => setIsOpen(false)}
                   className={`block py-2 pl-3 text-base font-medium transition-colors border-l-2 mb-1 ${
                     pathname === item.href ? 'text-[#022B96] border-[#022B96]' : 'text-foreground/80 hover:text-[#022B96] border-transparent'
@@ -323,6 +327,7 @@ export function Navbar() {
               <>
                 <Link
                   href={activeRole === 'buyer' ? '/dashboard/buyer' : activeRole === 'admin' ? '/dashboard/admin' : '/dashboard'}
+                  prefetch={true}
                   onClick={() => setIsOpen(false)}
                 >
                   <Button variant="outline" className="w-full gap-2 cursor-pointer">
@@ -341,13 +346,13 @@ export function Navbar() {
               </>
             ) : (
               <>
-                <Link href="/login" onClick={() => setIsOpen(false)} className="w-full">
+                <Link href="/login" prefetch={true} onClick={() => setIsOpen(false)} className="w-full">
                   <Button variant="outline" className="w-full gap-2 cursor-pointer">
                     <User className="h-4 w-4" />
                     {t('nav_sign_in')}
                   </Button>
                 </Link>
-                <Link href="/signup" onClick={() => setIsOpen(false)} className="w-full">
+                <Link href="/signup" prefetch={true} onClick={() => setIsOpen(false)} className="w-full">
                   <Button className="w-full bg-[#022B96] hover:bg-[#011a5e] text-white cursor-pointer">
                     {t('nav_register')}
                   </Button>

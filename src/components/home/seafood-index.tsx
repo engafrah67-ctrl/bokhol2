@@ -451,12 +451,15 @@ interface SeafoodIndexCardProps {
 }
 
 export function SeafoodIndexCard({ initialCountryData }: SeafoodIndexCardProps) {
+  // Always prefer real Supabase data; only use static fallback if nothing arrived from server
   const countryList = (initialCountryData && initialCountryData.length > 0) ? initialCountryData : COUNTRIES_MARKET_DATA
   const [selectedCountryId, setSelectedCountryId] = useState(countryList[0]?.id || 'eu')
   
   const currentCountry = countryList.find(c => c.id === selectedCountryId) || countryList[0]
   const [activeSpeciesId, setActiveSpeciesId] = useState(currentCountry?.species[0]?.id || 'yellowfin-tuna')
   const [isMounted, setIsMounted] = useState(false)
+  // Track whether we have real Supabase data
+  const hasRealData = !!(initialCountryData && initialCountryData.length > 0)
 
   React.useEffect(() => {
     setIsMounted(true)
@@ -514,24 +517,43 @@ export function SeafoodIndexCard({ initialCountryData }: SeafoodIndexCardProps) 
         {/* Bottom Row: Species Tabs */}
         <div className="flex flex-wrap items-center justify-between gap-3 pt-2 border-t border-slate-100 dark:border-slate-800/60">
           <div className="flex flex-wrap gap-2">
-            {currentCountry.species.map(s => (
-              <button
-                key={s.id}
-                onClick={() => setActiveSpeciesId(s.id)}
-                className={`px-3.5 py-1.5 text-xs font-semibold rounded-full border transition-all cursor-pointer ${
-                  activeSpeciesId === s.id
-                    ? 'bg-[#022B96] text-white border-[#022B96] shadow-xs'
-                    : 'bg-transparent text-slate-500 dark:text-slate-400 border-slate-200 dark:border-slate-700 hover:border-slate-400'
-                }`}
-              >
-                {s.label}
-              </button>
-            ))}
+            {currentCountry.species.map(s => {
+              // A species with suppliersCount > 0 has real offer data
+              const isLive = hasRealData && (s as any).suppliersCount > 0
+              return (
+                <button
+                  key={s.id}
+                  onClick={() => setActiveSpeciesId(s.id)}
+                  className={`px-3.5 py-1.5 text-xs font-semibold rounded-full border transition-all cursor-pointer ${
+                    activeSpeciesId === s.id
+                      ? 'bg-[#022B96] text-white border-[#022B96] shadow-xs'
+                      : 'bg-transparent text-slate-500 dark:text-slate-400 border-slate-200 dark:border-slate-700 hover:border-slate-400'
+                  }`}
+                >
+                  {s.label}
+                  {isLive && (
+                    <span className="ml-1.5 inline-block h-1.5 w-1.5 rounded-full bg-emerald-400 align-middle" title="Live data" />
+                  )}
+                </button>
+              )
+            })}
           </div>
 
-          <span className="text-xs text-slate-400 font-medium">
-            Benchmark Source: <strong className="text-slate-700 dark:text-slate-300">{currentCountry.source}</strong>
-          </span>
+          <div className="flex items-center gap-3">
+            {hasRealData && activeSpecies && (activeSpecies as any).suppliersCount > 0 ? (
+              <span className="inline-flex items-center gap-1.5 text-[11px] font-bold text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200/60 dark:border-emerald-800/60 px-2 py-0.5 rounded-full">
+                <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                Live · {(activeSpecies as any).suppliersCount} offer{(activeSpecies as any).suppliersCount !== 1 ? 's' : ''}
+              </span>
+            ) : (
+              <span className="inline-flex items-center gap-1.5 text-[11px] font-bold text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/40 border border-amber-200/60 dark:border-amber-800/60 px-2 py-0.5 rounded-full">
+                Benchmark rate
+              </span>
+            )}
+            <span className="text-xs text-slate-400 font-medium">
+              Source: <strong className="text-slate-700 dark:text-slate-300">{currentCountry.source}</strong>
+            </span>
+          </div>
         </div>
 
       </div>

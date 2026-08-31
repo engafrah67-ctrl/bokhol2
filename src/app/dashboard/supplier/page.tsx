@@ -34,6 +34,8 @@ import {
   Lock,
   LogOut,
   TrendingUp,
+  Mail,
+  Phone,
 } from 'lucide-react'
 import { performSignOut } from '@/lib/auth-helpers'
 import Link from 'next/link'
@@ -47,40 +49,8 @@ import {
 } from '@/lib/data/products-data'
 import { getStoredCompanies, CompanyProfile } from '@/lib/data/companies-data'
 
-/* ─── Fish category image map (for My Posts display) ─── */
-const FISH_IMAGE_MAP: Record<string, string> = {
-  'Salmon': '/fish-salmon.png',
-  'Atlantic Salmon': '/fish-salmon.png',
-  'Pacific Salmon': '/fish-salmon.png',
-  'Salmon Fillet': '/fish-salmon.png',
-  'Salmon Portions': '/fish-salmon.png',
-  'Tuna': '/fish-tuna.png',
-  'Yellowfin Tuna': '/fish-tuna.png',
-  'Bluefin Tuna': '/fish-tuna.png',
-  'Bigeye Tuna': '/fish-tuna.png',
-  'Albacore Tuna': '/fish-tuna.png',
-  'Skipjack Tuna': '/fish-tuna.png',
-  'Tuna Loin': '/fish-tuna.png',
-  'Sea Bass': '/fish-seabass.png',
-  'European Sea Bass': '/fish-seabass.png',
-  'Sea Bream': '/fish-seabass.png',
-  'Gilthead Sea Bream': '/fish-seabass.png',
-  'Cod': '/fish-cod.png',
-  'Atlantic Cod': '/fish-cod.png',
-  'Pacific Cod': '/fish-cod.png',
-  'Haddock': '/fish-cod.png',
-  'Pollock': '/fish-cod.png',
-  'Alaska Pollock': '/fish-cod.png',
-  'Hake': '/fish-cod.png',
-  'Whiting': '/fish-cod.png',
-  'Mackerel': '/fish-mackerel.png',
-  'Herring': '/fish-mackerel.png',
-  'Sardine': '/fish-mackerel.png',
-  'Anchovy': '/fish-mackerel.png',
-}
-
-function getFishImage(productName: string): string | null {
-  return FISH_IMAGE_MAP[productName] || null
+function getFishImage(productName: string, customImage?: string): string {
+  return getFishImageForProduct(productName, customImage)
 }
 
 
@@ -98,6 +68,7 @@ export default function SupplierDashboardPage() {
   const [company, setCompany] = useState<any>(null)
   const [countries, setCountries] = useState<any[]>([])
   const [buyerRequests, setBuyerRequests] = useState<any[]>([])
+  const [quoteReqModal, setQuoteReqModal] = useState<any | null>(null)
   const [supplierPosts, setSupplierPosts] = useState<any[]>([])
 
   // Loading & Action states
@@ -197,7 +168,7 @@ export default function SupplierDashboardPage() {
             setUserPhone(userProfile.phone || '')
           }
 
-          // 2. Set Countries & Requests
+          // 2. Set Countries & Requests (directly from Supabase buyer_requests)
           if (countriesRes.data && isMounted) setCountries(countriesRes.data)
           if (requestsRes.data && isMounted) setBuyerRequests(requestsRes.data)
 
@@ -1121,21 +1092,16 @@ export default function SupplierDashboardPage() {
 
         {/* ══ TAB: BUYER REQUESTS ══════════════════════════════ */}
         {activeTab === 'buyer-requests' && (
-          <div className="space-y-6">
-            <div className="bg-gradient-to-r from-slate-900 to-[#022B96] text-white rounded-2xl p-6 shadow-md flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div className="space-y-5">
+            <div className="flex items-center justify-between">
               <div>
-                <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-white/15 text-blue-200 text-xs font-semibold mb-2 border border-white/20">
-                  <ShoppingBag className="h-3.5 w-3.5" /> Logged-In Supplier Access
-                </span>
-                <h1 className="text-2xl font-bold tracking-tight text-white">Active Buyer Sourcing Requests</h1>
-                <p className="text-blue-100/90 text-sm mt-1 max-w-xl">
-                  Browse buyer tenders, review product specifications, and submit direct wholesale quotes.
-                </p>
+                <h2 className="text-lg font-bold text-slate-900">Buyer Requests</h2>
+                <p className="text-xs text-slate-500 mt-0.5">Open sourcing tenders from verified buyers.</p>
               </div>
               <Link href="/requests/buyer">
-                <Button className="bg-white text-[#022B96] hover:bg-slate-100 font-bold px-4 py-2 rounded-xl transition cursor-pointer text-xs shadow-sm flex items-center gap-1.5">
-                  Full Requests Portal <ArrowUpRight className="w-3.5 h-3.5" />
-                </Button>
+                <button className="text-xs font-bold text-[#022B96] border border-[#022B96]/30 hover:bg-blue-50 px-4 py-2 rounded-xl transition cursor-pointer flex items-center gap-1.5">
+                  View All <ArrowUpRight className="w-3.5 h-3.5" />
+                </button>
               </Link>
             </div>
 
@@ -1148,71 +1114,268 @@ export default function SupplierDashboardPage() {
                 <p className="text-sm text-slate-400">Check back soon — buyer tenders will appear here.</p>
               </div>
             ) : (
-              <div className="grid grid-cols-1 gap-4">
-                {buyerRequests.map((req: any) => (
-                  <div key={req.id} className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm hover:border-[#022B96]/30 transition space-y-4">
-                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-3">
-                      <div>
-                        <span className="inline-block text-[10px] font-black uppercase tracking-wider text-blue-700 bg-blue-50 px-2.5 py-0.5 rounded-md mb-1">
-                          Buyer Tender
+              <div className="space-y-3">
+                {buyerRequests.map((req: any) => {
+                  // Cleanly parse description, buyer contact & notes
+                  const desc = req.description || ''
+                  let buyerName = ''
+                  let buyerEmail = ''
+                  let buyerPhone = ''
+                  let cleanNotes = ''
+
+                  // Check if JSON
+                  try {
+                    const jsonMatch = desc.match(/\{[\s\S]*\}/)
+                    if (jsonMatch) {
+                      const parsed = JSON.parse(jsonMatch[0])
+                      if (parsed && typeof parsed === 'object') {
+                        buyerName = parsed.buyerName || parsed.name || ''
+                        buyerEmail = parsed.buyerEmail || parsed.email || ''
+                        buyerPhone = parsed.buyerPhone || parsed.phone || ''
+                        cleanNotes = parsed.additionalNotes || parsed.notes || ''
+                      }
+                    }
+                  } catch (_) {}
+
+                  // Regex fallbacks for legacy/text format: "Buyer: Name (email | phone)"
+                  if (!buyerName) {
+                    const nameMatch = desc.match(/Buyer:\s*([^(\n]+)/i)
+                    if (nameMatch) buyerName = nameMatch[1].trim()
+                  }
+                  if (!buyerEmail) {
+                    const emailMatch = desc.match(/([\w.+-]+@[\w-]+\.[\w.]+)/)
+                    if (emailMatch) buyerEmail = emailMatch[1].trim()
+                  }
+                  if (!buyerPhone) {
+                    const phoneMatch = desc.match(/(\+?[0-9][\s\-()0-9]{7,})/)
+                    if (phoneMatch) buyerPhone = phoneMatch[1].trim()
+                  }
+
+                  // If cleanNotes is still empty and desc has content other than contact header
+                  if (!cleanNotes && desc) {
+                    const stripped = desc.replace(/Direct quote request for[^\n]+/gi, '')
+                                         .replace(/Buyer:\s*[^\n]+/gi, '')
+                                         .replace(/\{[\s\S]*\}/g, '')
+                                         .trim()
+                    if (stripped && !stripped.startsWith('{') && !stripped.includes('"productNeeded"')) {
+                      cleanNotes = stripped
+                    }
+                  }
+
+                  return (
+                    <div key={req.id} className="bg-white border border-slate-200/80 hover:border-slate-300 rounded-2xl p-5 transition-all space-y-3.5">
+                      {/* Header */}
+                      <div className="flex items-start justify-between gap-4">
+                        <div className="min-w-0">
+                          <h3 className="font-bold text-slate-900 text-sm leading-snug truncate">{req.title}</h3>
+                          <p className="text-[11px] text-slate-400 mt-0.5">
+                            {new Date(req.created_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}
+                          </p>
+                        </div>
+                        {req.target_price && (
+                          <span className="text-xs font-bold text-emerald-700 bg-emerald-50 border border-emerald-200/80 px-2.5 py-1 rounded-full shrink-0">
+                            Target: {req.currency || 'USD'} {Number(req.target_price).toFixed(2)}/kg
+                          </span>
+                        )}
+                      </div>
+
+                      {/* Specs row */}
+                      <div className="flex flex-wrap gap-2 text-xs">
+                        {req.quantity && (
+                          <span className="bg-slate-50 border border-slate-100 px-2.5 py-1 rounded-lg text-slate-600 font-medium">
+                            📦 {req.quantity} {req.quantity_unit || 'kg'}
+                          </span>
+                        )}
+                        {req.destination && (
+                          <span className="bg-slate-50 border border-slate-100 px-2.5 py-1 rounded-lg text-slate-600 font-medium">
+                            📍 {req.destination}
+                          </span>
+                        )}
+                        <span className="bg-emerald-50 border border-emerald-100 px-2.5 py-1 rounded-lg text-emerald-700 font-semibold capitalize">
+                          {req.status || 'open'}
                         </span>
-                        <h3 className="text-lg font-extrabold text-slate-900">{req.title}</h3>
                       </div>
-                      {req.target_price && (
-                        <div className="flex items-center gap-2 text-xs font-bold text-slate-700 bg-slate-100 px-3 py-1.5 rounded-xl self-start sm:self-auto">
-                          <span>Target: {req.currency || 'USD'} {Number(req.target_price).toFixed(2)}/kg</span>
+
+                      {/* Buyer Contact Details Bar */}
+                      {(buyerName || buyerEmail || buyerPhone) && (
+                        <div className="flex flex-wrap items-center gap-3 pt-1 text-xs">
+                          {buyerName && (
+                            <span className="text-slate-700 font-semibold flex items-center gap-1.5">
+                              <span className="text-slate-400 font-normal">Buyer:</span> {buyerName}
+                            </span>
+                          )}
+                          {buyerPhone && (
+                            <a
+                              href={`https://wa.me/${buyerPhone.replace(/[^0-9]/g, '')}?text=${encodeURIComponent(`Hi ${buyerName || 'there'}, I saw your sourcing request for ${req.title} on Bokhol. We can supply this.`)}`}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="inline-flex items-center gap-1 text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200/80 px-2.5 py-0.5 rounded-md font-bold transition"
+                            >
+                              <Phone className="w-3 h-3 text-emerald-600" />
+                              {buyerPhone}
+                            </a>
+                          )}
+                          {buyerEmail && (
+                            <a
+                              href={`mailto:${buyerEmail}?subject=${encodeURIComponent(`Quote for ${req.title}`)}`}
+                              className="inline-flex items-center gap-1 text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-200/80 px-2.5 py-0.5 rounded-md font-medium transition"
+                            >
+                              <Mail className="w-3 h-3 text-blue-500" />
+                              {buyerEmail}
+                            </a>
+                          )}
                         </div>
                       )}
-                    </div>
 
-                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
-                      {req.quantity && (
-                        <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-100">
-                          <span className="text-slate-400 block text-[10px] uppercase font-bold">Quantity Needed</span>
-                          <span className="font-extrabold text-slate-800">{req.quantity} {req.quantity_unit || 'kg'}</span>
-                        </div>
+                      {/* Notes (if any) */}
+                      {cleanNotes && (
+                        <p className="text-xs text-slate-500 leading-relaxed border-l-2 border-slate-200 pl-3">
+                          {cleanNotes}
+                        </p>
                       )}
-                      {req.destination && (
-                        <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-100">
-                          <span className="text-slate-400 block text-[10px] uppercase font-bold">Delivery Port</span>
-                          <span className="font-semibold text-slate-800">{req.destination}</span>
-                        </div>
-                      )}
-                      <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-100">
-                        <span className="text-slate-400 block text-[10px] uppercase font-bold">Status</span>
-                        <span className="font-semibold text-slate-800 capitalize">{req.status || 'open'}</span>
-                      </div>
-                      <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-100">
-                        <span className="text-slate-400 block text-[10px] uppercase font-bold">Posted</span>
-                        <span className="font-semibold text-slate-800">
-                          {new Date(req.created_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}
-                        </span>
+
+                      {/* Action */}
+                      <div className="flex justify-end pt-1">
+                        <button
+                          onClick={() => setQuoteReqModal(req)}
+                          className="text-xs font-bold text-[#022B96] border border-[#022B96]/30 hover:bg-blue-50 px-4 py-2 rounded-xl transition cursor-pointer flex items-center gap-1.5"
+                        >
+                          <Send className="w-3 h-3" /> Send Quote
+                        </button>
                       </div>
                     </div>
-
-                    {req.description && (
-                      <p className="text-xs text-slate-600 bg-blue-50/50 p-3 rounded-xl border border-blue-100/60 leading-relaxed italic">
-                        &ldquo;{req.description}&rdquo;
-                      </p>
-                    )}
-
-                    <div className="flex items-center justify-between pt-2 border-t border-slate-100">
-                      <span className="text-[11px] text-slate-400 font-medium flex items-center gap-1">
-                        <Clock className="w-3.5 h-3.5" /> Posted by verified buyer
-                      </span>
-                      <Link href="/requests/buyer">
-                        <Button className="bg-[#022B96] hover:bg-[#011a5e] text-white text-xs font-bold px-4 py-2 rounded-xl shadow-sm cursor-pointer flex items-center gap-1.5">
-                          <Send className="w-3.5 h-3.5" /> Send Quote to Buyer
-                        </Button>
-                      </Link>
-                    </div>
-                  </div>
-                ))}
+                  )
+                })}
               </div>
             )}
           </div>
         )}
       </main>
+
+      {/* ══ SEND QUOTE TO BUYER MODAL ═══════════════════════════ */}
+      {quoteReqModal && (() => {
+        // Parse buyer contact info from description
+        let buyerContact = ''
+        let buyerNotes = ''
+        try {
+          const desc = quoteReqModal.description || ''
+          // Look for "Buyer: Name (email | phone)" pattern
+          const match = desc.match(/Buyer:\s*(.+?)(?:\n|$)/)
+          if (match) buyerContact = match[1].trim()
+          const parsed = JSON.parse(desc)
+          if (parsed && typeof parsed === 'object') {
+            buyerNotes = parsed.additionalNotes || parsed.notes || ''
+          }
+        } catch (_) {}
+
+        const emailMatch = buyerContact.match(/([\w.+-]+@[\w-]+\.[\w.]+)/)
+        const phoneMatch = buyerContact.match(/(\+?[0-9][\s\-()0-9]{6,})/)
+        const buyerEmail = emailMatch ? emailMatch[1] : ''
+        const buyerPhone = phoneMatch ? phoneMatch[1].trim() : ''
+        const subject = encodeURIComponent(`Bokhol Quote: ${quoteReqModal.title}`)
+        const body = encodeURIComponent(`Hello,\n\nThank you for your sourcing request on Bokhol.\n\nI can offer the following quote:\n\n- Product: ${quoteReqModal.title}\n- My Price: \n- Available Quantity: \n- Delivery Terms: \n\nPlease let me know if you'd like to proceed.\n\nBest regards,\n${company?.name || 'Supplier'}`)
+
+        return (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
+            <div className="bg-white rounded-2xl border border-slate-200 max-w-md w-full shadow-xl p-6 space-y-5 relative">
+              <button
+                onClick={() => setQuoteReqModal(null)}
+                className="absolute top-4 right-4 text-slate-400 hover:text-slate-600 p-1 rounded-full hover:bg-slate-100 transition cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+
+              <div>
+                <h3 className="font-bold text-slate-900 text-base">Send Quote to Buyer</h3>
+                <p className="text-xs text-slate-500 mt-0.5 truncate">{quoteReqModal.title}</p>
+              </div>
+
+              {/* Request Summary */}
+              <div className="flex flex-wrap gap-2 text-xs">
+                {quoteReqModal.quantity && (
+                  <span className="bg-slate-50 border border-slate-100 px-2.5 py-1 rounded-lg text-slate-600 font-medium">
+                    📦 {quoteReqModal.quantity} {quoteReqModal.quantity_unit || 'kg'}
+                  </span>
+                )}
+                {quoteReqModal.destination && (
+                  <span className="bg-slate-50 border border-slate-100 px-2.5 py-1 rounded-lg text-slate-600 font-medium">
+                    📍 {quoteReqModal.destination}
+                  </span>
+                )}
+                {quoteReqModal.target_price && (
+                  <span className="bg-emerald-50 border border-emerald-100 px-2.5 py-1 rounded-lg text-emerald-700 font-semibold">
+                    Target: {quoteReqModal.currency || 'USD'} {Number(quoteReqModal.target_price).toFixed(2)}/kg
+                  </span>
+                )}
+              </div>
+
+              {/* Buyer Contact */}
+              <div className="border border-slate-200 rounded-xl p-4 space-y-3">
+                <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Buyer Contact</p>
+                {buyerContact ? (
+                  <div className="space-y-2">
+                    {buyerEmail && (
+                      <div className="flex items-center justify-between gap-3">
+                        <div className="flex items-center gap-2 text-sm text-slate-700 min-w-0">
+                          <Mail className="h-4 w-4 text-slate-400 shrink-0" />
+                          <span className="font-medium truncate select-all">{buyerEmail}</span>
+                        </div>
+                        <a
+                          href={`mailto:${buyerEmail}?subject=${subject}&body=${body}`}
+                          className="text-xs font-bold text-[#022B96] hover:underline shrink-0"
+                        >
+                          Email
+                        </a>
+                      </div>
+                    )}
+                    {buyerPhone && (
+                      <div className="flex items-center justify-between gap-3">
+                        <div className="flex items-center gap-2 text-sm text-slate-700 min-w-0">
+                          <Phone className="h-4 w-4 text-slate-400 shrink-0" />
+                          <span className="font-medium select-all">{buyerPhone}</span>
+                        </div>
+                        <a
+                          href={`https://wa.me/${buyerPhone.replace(/[^0-9]/g, '')}?text=${encodeURIComponent(`Hi, I saw your request on Bokhol for ${quoteReqModal.title}. I can help!`)}`}
+                          target="_blank" rel="noreferrer"
+                          className="text-xs font-bold text-emerald-600 hover:underline shrink-0"
+                        >
+                          WhatsApp
+                        </a>
+                      </div>
+                    )}
+                    {!buyerEmail && !buyerPhone && (
+                      <p className="text-xs text-slate-500">{buyerContact}</p>
+                    )}
+                  </div>
+                ) : (
+                  <p className="text-xs text-slate-400 italic">No direct contact info provided by buyer.</p>
+                )}
+              </div>
+
+              {buyerNotes && (
+                <p className="text-xs text-slate-500 border-l-2 border-slate-200 pl-3 leading-relaxed">{buyerNotes}</p>
+              )}
+
+              <div className="flex gap-2 pt-1">
+                {buyerEmail && (
+                  <a
+                    href={`mailto:${buyerEmail}?subject=${subject}&body=${body}`}
+                    className="flex-1 text-center text-xs font-bold bg-[#022B96] hover:bg-[#011a5e] text-white px-4 py-2.5 rounded-xl transition cursor-pointer flex items-center justify-center gap-1.5"
+                  >
+                    <Send className="w-3.5 h-3.5" /> Send Email Quote
+                  </a>
+                )}
+                <button
+                  onClick={() => setQuoteReqModal(null)}
+                  className="px-4 py-2.5 text-xs font-semibold text-slate-500 hover:text-slate-700 border border-slate-200 rounded-xl transition cursor-pointer"
+                >
+                  Close
+                </button>
+              </div>
+            </div>
+          </div>
+        )
+      })()}
 
       {/* ══ UPDATE PRICE MODAL ══════════════════════════════════ */}
       {updatingPostModal && (

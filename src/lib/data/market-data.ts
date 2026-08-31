@@ -72,30 +72,120 @@ const BENCHMARK_BASELINES: Record<string, { price: number; high: number; low: nu
   'shrimp': { price: 6.40, high: 7.10, low: 5.80, change: 1.2 },
   'sea-bass': { price: 6.90, high: 7.40, low: 6.30, change: -0.4 },
   'sea-bream': { price: 6.50, high: 7.00, low: 5.90, change: 0.7 },
+  'haddock': { price: 3.80, high: 4.40, low: 3.20, change: 0.3 },
+  'halibut': { price: 12.00, high: 14.00, low: 10.00, change: 0.5 },
+  'lobster': { price: 28.00, high: 35.00, low: 22.00, change: 1.2 },
+  'crab': { price: 14.00, high: 18.00, low: 10.00, change: 0.8 },
 }
 
-function generate8WeekTrend(targetLatest: number, weeklyChangePct: number): SpeciesTrendPoint[] {
-  const points: SpeciesTrendPoint[] = []
-  const weeks = ['W1', 'W2', 'W3', 'W4', 'W5', 'W6', 'W7', 'W8']
-  
-  // Create realistic smooth historical price curves matching real market dynamics
-  const offsets = [-0.07, -0.04, -0.06, -0.02, 0.01, -0.01, 0.02, 0]
-  
-  for (let i = 0; i < 8; i++) {
-    const raw = targetLatest * (1 + offsets[i] + (i === 7 ? 0 : -(weeklyChangePct / 100) * (7 - i) * 0.15))
-    points.push({
-      week: weeks[i],
-      price: Math.max(0.5, parseFloat(raw.toFixed(2))),
-    })
+/**
+ * Realistic price bounds per species (EUR/kg).
+ * Any price outside this window is treated as a data-entry error and discarded.
+ * Falls back to a generous [0.5, 200] window for unknown species.
+ */
+const PRICE_SANITY_BOUNDS: Record<string, [number, number]> = {
+  'yellowfin-tuna':  [2,   60],
+  'bluefin-tuna':    [20, 250],
+  'tuna':            [2,   60],
+  'atlantic-salmon': [2,   40],
+  'salmon':          [2,   40],
+  'atlantic-cod':    [1,   25],
+  'cod':             [1,   25],
+  'haddock':         [1,   20],
+  'mackerel':        [0.5, 15],
+  'shrimp':          [1,   50],
+  'sea-bass':        [2,   40],
+  'sea-bream':       [2,   40],
+  'halibut':         [4,   80],
+  'lobster':         [8,  120],
+  'crab':            [4,   80],
+}
+
+/** Returns true if price is plausible for this species slug */
+function isPriceSane(price: number, slug: string): boolean {
+  const bounds = PRICE_SANITY_BOUNDS[slug]
+  if (bounds) return price >= bounds[0] && price <= bounds[1]
+  // Unknown species: accept 0.5 – 200 EUR/kg
+  return price >= 0.5 && price <= 200
+}
+
+/**
+ * Build an 8-week trend from real dated price entries.
+ * weeklyPrices maps ISO-week label (e.g. "2026-W35") → array of prices that week.
+ * Returns the 8 most recent weeks (oldest→newest), filling gaps by interpolation.
+ */
+function buildRealWeeklyTrend(
+  weeklyPrices: Map<string, number[]>,
+  latestPrice: number,
+): SpeciesTrendPoint[] {
+  // Generate last-8-weeks labels (oldest first)
+  const labels: string[] = []
+  const now = new Date()
+  for (let i = 7; i >= 0; i--) {
+    const d = new Date(now)
+    d.setDate(d.getDate() - i * 7)
+    const year = d.getFullYear()
+    // ISO week number
+    const startOfYear = new Date(year, 0, 1)
+    const weekNum = Math.ceil(((d.getTime() - startOfYear.getTime()) / 86400000 + startOfYear.getDay() + 1) / 7)
+    labels.push(`${year}-W${String(weekNum).padStart(2, '0')}`)
   }
-  return points
+
+  // Resolve prices for each label
+  const resolved: (number | null)[] = labels.map(lbl => {
+    const arr = weeklyPrices.get(lbl)
+    if (arr && arr.length > 0) {
+      return arr.reduce((a, b) => a + b, 0) / arr.length
+    }
+    return null
+  })
+
+  // Ensure the last point is the actual latest average
+  resolved[7] = latestPrice
+
+  // Fill gaps via linear interpolation between known values
+  for (let i = 0; i < resolved.length; i++) {
+    if (resolved[i] !== null) continue
+    // find previous known
+    let prev = i - 1
+    while (prev >= 0 && resolved[prev] === null) prev--
+    // find next known
+    let next = i + 1
+    while (next < resolved.length && resolved[next] === null) next++
+
+    if (prev >= 0 && next < resolved.length) {
+      const span = next - prev
+      const step = (resolved[next]! - resolved[prev]!) / span
+      resolved[i] = resolved[prev]! + step * (i - prev)
+    } else if (prev >= 0) {
+      resolved[i] = resolved[prev]!
+    } else if (next < resolved.length) {
+      resolved[i] = resolved[next]!
+    } else {
+      resolved[i] = latestPrice
+    }
+  }
+
+  return labels.map((_, i) => ({
+    week: `W${i + 1}`,
+    price: parseFloat((resolved[i] as number).toFixed(2)),
+  }))
+}
+
+/** Fallback: generate a smooth synthetic trend when no real history exists */
+function generate8WeekTrend(targetLatest: number, weeklyChangePct: number): SpeciesTrendPoint[] {
+  const offsets = [-0.07, -0.04, -0.06, -0.02, 0.01, -0.01, 0.02, 0]
+  return offsets.map((offset, i) => ({
+    week: `W${i + 1}`,
+    price: Math.max(0.5, parseFloat((targetLatest * (1 + offset + (i === 7 ? 0 : -(weeklyChangePct / 100) * (7 - i) * 0.15))).toFixed(2))),
+  }))
 }
 
 export function parseSupplierPostsToMarketData(posts: any[]): {
   countryData: LiveCountryMarketData[]
   topProducts: TopMarketProduct[]
 } {
-  // 1. Group real supplier posts by product slug
+  // 1. Group real supplier posts by product slug, with per-week price tracking
   const productMap = new Map<string, {
     name: string
     slug: string
@@ -106,6 +196,7 @@ export function parseSupplierPostsToMarketData(posts: any[]): {
     images: string[]
     lastUpdated: string
     countryBreakdown: Map<string, number[]>
+    weeklyPrices: Map<string, number[]>  // ISO week → prices that week
   }>()
 
   for (const post of posts || []) {
@@ -124,6 +215,12 @@ export function parseSupplierPostsToMarketData(posts: any[]): {
     const currency = details.currency || 'EUR'
     const customImg = details.customImage || ''
 
+    // Derive ISO week label from the post's creation date
+    const postDate = new Date(post.updated_at || post.created_at || Date.now())
+    const startOfYear = new Date(postDate.getFullYear(), 0, 1)
+    const isoWeek = Math.ceil(((postDate.getTime() - startOfYear.getTime()) / 86400000 + startOfYear.getDay() + 1) / 7)
+    const weekLabel = `${postDate.getFullYear()}-W${String(isoWeek).padStart(2, '0')}`
+
     if (!productMap.has(slug)) {
       productMap.set(slug, {
         name,
@@ -135,12 +232,17 @@ export function parseSupplierPostsToMarketData(posts: any[]): {
         images: [],
         lastUpdated: post.updated_at || post.created_at || new Date().toISOString(),
         countryBreakdown: new Map<string, number[]>(),
+        weeklyPrices: new Map<string, number[]>(),
       })
     }
 
     const entry = productMap.get(slug)!
-    if (price > 0 && price < 1000) {
+    if (price > 0 && isPriceSane(price, slug)) {
       entry.prices.push(price)
+
+      // Track price per ISO week for real chart data
+      if (!entry.weeklyPrices.has(weekLabel)) entry.weeklyPrices.set(weekLabel, [])
+      entry.weeklyPrices.get(weekLabel)!.push(price)
       
       // Group by country
       const normCountry = origin.includes('Netherlands') || origin.includes('Holland')
@@ -155,6 +257,9 @@ export function parseSupplierPostsToMarketData(posts: any[]): {
         entry.countryBreakdown.set(normCountry, [])
       }
       entry.countryBreakdown.get(normCountry)!.push(price)
+    } else if (price > 0) {
+      // Log the rejected outlier so it's visible in server logs
+      console.warn(`[MarketData] Rejected outlier price: ${price} EUR/kg for "${name}" (slug: ${slug})`)
     }
 
     if (origin) entry.origins.push(origin)
@@ -208,7 +313,11 @@ export function parseSupplierPostsToMarketData(posts: any[]): {
     }, {})
     const topOrigin = Object.entries(originCounts).sort((a, b) => b[1] - a[1])[0]?.[0] || 'Netherlands'
 
-    const trendPoints = generate8WeekTrend(latestPrice, change)
+    // Use real weekly price history if this product has actual posts; fall back to synthetic
+    const hasRealHistory = item.weeklyPrices && item.weeklyPrices.size > 0
+    const trendPoints = hasRealHistory
+      ? buildRealWeeklyTrend(item.weeklyPrices, latestPrice)
+      : generate8WeekTrend(latestPrice, change)
 
     allEuropeSpecies.push({
       id: slug,
@@ -303,11 +412,27 @@ export function parseSupplierPostsToMarketData(posts: any[]): {
   }
 }
 
+// In-memory cache for market data with 10s TTL
+let cachedMarketData: {
+  data: { countryData: LiveCountryMarketData[]; topProducts: TopMarketProduct[] }
+  timestamp: number
+} | null = null
+
+// Force-clear the cache if module is reloaded (dev hot-reload)
+export function invalidateMarketCache() {
+  cachedMarketData = null
+}
+
 // Helper to fetch live market index directly on server or client
 export async function getLiveMarketData(): Promise<{
   countryData: LiveCountryMarketData[]
   topProducts: TopMarketProduct[]
 }> {
+  const now = Date.now()
+  if (cachedMarketData && now - cachedMarketData.timestamp < 10000) {
+    return cachedMarketData.data
+  }
+
   try {
     const supabase = createClient()
     const { data: posts } = await supabase
@@ -316,9 +441,12 @@ export async function getLiveMarketData(): Promise<{
       .eq('is_published', true)
       .order('created_at', { ascending: false })
 
-    return parseSupplierPostsToMarketData(posts || [])
+    const result = parseSupplierPostsToMarketData(posts || [])
+    cachedMarketData = { data: result, timestamp: now }
+    return result
   } catch (err) {
     console.error('getLiveMarketData error:', err)
+    if (cachedMarketData) return cachedMarketData.data
     return parseSupplierPostsToMarketData([])
   }
 }

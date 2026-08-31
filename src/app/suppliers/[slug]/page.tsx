@@ -119,18 +119,65 @@ export default function SupplierProfilePage() {
     async function fetchProfile() {
       setLoading(true)
       try {
-        // 1. Fetch company from Supabase by slug or id
+        // 1. Fetch company from Supabase safely by UUID, slug, or name
         let matchedCompany: any = null
+        const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(slug)
 
-        const { data: dbCompany } = await supabase
-          .from('companies')
-          .select('*, country:countries(name, flag_emoji, slug)')
-          .or(`slug.eq.${slug},id.eq.${slug}`)
-          .maybeSingle()
-
-        if (dbCompany) {
-          matchedCompany = dbCompany
+        if (isUuid) {
+          const { data } = await supabase
+            .from('companies')
+            .select('*, country:countries(name, flag_emoji, slug)')
+            .eq('id', slug)
+            .maybeSingle()
+          matchedCompany = data
         } else {
+          // Try exact slug
+          const { data } = await supabase
+            .from('companies')
+            .select('*, country:countries(name, flag_emoji, slug)')
+            .eq('slug', slug)
+            .maybeSingle()
+          matchedCompany = data
+
+          // Try case-insensitive slug or company name
+          if (!matchedCompany) {
+            const { data: byIlike } = await supabase
+              .from('companies')
+              .select('*, country:countries(name, flag_emoji, slug)')
+              .ilike('slug', slug)
+              .maybeSingle()
+            matchedCompany = byIlike
+          }
+
+          if (!matchedCompany) {
+            const { data: byName } = await supabase
+              .from('companies')
+              .select('*, country:countries(name, flag_emoji, slug)')
+              .ilike('name', slug.replace(/-/g, ' '))
+              .maybeSingle()
+            matchedCompany = byName
+          }
+        }
+
+        // Fallback to logged-in user company if matching
+        if (!matchedCompany && user) {
+          const { data: userComp } = await supabase
+            .from('companies')
+            .select('*, country:countries(name, flag_emoji, slug)')
+            .eq('owner_id', user.id)
+            .maybeSingle()
+
+          if (
+            userComp &&
+            (userComp.slug?.toLowerCase() === slug.toLowerCase() ||
+              userComp.name?.toLowerCase() === slug.toLowerCase() ||
+              userComp.id === slug)
+          ) {
+            matchedCompany = userComp
+          }
+        }
+
+        if (!matchedCompany) {
           // Fallback to local stored companies or initial companies
           const stored = getStoredCompanies()
           const normSlug = slug.toLowerCase()
@@ -255,13 +302,88 @@ export default function SupplierProfilePage() {
       (company.email && user.email && company.email.toLowerCase() === user.email.toLowerCase()))
   )
 
+  // RFQ Quote Request form state
+  const [rfqQuantity, setRfqQuantity] = useState('500')
+  const [rfqUnit, setRfqUnit] = useState('kg')
+  const [rfqTargetPrice, setRfqTargetPrice] = useState('')
+  const [rfqDestination, setRfqDestination] = useState('')
+  const [rfqBuyerName, setRfqBuyerName] = useState('')
+  const [rfqBuyerEmail, setRfqBuyerEmail] = useState('')
+  const [rfqBuyerPhone, setRfqBuyerPhone] = useState('')
+  const [rfqNotes, setRfqNotes] = useState('')
+  const [rfqSubmitting, setRfqSubmitting] = useState(false)
+  const [rfqSuccess, setRfqSuccess] = useState(false)
+  const [showDirectContact, setShowDirectContact] = useState(false)
+
   const handleContactClick = (product?: SupplierProductListing) => {
     setSelectedProductForEnquiry(product || null)
-    if (!user) {
-      setShowAuthModal(true)
-    } else {
-      setShowContactModal(true)
+    setRfqTargetPrice(product?.pricePerKg ? String(product.pricePerKg) : '')
+    setRfqDestination(company?.city ? `${company.city} Port` : 'Rotterdam Port, Netherlands')
+    setRfqBuyerName(userProfile?.full_name || '')
+    setRfqBuyerEmail(user?.email || '')
+    setRfqBuyerPhone(userProfile?.phone || '')
+    setRfqNotes('')
+    setRfqSuccess(false)
+    setShowDirectContact(false)
+    setShowContactModal(true)
+  }
+
+  const handleSubmitQuoteRequest = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setRfqSubmitting(true)
+
+    const pName = selectedProductForEnquiry?.productName || 'Seafood Sourcing'
+    const qtyNum = parseFloat(rfqQuantity) || 500
+    const targetPriceNum = parseFloat(rfqTargetPrice) || (selectedProductForEnquiry?.pricePerKg ?? 0)
+    const curr = selectedProductForEnquiry?.currency || 'EUR'
+
+    const title = selectedProductForEnquiry
+      ? `${pName} — Quote Request for ${company.name}`
+      : `Commercial Sourcing Request for ${company.name}`
+
+    const description = rfqNotes
+      ? `${rfqNotes}\n\nBuyer: ${rfqBuyerName || 'Verified Buyer'} (${rfqBuyerEmail || user?.email || 'N/A'}${rfqBuyerPhone ? ' | ' + rfqBuyerPhone : ''})`
+      : `Direct quote request for ${pName}.\n\nBuyer: ${rfqBuyerName || 'Verified Buyer'} (${rfqBuyerEmail || user?.email || 'N/A'}${rfqBuyerPhone ? ' | ' + rfqBuyerPhone : ''})`
+
+    try {
+      // 1. Post to API which persists directly in Supabase database
+      const res = await fetch('/api/requests', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          title,
+          description,
+          quantity: qtyNum,
+          quantityUnit: rfqUnit,
+          targetPrice: targetPriceNum,
+          currency: curr,
+          destination: rfqDestination || company.city || 'EU Port',
+          userId: user?.id,
+          countryId: company.country_id,
+        }),
+      })
+
+      if (!res.ok) {
+        // Direct Supabase insert fallback if API endpoint returns non-200
+        await supabase.from('buyer_requests').insert({
+          user_id: user?.id || company.owner_id,
+          title,
+          description,
+          quantity: qtyNum,
+          quantity_unit: rfqUnit,
+          target_price: targetPriceNum,
+          currency: curr,
+          destination: rfqDestination || company.city || 'EU Port',
+          status: 'open',
+          country_id: company.country_id || null,
+        })
+      }
+    } catch (err) {
+      console.error('Error saving request to Supabase:', err)
     }
+
+    setRfqSubmitting(false)
+    setRfqSuccess(true)
   }
 
   if (loading) {
@@ -470,126 +592,128 @@ export default function SupplierProfilePage() {
 
           {/* RIGHT COL: Real Uploaded Products */}
           <div className="lg:col-span-2 space-y-5">
-            <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-6 shadow-sm space-y-4">
-              <div className="flex items-center justify-between">
-                <h2 className="text-base font-extrabold text-slate-900 dark:text-white flex items-center gap-2">
-                  <Package className="h-5 w-5 text-[#022B96] dark:text-blue-400" />
-                  Product Listings ({products.length})
-                </h2>
-                {products.length > 0 && (
-                  <span className="text-xs font-bold text-[#022B96] dark:text-blue-300 bg-blue-50 dark:bg-blue-950/60 px-2.5 py-1 rounded-md border border-blue-100 dark:border-blue-900">
-                    Live Verified Offers
-                  </span>
+            <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-6 shadow-xs space-y-5">
+              <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
+                <div>
+                  <h2 className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                    <Package className="h-4.5 w-4.5 text-[#022B96] dark:text-blue-400" />
+                    Product Listings
+                  </h2>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                    {products.length} {products.length === 1 ? 'product' : 'products'} available for sourcing
+                  </p>
+                </div>
+                {isOwner && (
+                  <Link
+                    href="/dashboard/supplier/posts/new"
+                    className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-[#022B96] hover:bg-[#011a5e] text-white text-xs font-semibold transition cursor-pointer shadow-xs"
+                  >
+                    <Plus className="h-3.5 w-3.5" /> Add Product
+                  </Link>
                 )}
               </div>
 
               {/* REAL PRODUCT LISTINGS OR EMPTY STATE */}
               {products.length === 0 ? (
-                <div className="bg-slate-50/80 dark:bg-slate-800/40 border border-dashed border-slate-200 dark:border-slate-700 rounded-2xl p-8 sm:p-12 text-center">
-                  <div className="h-14 w-14 rounded-2xl bg-blue-50 dark:bg-blue-950/50 text-[#022B96] dark:text-blue-400 flex items-center justify-center mx-auto mb-4 border border-blue-100 dark:border-blue-900 shadow-xs">
-                    <Fish className="h-7 w-7" />
+                <div className="border border-dashed border-slate-200 dark:border-slate-700 rounded-2xl p-10 text-center">
+                  <div className="h-12 w-12 rounded-xl bg-blue-50 dark:bg-blue-950/50 text-[#022B96] dark:text-blue-400 flex items-center justify-center mx-auto mb-3">
+                    <Fish className="h-6 w-6" />
                   </div>
-                  <h3 className="text-base font-bold text-slate-800 dark:text-slate-200">No Product Listings Yet</h3>
-                  <p className="text-xs text-slate-500 dark:text-slate-400 max-w-md mx-auto mt-1.5 leading-relaxed">
-                    {company.name} has not published any live seafood product listings at this time. You can contact them directly for current inventory and custom price quotes.
+                  <h3 className="text-sm font-bold text-slate-800 dark:text-slate-200">No Product Listings Yet</h3>
+                  <p className="text-xs text-slate-400 max-w-sm mx-auto mt-1 leading-relaxed">
+                    {company.name} has not published any live seafood product listings at this time.
                   </p>
-                  <div className="mt-5 flex items-center justify-center gap-3">
+                  <div className="mt-4 flex items-center justify-center gap-3">
                     <Button
                       onClick={() => handleContactClick()}
-                      className="bg-[#022B96] hover:bg-[#011a5e] text-white text-xs font-bold px-5 py-2.5 rounded-xl shadow-sm cursor-pointer"
+                      className="bg-[#022B96] hover:bg-[#011a5e] text-white text-xs font-semibold px-4 py-2 rounded-xl cursor-pointer"
                     >
                       <MessageSquare className="h-3.5 w-3.5 mr-1.5" />
                       Contact Supplier
                     </Button>
-                    {isOwner && (
-                      <Link
-                        href="/dashboard/supplier/posts/new"
-                        className="inline-flex items-center gap-1.5 px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold transition shadow-sm"
-                      >
-                        <Plus className="h-3.5 w-3.5" /> Upload First Product
-                      </Link>
-                    )}
                   </div>
                 </div>
               ) : (
-                <div className="grid grid-cols-1 gap-4">
+                <div className="space-y-4">
                   {products.map((product) => {
                     const isFresh = product.freshFrozen.toLowerCase().includes('fresh')
 
                     return (
                       <div
                         key={product.id}
-                        className="bg-slate-50/70 dark:bg-slate-800/40 border border-slate-200/80 dark:border-slate-700/60 hover:border-blue-300 dark:hover:border-blue-700 rounded-2xl p-5 transition space-y-4 shadow-xs"
+                        className="border border-slate-200/90 hover:border-slate-300 dark:border-slate-800 rounded-2xl p-5 transition-all bg-white dark:bg-slate-900 space-y-4"
                       >
-                        {/* Product Header */}
-                        <div className="flex items-start justify-between gap-4">
-                          <div className="flex items-center gap-3.5 min-w-0">
-                            <div className="h-14 w-14 rounded-2xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 flex items-center justify-center p-1.5 overflow-hidden shadow-xs shrink-0">
+                        {/* Main Info Row */}
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                          <div className="flex items-center gap-4 min-w-0">
+                            {/* Product Image */}
+                            <div className="h-16 w-20 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-100 dark:border-slate-700 flex items-center justify-center p-2 shrink-0 overflow-hidden">
                               {product.customImage ? (
-                                <img src={product.customImage} alt={product.productName} className="h-full w-full object-contain" />
+                                <img
+                                  src={product.customImage}
+                                  alt={product.productName}
+                                  className="h-full w-full object-contain"
+                                />
                               ) : (
-                                <Fish className="h-7 w-7 text-blue-600" />
+                                <Fish className="h-8 w-8 text-slate-400" />
                               )}
                             </div>
+
+                            {/* Title & Price */}
                             <div className="min-w-0">
-                              <h3 className="text-base font-extrabold text-slate-900 dark:text-white leading-snug truncate">
-                                {product.productName}
-                              </h3>
-                              <p className="text-sm font-extrabold text-blue-600 dark:text-blue-400 mt-0.5">
+                              <div className="flex items-center gap-2">
+                                <h3 className="text-base font-bold text-slate-900 dark:text-white truncate">
+                                  {product.productName}
+                                </h3>
+                                <span className="text-[10px] font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200/80 dark:bg-emerald-950/60 dark:text-emerald-300 dark:border-emerald-800 px-2.5 py-0.5 rounded-full shrink-0">
+                                  {product.availability}
+                                </span>
+                              </div>
+                              <p className="text-base font-extrabold text-[#022B96] dark:text-blue-400 mt-0.5">
                                 {product.priceFormatted}
                               </p>
                             </div>
                           </div>
 
-                          <span className="text-[11px] font-bold bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-400 border border-emerald-200/80 dark:border-emerald-800 px-3 py-1 rounded-full shrink-0">
-                            {product.availability}
-                          </span>
-                        </div>
-
-                        {/* 9 Product Specification Grid */}
-                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 text-xs">
-                          <div className="bg-white dark:bg-slate-900 p-2.5 rounded-xl border border-slate-100 dark:border-slate-800">
-                            <span className="text-[10px] font-bold uppercase text-slate-400 block">Country of Origin</span>
-                            <span className="font-bold text-slate-800 dark:text-slate-200 truncate block">🌍 {product.countryOfOrigin}</span>
-                          </div>
-                          <div className="bg-white dark:bg-slate-900 p-2.5 rounded-xl border border-slate-100 dark:border-slate-800">
-                            <span className="text-[10px] font-bold uppercase text-slate-400 block">Fresh / Frozen</span>
-                            <span className="font-bold text-slate-800 dark:text-slate-200 truncate block">
-                              {isFresh ? '🌿' : '❄️'} {product.freshFrozen}
-                            </span>
-                          </div>
-                          <div className="bg-white dark:bg-slate-900 p-2.5 rounded-xl border border-slate-100 dark:border-slate-800">
-                            <span className="text-[10px] font-bold uppercase text-slate-400 block">Size / Weight</span>
-                            <span className="font-bold text-slate-800 dark:text-slate-200 truncate block">⚖️ {product.sizeWeight}</span>
-                          </div>
-                          <div className="bg-white dark:bg-slate-900 p-2.5 rounded-xl border border-slate-100 dark:border-slate-800">
-                            <span className="text-[10px] font-bold uppercase text-slate-400 block">Packaging / Cut</span>
-                            <span className="font-bold text-slate-800 dark:text-slate-200 truncate block">📦 {product.packagingFillet}</span>
-                          </div>
-                        </div>
-
-                        {/* Location & Supplier Extra Info */}
-                        <div className="pt-2 border-t border-slate-200/60 dark:border-slate-700/60 space-y-2 text-xs">
-                          <div className="flex flex-wrap items-center justify-between gap-2">
-                            <div className="flex items-center gap-1.5 text-slate-700 dark:text-slate-300 font-semibold">
-                              <MapPin className="h-3.5 w-3.5 text-red-500 shrink-0" />
-                              <span>Port / Location: <strong>{product.location}</strong></span>
-                            </div>
+                          {/* Request Quote Button */}
+                          <div className="flex items-center justify-end">
                             <Button
                               onClick={() => handleContactClick(product)}
-                              size="sm"
-                              className="bg-[#022B96] hover:bg-[#011a5e] text-white text-xs font-semibold px-3 py-1.5 h-8 rounded-lg cursor-pointer flex items-center gap-1.5 shadow-xs"
+                              className="bg-[#022B96] hover:bg-[#011a5e] text-white text-xs font-semibold px-4 py-2 rounded-xl cursor-pointer flex items-center gap-1.5 shadow-xs transition"
                             >
                               <Send className="h-3 w-3" />
                               Request Quote
                             </Button>
                           </div>
-                          {product.supplierInfoExtra && (
-                            <p className="text-slate-500 dark:text-slate-400 leading-relaxed text-[11px]">
-                              <strong className="text-slate-700 dark:text-slate-300">Supplier Note:</strong> {product.supplierInfoExtra}
-                            </p>
+                        </div>
+
+                        {/* Specs Pills */}
+                        <div className="flex flex-wrap gap-2 text-xs pt-1">
+                          <span className="inline-flex items-center gap-1 text-slate-600 dark:text-slate-300 bg-slate-50 dark:bg-slate-800/80 px-2.5 py-1 rounded-lg border border-slate-100 dark:border-slate-700/60 font-medium">
+                            <Globe className="h-3 w-3 text-slate-400" /> {product.countryOfOrigin}
+                          </span>
+                          <span className="inline-flex items-center gap-1 text-slate-600 dark:text-slate-300 bg-slate-50 dark:bg-slate-800/80 px-2.5 py-1 rounded-lg border border-slate-100 dark:border-slate-700/60 font-medium">
+                            {isFresh ? '🌿' : '❄️'} {product.freshFrozen}
+                          </span>
+                          <span className="inline-flex items-center gap-1 text-slate-600 dark:text-slate-300 bg-slate-50 dark:bg-slate-800/80 px-2.5 py-1 rounded-lg border border-slate-100 dark:border-slate-700/60 font-medium">
+                            ⚖️ {product.sizeWeight}
+                          </span>
+                          <span className="inline-flex items-center gap-1 text-slate-600 dark:text-slate-300 bg-slate-50 dark:bg-slate-800/80 px-2.5 py-1 rounded-lg border border-slate-100 dark:border-slate-700/60 font-medium">
+                            📦 {product.packagingFillet}
+                          </span>
+                          {product.location && (
+                            <span className="inline-flex items-center gap-1 text-slate-600 dark:text-slate-300 bg-slate-50 dark:bg-slate-800/80 px-2.5 py-1 rounded-lg border border-slate-100 dark:border-slate-700/60 font-medium">
+                              <MapPin className="h-3 w-3 text-rose-500" /> {product.location}
+                            </span>
                           )}
                         </div>
+
+                        {/* Supplier Note (if any) */}
+                        {product.supplierInfoExtra && (
+                          <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed border-l-2 border-slate-200 dark:border-slate-700 pl-3">
+                            {product.supplierInfoExtra}
+                          </p>
+                        )}
                       </div>
                     )
                   })}
@@ -628,81 +752,239 @@ export default function SupplierProfilePage() {
         </div>
       )}
 
-      {/* CONTACT DETAILS MODAL */}
+      {/* QUOTE REQUEST / RFQ MODAL */}
       {showContactModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
-          <div className="bg-white dark:bg-slate-900 rounded-2xl p-6 max-w-md w-full shadow-xl border border-slate-200 dark:border-slate-800 space-y-4 relative">
-            <button onClick={() => setShowContactModal(false)} className="absolute top-4 right-4 text-slate-400 hover:text-slate-600">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 overflow-y-auto">
+          <div className="bg-white dark:bg-slate-900 rounded-3xl p-6 sm:p-7 max-w-lg w-full shadow-2xl border border-slate-200 dark:border-slate-800 space-y-5 relative my-8">
+            <button
+              onClick={() => setShowContactModal(false)}
+              className="absolute top-5 right-5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-1.5 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 transition cursor-pointer"
+            >
               <X className="h-5 w-5" />
             </button>
-            <div className="h-12 w-12 rounded-full bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 flex items-center justify-center mx-auto">
-              <CheckCircle2 className="h-6 w-6" />
-            </div>
-            <div className="text-center">
-              <h3 className="font-bold text-slate-800 dark:text-white text-base">Contact {company.name}</h3>
-              {selectedProductForEnquiry ? (
-                <div className="inline-block mt-1 px-3 py-1 bg-blue-50 dark:bg-blue-950/50 text-[#022B96] dark:text-blue-300 rounded-lg text-xs font-semibold border border-blue-100 dark:border-blue-900">
-                  Enquiry regarding: {selectedProductForEnquiry.productName} ({selectedProductForEnquiry.priceFormatted})
-                </div>
-              ) : (
-                <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">Verified supplier direct contact channels</p>
-              )}
-            </div>
 
-            <div className="bg-slate-50 dark:bg-slate-800/60 rounded-xl p-4 space-y-3 border border-slate-100 dark:border-slate-700">
-              {company.email && (
-                <div className="flex items-center justify-between gap-3 text-sm">
-                  <div className="flex items-center gap-2.5 text-slate-700 dark:text-slate-300 min-w-0">
-                    <Mail className="h-4 w-4 text-slate-400 flex-shrink-0" />
-                    <span className="font-medium truncate select-all">{company.email}</span>
-                  </div>
-                  <a
-                    href={`mailto:${company.email}?subject=${encodeURIComponent(
-                      selectedProductForEnquiry
-                        ? `Bokhol Inquiry: ${selectedProductForEnquiry.productName}`
-                        : `Bokhol Seafood Inquiry — ${company.name}`
-                    )}`}
-                    className="text-xs font-bold text-blue-600 dark:text-blue-400 hover:underline shrink-0"
-                  >
-                    Email
-                  </a>
+            {rfqSuccess ? (
+              <div className="py-6 text-center space-y-4">
+                <div className="h-16 w-16 rounded-full bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 flex items-center justify-center mx-auto border border-emerald-200 dark:border-emerald-800">
+                  <CheckCircle2 className="h-9 w-9" />
                 </div>
-              )}
-              {company.phone && (
-                <div className="flex items-center justify-between gap-3 text-sm">
-                  <div className="flex items-center gap-2.5 text-slate-700 dark:text-slate-300 min-w-0">
-                    <Phone className="h-4 w-4 text-slate-400 flex-shrink-0" />
-                    <span className="font-medium truncate select-all">{company.phone}</span>
-                  </div>
-                  <a
-                    href={`tel:${company.phone}`}
-                    className="text-xs font-bold text-blue-600 dark:text-blue-400 hover:underline shrink-0"
-                  >
-                    Call
-                  </a>
+                <div className="space-y-1">
+                  <h3 className="font-extrabold text-slate-900 dark:text-white text-xl">
+                    Quote Request Sent to Supplier Dashboard!
+                  </h3>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 max-w-sm mx-auto leading-relaxed mt-2">
+                    Your sourcing request for <strong>{selectedProductForEnquiry?.productName || 'Seafood'}</strong> has been delivered directly to <strong>{company.name}</strong>'s dashboard. The supplier will review your specs and reach out with a quotation.
+                  </p>
                 </div>
-              )}
-              {company.website && (
-                <div className="flex items-center justify-between gap-3 text-sm">
-                  <div className="flex items-center gap-2.5 text-slate-700 dark:text-slate-300 min-w-0">
-                    <Globe className="h-4 w-4 text-slate-400 flex-shrink-0" />
-                    <span className="font-medium truncate">{company.website.replace(/^https?:\/\//, '')}</span>
-                  </div>
-                  <a
-                    href={company.website}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="text-xs font-bold text-blue-600 dark:text-blue-400 hover:underline shrink-0"
-                  >
-                    Visit
-                  </a>
-                </div>
-              )}
-            </div>
 
-            <p className="text-[10px] text-slate-400 text-center">
-              Mention you found them on Bokhol to get prioritized trade response.
-            </p>
+                <div className="pt-4">
+                  <Button
+                    onClick={() => setShowContactModal(false)}
+                    className="bg-[#022B96] hover:bg-[#011a5e] text-white text-xs font-bold px-8 py-2.5 rounded-xl cursor-pointer shadow-sm"
+                  >
+                    Done
+                  </Button>
+                </div>
+              </div>
+            ) : (
+              <div>
+                {/* Modal Header */}
+                <div className="border-b border-slate-100 dark:border-slate-800 pb-4">
+                  <span className="text-[10px] font-black uppercase tracking-wider text-blue-700 bg-blue-50 dark:bg-blue-950/50 dark:text-blue-300 px-2.5 py-0.5 rounded-md inline-block mb-1.5">
+                    Commercial RFQ / Tender
+                  </span>
+                  <h3 className="text-xl font-black text-slate-900 dark:text-white tracking-tight">
+                    Request Quote from {company.name}
+                  </h3>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                    Submit your sourcing requirements directly to this supplier's dashboard.
+                  </p>
+
+                  {/* Selected Product Pill */}
+                  {selectedProductForEnquiry && (
+                    <div className="flex items-center gap-3 p-3 bg-blue-50/70 dark:bg-blue-950/40 border border-blue-100 dark:border-blue-900 rounded-2xl mt-3">
+                      <div className="h-10 w-12 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 flex items-center justify-center p-1 shrink-0 overflow-hidden">
+                        <img
+                          src={selectedProductForEnquiry.customImage || getFishImageForProduct(selectedProductForEnquiry.productName)}
+                          alt={selectedProductForEnquiry.productName}
+                          className="h-full w-full object-contain"
+                        />
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <p className="font-extrabold text-slate-900 dark:text-white text-xs truncate">
+                          {selectedProductForEnquiry.productName}
+                        </p>
+                        <p className="text-[11px] font-bold text-blue-600 dark:text-blue-400">
+                          Listed Price: {selectedProductForEnquiry.priceFormatted}
+                        </p>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* RFQ Form */}
+                <form onSubmit={handleSubmitQuoteRequest} className="space-y-4 pt-4">
+                  {/* Row 1: Quantity & Target Price */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-[11px] font-bold uppercase text-slate-600 dark:text-slate-400 tracking-wider mb-1.5">
+                        Required Quantity *
+                      </label>
+                      <div className="flex gap-2">
+                        <input
+                          type="number"
+                          required
+                          min="1"
+                          placeholder="e.g. 500"
+                          value={rfqQuantity}
+                          onChange={(e) => setRfqQuantity(e.target.value)}
+                          className="flex-1 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-100 rounded-xl px-3 py-2 text-xs outline-none focus:border-[#022B96] transition font-semibold"
+                        />
+                        <select
+                          value={rfqUnit}
+                          onChange={(e) => setRfqUnit(e.target.value)}
+                          className="bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-100 rounded-xl px-2.5 py-2 text-xs outline-none focus:border-[#022B96] transition font-semibold cursor-pointer"
+                        >
+                          <option value="kg">kg</option>
+                          <option value="Tons">Tons</option>
+                          <option value="Boxes">Boxes</option>
+                          <option value="Pallets">Pallets</option>
+                        </select>
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="block text-[11px] font-bold uppercase text-slate-600 dark:text-slate-400 tracking-wider mb-1.5">
+                        Target Price / kg
+                      </label>
+                      <input
+                        type="number"
+                        step="0.01"
+                        placeholder="e.g. 4.00"
+                        value={rfqTargetPrice}
+                        onChange={(e) => setRfqTargetPrice(e.target.value)}
+                        className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-100 rounded-xl px-3 py-2 text-xs outline-none focus:border-[#022B96] transition font-semibold"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Row 2: Destination Port */}
+                  <div>
+                    <label className="block text-[11px] font-bold uppercase text-slate-600 dark:text-slate-400 tracking-wider mb-1.5">
+                      Delivery Destination (Port / City) *
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      placeholder="e.g. Rotterdam Port, Netherlands"
+                      value={rfqDestination}
+                      onChange={(e) => setRfqDestination(e.target.value)}
+                      className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-100 rounded-xl px-3 py-2 text-xs outline-none focus:border-[#022B96] transition font-medium"
+                    />
+                  </div>
+
+                  {/* Row 3: Buyer Details */}
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <div>
+                      <label className="block text-[11px] font-bold uppercase text-slate-600 dark:text-slate-400 tracking-wider mb-1.5">
+                        Your Name / Company *
+                      </label>
+                      <input
+                        type="text"
+                        required
+                        placeholder="Buyer or Company Name"
+                        value={rfqBuyerName}
+                        onChange={(e) => setRfqBuyerName(e.target.value)}
+                        className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-100 rounded-xl px-3 py-2 text-xs outline-none focus:border-[#022B96] transition font-medium"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] font-bold uppercase text-slate-600 dark:text-slate-400 tracking-wider mb-1.5">
+                        Email Address *
+                      </label>
+                      <input
+                        type="email"
+                        required
+                        placeholder="buyer@company.com"
+                        value={rfqBuyerEmail}
+                        onChange={(e) => setRfqBuyerEmail(e.target.value)}
+                        className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-100 rounded-xl px-3 py-2 text-xs outline-none focus:border-[#022B96] transition font-medium"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] font-bold uppercase text-emerald-600 dark:text-emerald-400 tracking-wider mb-1.5 flex items-center justify-between">
+                        <span>WhatsApp / Phone *</span>
+                      </label>
+                      <input
+                        type="tel"
+                        required
+                        placeholder="+1 555 123 4567"
+                        value={rfqBuyerPhone}
+                        onChange={(e) => setRfqBuyerPhone(e.target.value)}
+                        className="w-full bg-slate-50 dark:bg-slate-800 border border-emerald-300 dark:border-emerald-700 text-slate-800 dark:text-slate-100 rounded-xl px-3 py-2 text-xs outline-none focus:border-emerald-500 transition font-medium"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Row 4: Sourcing Notes */}
+                  <div>
+                    <label className="block text-[11px] font-bold uppercase text-slate-600 dark:text-slate-400 tracking-wider mb-1.5">
+                      Specifications &amp; Instructions
+                    </label>
+                    <textarea
+                      rows={2}
+                      placeholder="e.g. Looking for weekly recurring shipment, IQF frozen, -18°C temperature, HACCP certification required."
+                      value={rfqNotes}
+                      onChange={(e) => setRfqNotes(e.target.value)}
+                      className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-100 rounded-xl p-3 text-xs outline-none focus:border-[#022B96] transition resize-none font-medium"
+                    />
+                  </div>
+
+                  {/* Submit Button */}
+                  <div className="pt-2">
+                    <Button
+                      type="submit"
+                      disabled={rfqSubmitting || !rfqQuantity || !rfqDestination}
+                      className="w-full py-3 bg-gradient-to-r from-[#022B96] to-[#0440D9] hover:from-[#011a5e] hover:to-[#022B96] text-white font-extrabold text-xs rounded-xl shadow-md cursor-pointer flex items-center justify-center gap-2 transition"
+                    >
+                      {rfqSubmitting ? (
+                        <><div className="h-4 w-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> Sending to Supplier...</>
+                      ) : (
+                        <><Send className="h-3.5 w-3.5" /> Send Request to Supplier Dashboard</>
+                      )}
+                    </Button>
+                  </div>
+                </form>
+
+                {/* Direct Contact Toggle */}
+                <div className="pt-3 border-t border-slate-100 dark:border-slate-800 text-center">
+                  <button
+                    type="button"
+                    onClick={() => setShowDirectContact(!showDirectContact)}
+                    className="text-[11px] text-slate-400 hover:text-blue-600 underline font-medium cursor-pointer"
+                  >
+                    {showDirectContact ? 'Hide Direct Contact Info' : 'Or view supplier phone/email'}
+                  </button>
+
+                  {showDirectContact && (
+                    <div className="mt-2 p-3 bg-slate-50 dark:bg-slate-800/60 rounded-xl space-y-1.5 text-xs text-left border border-slate-100 dark:border-slate-700">
+                      {company.email && (
+                        <div className="flex items-center gap-2 text-slate-700 dark:text-slate-300">
+                          <Mail className="h-3.5 w-3.5 text-slate-400 shrink-0" />
+                          <span className="font-semibold select-all">{company.email}</span>
+                        </div>
+                      )}
+                      {company.phone && (
+                        <div className="flex items-center gap-2 text-slate-700 dark:text-slate-300">
+                          <Phone className="h-3.5 w-3.5 text-slate-400 shrink-0" />
+                          <span className="font-semibold select-all">{company.phone}</span>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}

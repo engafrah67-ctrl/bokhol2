@@ -1,7 +1,6 @@
 'use client'
 
 import React, { useEffect, useRef, useState } from 'react'
-import Image from 'next/image'
 import Link from 'next/link'
 import {
   Globe2,
@@ -23,6 +22,7 @@ import {
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { useLanguage } from '@/contexts/language-context'
+import { getStoredPartnerBuyers, DEFAULT_PARTNER_BUYERS, PartnerBuyer } from '@/lib/data/partner-buyers-data'
 
 // ─── Intersection Observer Hook ───────────────────────────────────────────────
 function useInView(threshold = 0.2) {
@@ -179,21 +179,25 @@ const WHY_ITEMS = [
   'Looking for new sourcing opportunities',
 ]
 
-const supplierLogos = [
-  { id: '1', name: 'DAYSEADAY', logo: '/partners/dayseaday.png' },
-  { id: '2', name: 'AM fish', logo: '/partners/am-fish.png' },
-  { id: '3', name: 'ATL SEAFOOD', logo: '/partners/atl-seafood.png' },
-  { id: '4', name: 'ANT SEAFOOD', logo: '/partners/ant-seafood.png' },
-  { id: '5', name: 'amacore', logo: '/partners/amacore.png' },
-  { id: '6', name: 'BLUE WORLD SEAFOOD', logo: '/partners/blue-world-seafood.png' },
-]
-
-
 // ─── Main Page ────────────────────────────────────────────────────────────────
 export default function AboutPage() {
   const { t } = useLanguage()
   const { ref: valuesRef, inView: valuesInView } = useInView(0.1)
   const { ref: missionRef, inView: missionInView } = useInView(0.2)
+  const [partnerBuyers, setPartnerBuyers] = useState<PartnerBuyer[]>(DEFAULT_PARTNER_BUYERS)
+
+  useEffect(() => {
+    setPartnerBuyers(getStoredPartnerBuyers())
+    const handleUpdate = () => {
+      setPartnerBuyers(getStoredPartnerBuyers())
+    }
+    window.addEventListener('partner-buyers-updated', handleUpdate)
+    window.addEventListener('storage', handleUpdate)
+    return () => {
+      window.removeEventListener('partner-buyers-updated', handleUpdate)
+      window.removeEventListener('storage', handleUpdate)
+    }
+  }, [])
 
   return (
     <main className="min-h-screen bg-transparent text-foreground pb-20 overflow-x-hidden">
@@ -466,26 +470,25 @@ export default function AboutPage() {
               Network
             </div>
             <h2 className="text-2xl sm:text-4xl font-extrabold text-foreground tracking-tight">
-              Trusted by Producers, Buyers &amp; Industry Leaders
+              Our EU Buyers &amp; Partners
             </h2>
             <p className="text-muted-foreground text-sm max-w-xl mx-auto">
-              A growing community of verified seafood companies already on our platform.
+              A growing network of verified seafood importers, wholesalers, hotels, and restaurant chains on our platform.
             </p>
           </div>
 
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-4">
-            {supplierLogos.map((item) => (
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 lg:grid-cols-9 gap-3.5">
+            {partnerBuyers.map((item) => (
               <div
                 key={item.id}
-                className="bg-card border border-border rounded-2xl p-5 flex items-center justify-center h-24 hover:shadow-md hover:border-[#022B96]/40 transition-all duration-300 hover:-translate-y-0.5 group cursor-pointer"
+                title={item.name}
+                className="bg-card border border-border rounded-2xl p-3.5 flex flex-col items-center justify-center h-24 hover:shadow-md hover:border-[#022B96]/40 transition-all duration-300 hover:-translate-y-0.5 group cursor-pointer"
               >
-                <Image
+                <img
                   src={item.logo}
                   alt={`${item.name} logo`}
-                  width={140}
-                  height={50}
-                  unoptimized
-                  className="h-9 sm:h-11 w-auto object-contain transition-transform duration-300 group-hover:scale-105"
+                  className="h-10 w-auto max-w-[110px] object-contain transition-transform duration-300 group-hover:scale-105 mix-blend-multiply dark:invert"
+                  loading="lazy"
                 />
               </div>
             ))}

@@ -10,16 +10,11 @@ import {
   HelpCircle,
   X,
   ArrowRight,
-  Check,
-  Copy,
-  ExternalLink,
   Sparkles,
 } from 'lucide-react'
 
 export function SupportWidget() {
   const [isOpen, setIsOpen] = useState(false)
-  const [copiedEmail, setCopiedEmail] = useState(false)
-  const [copiedPhone, setCopiedPhone] = useState(false)
   const [showTooltip, setShowTooltip] = useState(false)
   const widgetRef = useRef<HTMLDivElement>(null)
 
@@ -61,221 +56,131 @@ export function SupportWidget() {
     }
   }, [isOpen])
 
-  const handleCopyEmail = (e: React.MouseEvent) => {
-    e.stopPropagation()
-    navigator.clipboard.writeText(email)
-    setCopiedEmail(true)
-    setTimeout(() => setCopiedEmail(false), 2000)
-  }
-
-  const handleCopyPhone = (e: React.MouseEvent) => {
-    e.stopPropagation()
-    navigator.clipboard.writeText(phone)
-    setCopiedPhone(true)
-    setTimeout(() => setCopiedPhone(false), 2000)
-  }
-
   return (
     <div ref={widgetRef} className="fixed bottom-6 right-6 z-50 flex flex-col items-end">
       {/* ── Popup Card ── */}
       {isOpen && (
         <div
           id="bokhol-support-popup"
-          className="mb-4 w-[360px] sm:w-[390px] max-w-[calc(100vw-2rem)] rounded-3xl bg-white dark:bg-slate-900 shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden transition-all duration-300 animate-in fade-in slide-in-from-bottom-6"
+          className="mb-4 w-[340px] sm:w-[360px] max-w-[calc(100vw-2rem)] rounded-3xl bg-white dark:bg-slate-900 shadow-2xl border border-slate-200/80 dark:border-slate-800 overflow-hidden transition-all duration-300 animate-in fade-in slide-in-from-bottom-5"
         >
-          {/* Header Banner */}
-          <div className="relative bg-[#022B96] text-white p-5 pb-6">
-            {/* Subtle background glow */}
-            <div className="absolute top-0 right-0 w-32 h-32 bg-blue-500/20 rounded-full blur-2xl pointer-events-none" />
-
-            <div className="flex items-start justify-between relative z-10">
-              <div className="flex items-center gap-3">
-                {/* Avatar with online badge */}
-                <div className="relative">
-                  <div className="w-12 h-12 rounded-2xl overflow-hidden ring-2 ring-white/30 bg-slate-800 shadow-md">
-                    <img
-                      src="/hassan.png"
-                      alt="Hassan Abdulkadir"
-                      className="w-full h-full object-cover object-top"
-                    />
-                  </div>
-                  <span className="absolute -bottom-1 -right-1 flex h-3.5 w-3.5 items-center justify-center rounded-full bg-white dark:bg-slate-900 shadow">
-                    <span className="h-2.5 w-2.5 rounded-full bg-emerald-500 animate-pulse" />
-                  </span>
+          {/* Header */}
+          <div className="bg-[#022B96] text-white p-4 sm:p-5 flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="relative">
+                <div className="w-11 h-11 rounded-2xl overflow-hidden ring-2 ring-white/20 bg-slate-800 shadow-sm">
+                  <img
+                    src="/hassan.png"
+                    alt="Hassan Abdulkadir"
+                    className="w-full h-full object-cover object-top"
+                  />
                 </div>
-
-                <div>
-                  <div className="flex items-center gap-1.5">
-                    <h3 className="font-bold text-white text-base leading-tight">
-                      Hassan Abdulkadir
-                    </h3>
-                  </div>
-                  <p className="text-blue-200 text-xs font-medium">
-                    Customer Success & Market Specialist
-                  </p>
-                </div>
+                <span className="absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full bg-emerald-500 ring-2 ring-[#022B96]" />
               </div>
 
-              {/* Close Button */}
-              <button
-                onClick={() => setIsOpen(false)}
-                className="h-8 w-8 rounded-full bg-white/10 hover:bg-white/20 text-white flex items-center justify-center transition-colors"
-                aria-label="Close contact dialog"
-              >
-                <X className="h-4 w-4" />
-              </button>
+              <div>
+                <h3 className="font-bold text-white text-sm leading-tight">
+                  Hassan Abdulkadir
+                </h3>
+                <p className="text-blue-200 text-xs font-medium flex items-center gap-1.5 mt-0.5">
+                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
+                  Support Specialist • Online
+                </p>
+              </div>
             </div>
 
-            {/* Intro text */}
-            <div className="mt-4 pt-3 border-t border-white/10">
-              <p className="text-white/90 text-xs font-normal leading-relaxed">
-                Choose a channel that works best for you. We respond quickly during business days.
-              </p>
-            </div>
+            <button
+              onClick={() => setIsOpen(false)}
+              className="h-7 w-7 rounded-full bg-white/10 hover:bg-white/20 text-white flex items-center justify-center transition-colors cursor-pointer"
+              aria-label="Close dialog"
+            >
+              <X className="h-4 w-4" />
+            </button>
           </div>
 
           {/* Contact Channels List */}
-          <div className="p-4 space-y-2.5 bg-slate-50/70 dark:bg-slate-900/80 max-h-[60vh] overflow-y-auto">
-            {/* Channel 1: Phone / WhatsApp */}
-            <div className="group relative rounded-2xl border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-slate-800/90 p-3.5 transition-all duration-200 hover:border-emerald-500/50 hover:shadow-md">
-              <div className="flex items-start gap-3">
-                <div className="h-10 w-10 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 flex items-center justify-center shrink-0">
-                  <Phone className="h-5 w-5" />
+          <div className="p-3 space-y-2 bg-slate-50/50 dark:bg-slate-900/60">
+            {/* Channel 1: WhatsApp */}
+            <a
+              href={waUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center justify-between p-3 rounded-2xl bg-white dark:bg-slate-800/80 border border-slate-200/70 dark:border-slate-700/60 hover:border-emerald-500/50 hover:shadow-xs transition group"
+            >
+              <div className="flex items-center gap-3 min-w-0">
+                <div className="h-9 w-9 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 flex items-center justify-center shrink-0">
+                  <Phone className="h-4 w-4" />
                 </div>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center justify-between">
-                    <h4 className="text-xs font-bold text-foreground">Phone & WhatsApp</h4>
-                    <span className="text-[10px] font-semibold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/50 px-2 py-0.5 rounded-full">
-                      Direct line
-                    </span>
-                  </div>
-                  <p className="text-[11px] text-muted-foreground mt-0.5">
-                    Call or chat directly with our specialist
-                  </p>
-                  <div className="mt-2 flex items-center gap-2">
-                    <a
-                      href={waUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="inline-flex items-center gap-1.5 text-xs font-bold text-[#022B96] dark:text-blue-400 hover:underline"
-                    >
-                      {phone}
-                      <ExternalLink className="h-3 w-3" />
-                    </a>
-                    <button
-                      onClick={handleCopyPhone}
-                      className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-1 rounded transition-colors"
-                      title="Copy phone number"
-                    >
-                      {copiedPhone ? (
-                        <Check className="h-3.5 w-3.5 text-emerald-500" />
-                      ) : (
-                        <Copy className="h-3.5 w-3.5" />
-                      )}
-                    </button>
-                  </div>
+                <div className="min-w-0">
+                  <h4 className="text-xs font-bold text-slate-800 dark:text-slate-200">WhatsApp / Call</h4>
+                  <p className="text-[11px] text-slate-400 dark:text-slate-400 truncate">{phone}</p>
                 </div>
               </div>
-            </div>
+              <span className="text-[11px] font-bold text-emerald-700 bg-emerald-50 dark:bg-emerald-950/60 px-2.5 py-1 rounded-xl border border-emerald-200/60 dark:border-emerald-800/60 shrink-0 group-hover:bg-emerald-600 group-hover:text-white transition">
+                Chat
+              </span>
+            </a>
 
             {/* Channel 2: Email */}
-            <div className="group relative rounded-2xl border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-slate-800/90 p-3.5 transition-all duration-200 hover:border-blue-500/50 hover:shadow-md">
-              <div className="flex items-start gap-3">
-                <div className="h-10 w-10 rounded-xl bg-blue-50 dark:bg-blue-950/40 text-[#022B96] dark:text-blue-400 flex items-center justify-center shrink-0">
-                  <Mail className="h-5 w-5" />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center justify-between">
-                    <h4 className="text-xs font-bold text-foreground">E-mail</h4>
-                    <span className="text-[10px] font-semibold text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/50 px-2 py-0.5 rounded-full">
-                      Quick reply
-                    </span>
-                  </div>
-                  <p className="text-[11px] text-muted-foreground mt-0.5">
-                    Reply within a few hours on business days
-                  </p>
-                  <div className="mt-2 flex items-center gap-2">
-                    <a
-                      href={`mailto:${email}`}
-                      className="inline-flex items-center gap-1.5 text-xs font-bold text-[#022B96] dark:text-blue-400 hover:underline truncate"
-                    >
-                      {email}
-                    </a>
-                    <button
-                      onClick={handleCopyEmail}
-                      className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-1 rounded transition-colors shrink-0"
-                      title="Copy email address"
-                    >
-                      {copiedEmail ? (
-                        <Check className="h-3.5 w-3.5 text-emerald-500" />
-                      ) : (
-                        <Copy className="h-3.5 w-3.5" />
-                      )}
-                    </button>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Channel 3: Contactformulier / Request */}
-            <Link
-              href="/requests/buyer/new"
-              onClick={() => setIsOpen(false)}
-              className="group relative flex items-start gap-3 rounded-2xl border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-slate-800/90 p-3.5 transition-all duration-200 hover:border-indigo-500/50 hover:shadow-md block"
+            <a
+              href={`mailto:${email}`}
+              className="flex items-center justify-between p-3 rounded-2xl bg-white dark:bg-slate-800/80 border border-slate-200/70 dark:border-slate-700/60 hover:border-blue-500/50 hover:shadow-xs transition group"
             >
-              <div className="h-10 w-10 rounded-xl bg-indigo-50 dark:bg-indigo-950/40 text-indigo-600 dark:text-indigo-400 flex items-center justify-center shrink-0">
-                <MessageSquare className="h-5 w-5" />
-              </div>
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center justify-between">
-                  <h4 className="text-xs font-bold text-foreground">Contact Form / Sourcing Request</h4>
-                  <div className="h-6 w-6 rounded-full bg-indigo-50 dark:bg-indigo-950/50 text-indigo-600 dark:text-indigo-400 flex items-center justify-center group-hover:translate-x-0.5 transition-transform">
-                    <ArrowRight className="h-3.5 w-3.5" />
-                  </div>
+              <div className="flex items-center gap-3 min-w-0">
+                <div className="h-9 w-9 rounded-xl bg-blue-50 dark:bg-blue-950/40 text-[#022B96] dark:text-blue-400 flex items-center justify-center shrink-0">
+                  <Mail className="h-4 w-4" />
                 </div>
-                <p className="text-[11px] text-muted-foreground mt-0.5">
-                  Send a specific inquiry, request a quote, or find suppliers.
-                </p>
+                <div className="min-w-0">
+                  <h4 className="text-xs font-bold text-slate-800 dark:text-slate-200">Email Support</h4>
+                  <p className="text-[11px] text-slate-400 dark:text-slate-400 truncate">{email}</p>
+                </div>
               </div>
+              <span className="text-[11px] font-bold text-[#022B96] bg-blue-50 dark:bg-blue-950/60 px-2.5 py-1 rounded-xl border border-blue-200/60 dark:border-blue-800/60 shrink-0 group-hover:bg-[#022B96] group-hover:text-white transition">
+                Email
+              </span>
+            </a>
+
+            {/* Channel 3: Contact Form */}
+            <Link
+              href="/contact"
+              onClick={() => setIsOpen(false)}
+              className="flex items-center justify-between p-3 rounded-2xl bg-white dark:bg-slate-800/80 border border-slate-200/70 dark:border-slate-700/60 hover:border-slate-300 dark:hover:border-slate-600 hover:shadow-xs transition group"
+            >
+              <div className="flex items-center gap-3 min-w-0">
+                <div className="h-9 w-9 rounded-xl bg-indigo-50 dark:bg-indigo-950/40 text-indigo-600 dark:text-indigo-400 flex items-center justify-center shrink-0">
+                  <MessageSquare className="h-4 w-4" />
+                </div>
+                <div className="min-w-0">
+                  <h4 className="text-xs font-bold text-slate-800 dark:text-slate-200">Contact Form</h4>
+                  <p className="text-[11px] text-slate-400 dark:text-slate-400 truncate">Send a message to our team</p>
+                </div>
+              </div>
+              <ArrowRight className="h-4 w-4 text-slate-400 group-hover:text-[#022B96] group-hover:translate-x-0.5 transition shrink-0" />
             </Link>
 
-            {/* Channel 4: Helpcenter / Market Updates */}
+            {/* Channel 4: Help Center / News */}
             <Link
               href="/news"
               onClick={() => setIsOpen(false)}
-              className="group relative flex items-start gap-3 rounded-2xl border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-slate-800/90 p-3.5 transition-all duration-200 hover:border-amber-500/50 hover:shadow-md block"
+              className="flex items-center justify-between p-3 rounded-2xl bg-white dark:bg-slate-800/80 border border-slate-200/70 dark:border-slate-700/60 hover:border-slate-300 dark:hover:border-slate-600 hover:shadow-xs transition group"
             >
-              <div className="h-10 w-10 rounded-xl bg-amber-50 dark:bg-amber-950/40 text-amber-600 dark:text-amber-400 flex items-center justify-center shrink-0">
-                <HelpCircle className="h-5 w-5" />
-              </div>
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center justify-between">
-                  <h4 className="text-xs font-bold text-foreground">Helpcenter & Market News</h4>
-                  <span className="text-xs text-amber-600 dark:text-amber-400 font-bold group-hover:underline flex items-center gap-1">
-                    Knowledge base
-                    <ArrowRight className="h-3 w-3" />
-                  </span>
+              <div className="flex items-center gap-3 min-w-0">
+                <div className="h-9 w-9 rounded-xl bg-amber-50 dark:bg-amber-950/40 text-amber-600 dark:text-amber-400 flex items-center justify-center shrink-0">
+                  <HelpCircle className="h-4 w-4" />
                 </div>
-                <p className="text-[11px] text-muted-foreground mt-0.5">
-                  Seafood indexes, verified directory guides & FAQs
-                </p>
+                <div className="min-w-0">
+                  <h4 className="text-xs font-bold text-slate-800 dark:text-slate-200">Market Knowledge</h4>
+                  <p className="text-[11px] text-slate-400 dark:text-slate-400 truncate">Indexes &amp; seafood news</p>
+                </div>
               </div>
+              <ArrowRight className="h-4 w-4 text-slate-400 group-hover:text-amber-600 group-hover:translate-x-0.5 transition shrink-0" />
             </Link>
           </div>
 
-          {/* Footer inside widget */}
-          <div className="px-4 py-3 bg-white dark:bg-slate-900 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <div className="h-5 w-5 relative">
-                <img src="/app-icon.png?v=3" alt="Bokhol Icon" className="w-full h-full object-contain" />
-              </div>
-              <span className="text-[11px] font-bold text-slate-700 dark:text-slate-300">
-                Bokhol Network
-              </span>
-            </div>
-            <span className="text-[10px] text-muted-foreground">
-              Market Intelligence
-            </span>
+          {/* Footer */}
+          <div className="px-4 py-2.5 bg-white dark:bg-slate-900 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between text-[11px] text-slate-400">
+            <span className="font-semibold text-slate-600 dark:text-slate-300">Bokhol Network</span>
+            <span>Fast Response • Mon–Fri</span>
           </div>
         </div>
       )}

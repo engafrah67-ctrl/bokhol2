@@ -26,6 +26,7 @@ import ReactCountryFlag from 'react-country-flag'
 import { Button } from '@/components/ui/button'
 import {
   CompanyProfile,
+  INITIAL_COMPANIES,
   getStoredCompanies,
 } from '@/lib/data/companies-data'
 import { ClaimProfileModal } from '@/components/directory/claim-profile-modal'
@@ -55,7 +56,7 @@ const COMMUNITY_AUDIENCE = [
 ]
 
 export default function OurNetworkDirectoryPage() {
-  const [companies, setCompanies] = useState<CompanyProfile[]>([])
+  const [companies, setCompanies] = useState<CompanyProfile[]>(INITIAL_COMPANIES)
   const [searchQuery, setSearchQuery] = useState('')
   const [selectedTag, setSelectedTag] = useState<string | null>(null)
 

@@ -1,10 +1,10 @@
 'use client'
 
 import React, { useState, useEffect } from 'react'
-import { getStoredPartnerBuyers, PartnerBuyer } from '@/lib/data/partner-buyers-data'
+import { getStoredPartnerBuyers, DEFAULT_PARTNER_BUYERS, PartnerBuyer } from '@/lib/data/partner-buyers-data'
 
 export function PartnersSection() {
-  const [partnerBuyers, setPartnerBuyers] = useState<PartnerBuyer[]>([])
+  const [partnerBuyers, setPartnerBuyers] = useState<PartnerBuyer[]>(DEFAULT_PARTNER_BUYERS)
 
   useEffect(() => {
     // Initial load

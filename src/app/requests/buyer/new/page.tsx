@@ -3,7 +3,7 @@
 import React, { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { ArrowLeft, ArrowRight, Loader2, ShoppingBag, MapPin, ShieldCheck, AlertCircle, Calendar, Package, Lock, LogIn, UserPlus } from 'lucide-react'
+import { ArrowLeft, ArrowRight, Loader2, ShoppingBag, MapPin, ShieldCheck, AlertCircle, Calendar, Package, Lock, LogIn, UserPlus, Phone, Mail, User } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { useUser } from '@/hooks/use-user'
 
@@ -12,7 +12,7 @@ const labelCls = 'block text-xs font-bold uppercase tracking-wider text-slate-70
 
 export default function NewBuyerRequestPage() {
   const router = useRouter()
-  const { user, isLoading } = useUser()
+  const { user, profile, isLoading } = useUser()
   const [loading, setLoading] = useState(false)
   const [errorMessage, setErrorMessage] = useState('')
 
@@ -26,11 +26,21 @@ export default function NewBuyerRequestPage() {
   const [targetPrice, setTargetPrice] = useState('')
   const [additionalNotes, setAdditionalNotes] = useState('')
 
+  // Contact Info State
+  const [buyerName, setBuyerName] = useState('')
+  const [buyerPhone, setBuyerPhone] = useState('')
+  const [buyerEmail, setBuyerEmail] = useState('')
+
   React.useEffect(() => {
     if (!isLoading && !user) {
       router.replace('/login?next=/requests/buyer/new')
     }
-  }, [isLoading, user, router])
+    if (user) {
+      if (!buyerEmail) setBuyerEmail(user.email || '')
+      if (!buyerName && profile?.full_name) setBuyerName(profile.full_name)
+      if (!buyerPhone && (profile as any)?.phone) setBuyerPhone((profile as any).phone)
+    }
+  }, [isLoading, user, profile, router, buyerEmail, buyerName, buyerPhone])
 
   // Loading spinner while checking auth status
   if (isLoading || !user) {
@@ -67,8 +77,13 @@ export default function NewBuyerRequestPage() {
     setErrorMessage('')
 
     const supabase = createClient()
-    const { data: { user } } = await supabase.auth.getUser()
+    const { data: { user: currentUser } } = await supabase.auth.getUser()
     
+    // Format contact string for description
+    const contactName = buyerName || currentUser?.user_metadata?.full_name || currentUser?.email?.split('@')[0] || 'Verified Buyer'
+    const contactEmail = buyerEmail || currentUser?.email || ''
+    const contactSummary = `Buyer: ${contactName} (${contactEmail}${buyerPhone ? ` | ${buyerPhone}` : ''})`
+
     // Save details JSON
     const details = {
       productNeeded,
@@ -78,32 +93,49 @@ export default function NewBuyerRequestPage() {
       packagingProcessing,
       deliveryDate,
       targetPrice: targetPrice ? `$${targetPrice}/kg` : null,
+      buyerName: contactName,
+      buyerEmail: contactEmail,
+      buyerPhone: buyerPhone || null,
       additionalNotes,
       createdAt: new Date().toISOString()
     }
 
-    const payload = {
-      id: 'req-' + Date.now(),
-      user_id: user?.id || 'buyer-user',
-      title: `${quantity} ${productNeeded} — ${location}`,
-      description: JSON.stringify(details),
-      destination: location,
-      status: 'open',
-      created_at: new Date().toISOString(),
-    }
+    const descriptionPayload = `${contactSummary}\n${JSON.stringify(details)}`
 
-    if (user) {
-      try {
-        await supabase.from('buyer_requests').insert(payload)
-      } catch (_) {}
-    }
+    try {
+      const res = await fetch('/api/requests', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          title: `${quantity} ${productNeeded} — ${location}`,
+          description: descriptionPayload,
+          destination: location,
+          quantity: parseFloat(quantity) || null,
+          quantityUnit: 'kg',
+          targetPrice: targetPrice ? parseFloat(targetPrice) : null,
+          currency: 'USD',
+          userId: currentUser?.id,
+          countryId: null,
+        }),
+      })
 
-    // Always store in local storage as well for instant rendering
-    if (typeof window !== 'undefined') {
-      try {
-        const existing = JSON.parse(localStorage.getItem('buyer_sourcing_requests') || '[]')
-        localStorage.setItem('buyer_sourcing_requests', JSON.stringify([payload, ...existing]))
-      } catch (_) {}
+      if (!res.ok) {
+        // Direct Supabase insert fallback
+        await supabase.from('buyer_requests').insert({
+          user_id: currentUser?.id,
+          title: `${quantity} ${productNeeded} — ${location}`,
+          description: descriptionPayload,
+          destination: location,
+          quantity: parseFloat(quantity) || null,
+          quantity_unit: 'kg',
+          target_price: targetPrice ? parseFloat(targetPrice) : null,
+          currency: 'USD',
+          status: 'open',
+          country_id: null,
+        })
+      }
+    } catch (err) {
+      console.error('Error saving request to Supabase:', err)
     }
 
     setLoading(false)
@@ -279,6 +311,74 @@ export default function NewBuyerRequestPage() {
                   onChange={e => setAdditionalNotes(e.target.value)}
                   className="w-full text-sm border border-slate-200 rounded-xl bg-white p-4 focus:ring-2 focus:ring-[#022B96]/20 focus:border-[#022B96] outline-none placeholder:text-slate-400 transition"
                 />
+              </div>
+            </div>
+
+            <div className="border-t border-slate-100" />
+
+            {/* Section 3: Contact Info */}
+            <div className="space-y-4">
+              <div>
+                <div className="flex items-center justify-between">
+                  <h3 className="text-xs font-black uppercase tracking-wider text-slate-400">3. Contact & Communication</h3>
+                  <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200/60">
+                    Required for direct supplier quotes
+                  </span>
+                </div>
+                <p className="text-xs text-slate-500 mt-1">
+                  Suppliers will use these details to contact you directly and send price quotes.
+                </p>
+              </div>
+
+              <div className="grid sm:grid-cols-2 gap-5">
+                {/* Buyer / Company Name */}
+                <div>
+                  <label className={labelCls}>Your Name or Company Name *</label>
+                  <div className="relative">
+                    <User className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+                    <input
+                      type="text"
+                      required
+                      placeholder="e.g. John Doe / Global Seafood Imports"
+                      value={buyerName}
+                      onChange={e => setBuyerName(e.target.value)}
+                      className={`${inputCls} pl-10`}
+                    />
+                  </div>
+                </div>
+
+                {/* Phone / WhatsApp */}
+                <div>
+                  <label className={labelCls}>Phone / WhatsApp Number *</label>
+                  <div className="relative">
+                    <Phone className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-emerald-600" />
+                    <input
+                      type="tel"
+                      required
+                      placeholder="e.g. +1 555 123 4567 or +34 612 345 678"
+                      value={buyerPhone}
+                      onChange={e => setBuyerPhone(e.target.value)}
+                      className={`${inputCls} pl-10 border-emerald-200 focus:border-emerald-500 focus:ring-emerald-500/20`}
+                    />
+                  </div>
+                  <p className="text-[11px] text-slate-400 mt-1">Suppliers will reach out to you via WhatsApp/Phone.</p>
+                </div>
+              </div>
+
+              {/* Email */}
+              <div>
+                <label className={labelCls}>Contact Email *</label>
+                <div className="relative">
+                  <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+                  <input
+                    type="email"
+                    required
+                    placeholder="e.g. buyer@company.com"
+                    value={buyerEmail}
+                    onChange={e => setBuyerEmail(e.target.value)}
+                    className={`${inputCls} pl-10`}
+                  />
+                </div>
               </div>
             </div>
 

@@ -4,8 +4,7 @@ import React, { useState, useEffect, useRef } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
-import { addSupplierPost } from '@/lib/data/products-data'
-import { ProductMarketGraph } from '@/components/market/product-market-graph'
+import { addSupplierPost, getFishImageForProduct } from '@/lib/data/products-data'
 import {
   ArrowLeft,
   Fish,
@@ -74,14 +73,25 @@ const FISH_CATALOG: {
   {
     category: 'Flatfish',
     color: '#C27803',
-    items: ['Plaice', 'Sole', 'Lemon Sole', 'Turbot', 'Brill', 'Halibut'],
+    image: '/fish-turbot.jpg',
+    items: ['Turbot', 'Plaice', 'Sole', 'Lemon Sole', 'Brill', 'Halibut'],
   },
   {
-    category: 'Other Finfish & Crustaceans',
+    category: 'Crustaceans & Shellfish',
     color: '#5850EC',
+    image: '/fish-crab.jpg',
     items: [
-      'Trout', 'Monkfish', 'Swordfish', 'Tilapia', 'Pangasius',
-      'Shrimp', 'King Crab', 'Octopus', 'Squid', 'Mussels',
+      'Shrimp', 'King Crab', 'Crab', 'Lobster',
+      'Prawn', 'Mussels', 'Clams', 'Oysters',
+      'Octopus', 'Squid',
+    ],
+  },
+  {
+    category: 'Other Finfish',
+    color: '#0D9488',
+    image: '/fish-trout.jpg',
+    items: [
+      'Trout', 'Rainbow Trout', 'Monkfish', 'Swordfish', 'Tilapia', 'Pangasius',
     ],
   },
 ]
@@ -425,31 +435,27 @@ export default function PostStockPage() {
               {form.productName ? (
                 <div className="space-y-4">
                   <div className="flex items-center justify-between p-4 bg-blue-50/60 border border-blue-200 rounded-2xl">
-                    <div className="flex items-center gap-3">
-                      <div className="h-10 w-10 rounded-xl bg-[#022B96] text-white flex items-center justify-center font-bold">
-                        <Fish className="h-5 w-5" />
+                    <div className="flex items-center gap-3.5 min-w-0">
+                      <div className="h-12 w-16 rounded-xl bg-white border border-blue-200/80 shadow-xs flex items-center justify-center p-1 overflow-hidden shrink-0">
+                        <img
+                          src={displayImage || getFishImageForProduct(form.productName)}
+                          alt={form.productName}
+                          className="h-full w-full object-contain"
+                        />
                       </div>
-                      <div>
-                        <p className="font-extrabold text-slate-900 text-base leading-tight">{form.productName}</p>
+                      <div className="min-w-0">
+                        <p className="font-extrabold text-slate-900 text-base leading-tight truncate">{form.productName}</p>
                         <p className="text-xs text-slate-500 mt-0.5">{selectedProductMeta?.category || 'Seafood Item'}</p>
                       </div>
                     </div>
                     <button
                       type="button"
                       onClick={() => { set('productName', ''); setPickerOpen(true) }}
-                      className="text-xs font-bold text-[#022B96] hover:underline cursor-pointer"
+                      className="text-xs font-bold text-[#022B96] hover:underline cursor-pointer shrink-0 ml-3"
                     >
                       Change Species
                     </button>
                   </div>
-
-                  {/* Live Real-time Market Graph & Benchmark for this product */}
-                  <ProductMarketGraph
-                    productName={form.productName}
-                    supplierPrice={parseFloat(form.pricePerKg) || undefined}
-                    currency={form.currency}
-                    compact={true}
-                  />
                 </div>
               ) : (
                 <button
@@ -682,16 +688,22 @@ export default function PostStockPage() {
                     <div className="flex-1 h-px bg-slate-100 ml-2" />
                   </div>
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                    {cat.items.map((item) => (
-                      <button
-                        key={item}
-                        type="button"
-                        onClick={() => selectProduct(item)}
-                        className="p-3 bg-slate-50 hover:bg-blue-50 border border-slate-200 hover:border-blue-300 rounded-xl text-left font-bold text-xs text-slate-800 hover:text-blue-700 transition cursor-pointer"
-                      >
-                        {item}
-                      </button>
-                    ))}
+                    {cat.items.map((item) => {
+                      const itemImg = getFishImageForProduct(item, cat.image)
+                      return (
+                        <button
+                          key={item}
+                          type="button"
+                          onClick={() => selectProduct(item)}
+                          className="p-2.5 bg-slate-50 hover:bg-blue-50/80 border border-slate-200 hover:border-blue-300 rounded-xl text-left font-bold text-xs text-slate-800 hover:text-[#022B96] transition cursor-pointer flex items-center gap-2.5 group"
+                        >
+                          <div className="h-9 w-12 bg-white rounded-lg border border-slate-200/80 group-hover:border-blue-200 flex items-center justify-center p-0.5 shrink-0 overflow-hidden shadow-2xs">
+                            <img src={itemImg} alt={item} className="h-full w-full object-contain" />
+                          </div>
+                          <span className="truncate">{item}</span>
+                        </button>
+                      )
+                    })}
                   </div>
                 </div>
               ))}

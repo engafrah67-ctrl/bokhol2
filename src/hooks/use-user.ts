@@ -11,6 +11,7 @@ interface UserProfile {
   full_name: string | null
   avatar_url: string | null
   company_id: string | null
+  phone?: string | null
 }
 
 interface UseUserReturn {
@@ -95,6 +96,15 @@ export function useUser(): UseUserReturn {
       if (currentUser) {
         cachedUser = currentUser
         setUser(currentUser)
+        
+        // Fast path: if profile is already cached for this user, use it immediately
+        if (cachedProfile && cachedProfile.id === currentUser.id) {
+          setProfile(cachedProfile)
+          setIsLoading(false)
+          cachedLoading = false
+          return
+        }
+
         const userProf = await fetchProfile(currentUser)
         if (isMounted) {
           setProfile(userProf)
@@ -111,13 +121,15 @@ export function useUser(): UseUserReturn {
       }
     }
 
-    // Check current session
-    supabase.auth.getSession().then((res: any) => {
-      const session = res?.data?.session
-      syncUserSession(session?.user ?? null)
-    }).catch(() => {
-      if (isMounted) setIsLoading(false)
-    })
+    // Check current session only if not already loaded or cache is empty
+    if (!cachedUser && cachedLoading) {
+      supabase.auth.getSession().then((res: any) => {
+        const session = res?.data?.session
+        syncUserSession(session?.user ?? null)
+      }).catch(() => {
+        if (isMounted) setIsLoading(false)
+      })
+    }
 
     // Subscribe to auth state changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
