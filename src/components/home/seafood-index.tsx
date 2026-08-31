@@ -409,6 +409,30 @@ const COUNTRIES_MARKET_DATA: CountryIndexData[] = [
   }
 ]
 
+import { LiveCountryMarketData, LiveSpeciesIndex } from '@/lib/data/market-data'
+
+export interface SpeciesData {
+  id: string
+  label: string
+  currency: string
+  unit: string
+  latest: number
+  weekHigh: number
+  weekLow: number
+  change: number
+  color: string
+  data: { week: string; price: number }[]
+}
+
+export interface CountryIndexData {
+  id: string
+  name: string
+  flagUrl: string
+  source: string
+  description: string
+  species: SpeciesData[]
+}
+
 // Custom tooltip
 function CustomTooltip({ active, payload, label, currency }: any) {
   if (!active || !payload?.length) return null
@@ -422,18 +446,27 @@ function CustomTooltip({ active, payload, label, currency }: any) {
   )
 }
 
-export function SeafoodIndexCard() {
-  const [selectedCountryId, setSelectedCountryId] = useState('eu')
-  const [activeSpeciesId, setActiveSpeciesId] = useState('salmon')
+interface SeafoodIndexCardProps {
+  initialCountryData?: LiveCountryMarketData[]
+}
+
+export function SeafoodIndexCard({ initialCountryData }: SeafoodIndexCardProps) {
+  const countryList = (initialCountryData && initialCountryData.length > 0) ? initialCountryData : COUNTRIES_MARKET_DATA
+  const [selectedCountryId, setSelectedCountryId] = useState(countryList[0]?.id || 'eu')
+  
+  const currentCountry = countryList.find(c => c.id === selectedCountryId) || countryList[0]
+  const [activeSpeciesId, setActiveSpeciesId] = useState(currentCountry?.species[0]?.id || 'yellowfin-tuna')
   const [isMounted, setIsMounted] = useState(false)
 
   React.useEffect(() => {
     setIsMounted(true)
   }, [])
 
-  const currentCountry = COUNTRIES_MARKET_DATA.find(c => c.id === selectedCountryId) || COUNTRIES_MARKET_DATA[0]
-  const activeSpecies = currentCountry.species.find(s => s.id === activeSpeciesId) || currentCountry.species[0]
-  const isUp = activeSpecies.change >= 0
+  // Auto-switch active species if current country doesn't have it
+  const activeSpecies = currentCountry?.species.find(s => s.id === activeSpeciesId) || currentCountry?.species[0]
+  const isUp = (activeSpecies?.change ?? 0) >= 0
+
+  if (!currentCountry || !activeSpecies) return null
 
   return (
     <section id="indexes" className="py-10 px-8 border border-border bg-background text-foreground rounded-2xl shadow-sm">
@@ -454,7 +487,7 @@ export function SeafoodIndexCard() {
 
           {/* Clean Country Selector Tabs with Real Flags */}
           <div className="inline-flex items-center gap-1.5 p-1 bg-slate-100 dark:bg-slate-800/80 rounded-2xl border border-slate-200/70 dark:border-slate-700/60 self-start lg:self-auto">
-            {COUNTRIES_MARKET_DATA.map((c) => {
+            {countryList.map((c) => {
               const isSelected = selectedCountryId === c.id
               return (
                 <button

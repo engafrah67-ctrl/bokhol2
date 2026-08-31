@@ -33,9 +33,11 @@ import {
   Send,
   Lock,
   LogOut,
+  TrendingUp,
 } from 'lucide-react'
 import { performSignOut } from '@/lib/auth-helpers'
 import Link from 'next/link'
+import { ProductMarketGraph } from '@/components/market/product-market-graph'
 import {
   getStoredSupplierPosts,
   updateProductPrice,
@@ -120,6 +122,7 @@ export default function SupplierDashboardPage() {
   const [companyLogoUrl, setCompanyLogoUrl] = useState('')
   // Update Price Modal states
   const [updatingPostModal, setUpdatingPostModal] = useState<any | null>(null)
+  const [viewingGraphPost, setViewingGraphPost] = useState<any | null>(null)
   const [updatePriceInput, setUpdatePriceInput] = useState<string>('')
   const [updateCurrencyInput, setUpdateCurrencyInput] = useState<string>('EUR')
   const [updateAvailabilityInput, setUpdateAvailabilityInput] = useState<string>('In Stock — Ready to Ship')
@@ -1022,6 +1025,13 @@ export default function SupplierDashboardPage() {
                         </span>
                         <div className="flex items-center gap-2">
                           <button
+                            onClick={() => setViewingGraphPost(post)}
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 hover:bg-blue-100 text-[#022B96] text-xs font-bold rounded-xl transition cursor-pointer border border-blue-200 shadow-xs"
+                          >
+                            <TrendingUp className="h-3.5 w-3.5" />
+                            Market Graph
+                          </button>
+                          <button
                             onClick={() => {
                               let parsed = post
                               if (typeof post.content === 'string') {
@@ -1283,6 +1293,86 @@ export default function SupplierDashboardPage() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* ══ VIEW MARKET GRAPH MODAL ══════════════════════════════════ */}
+      {viewingGraphPost && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4 overflow-y-auto">
+          <div className="bg-white rounded-3xl border border-slate-200 max-w-2xl w-full shadow-2xl overflow-hidden my-8">
+            <div className="flex items-center justify-between p-5 border-b border-slate-100 bg-slate-50/50">
+              <div className="flex items-center gap-3">
+                <div className="h-10 w-10 rounded-2xl bg-[#022B96] text-white flex items-center justify-center font-bold shadow-md">
+                  <TrendingUp className="h-5 w-5" />
+                </div>
+                <div>
+                  <h3 className="font-black text-slate-900 text-base leading-tight">
+                    {(() => {
+                      let p = viewingGraphPost
+                      if (typeof p.content === 'string') { try { p = { ...p, ...JSON.parse(p.content) } } catch (_) {} }
+                      return p.product_name || p.productName || 'Seafood Product'
+                    })()} — Live Market Graph
+                  </h3>
+                  <p className="text-xs text-slate-500">Live European market price trend &amp; benchmark analysis</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setViewingGraphPost(null)}
+                className="h-8 w-8 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 flex items-center justify-center transition cursor-pointer"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            <div className="p-6">
+              <ProductMarketGraph
+                productName={(() => {
+                  let p = viewingGraphPost
+                  if (typeof p.content === 'string') { try { p = { ...p, ...JSON.parse(p.content) } } catch (_) {} }
+                  return p.product_name || p.productName || 'Seafood Product'
+                })()}
+                supplierPrice={(() => {
+                  let p = viewingGraphPost
+                  if (typeof p.content === 'string') { try { p = { ...p, ...JSON.parse(p.content) } } catch (_) {} }
+                  return parseFloat(p.price_per_kg || p.pricePerKg || 0)
+                })()}
+                currency={(() => {
+                  let p = viewingGraphPost
+                  if (typeof p.content === 'string') { try { p = { ...p, ...JSON.parse(p.content) } } catch (_) {} }
+                  return p.currency || 'EUR'
+                })()}
+              />
+
+              <div className="mt-6 flex justify-end gap-3">
+                <button
+                  type="button"
+                  onClick={() => setViewingGraphPost(null)}
+                  className="px-5 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl text-xs transition cursor-pointer"
+                >
+                  Close
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const post = viewingGraphPost
+                    let parsed = post
+                    if (typeof post.content === 'string') {
+                      try { parsed = { ...post, ...JSON.parse(post.content) } } catch (_) {}
+                    }
+                    setViewingGraphPost(null)
+                    setUpdatingPostModal(post)
+                    setUpdatePriceInput(String(parsed.price_per_kg || parsed.pricePerKg || ''))
+                    setUpdateCurrencyInput(parsed.currency || 'EUR')
+                    setUpdateAvailabilityInput(parsed.availability || 'In Stock — Ready to Ship')
+                  }}
+                  className="px-5 py-2.5 bg-[#022B96] hover:bg-[#011a5e] text-white font-bold rounded-xl text-xs transition cursor-pointer shadow-sm flex items-center gap-1.5"
+                >
+                  <DollarSign className="h-4 w-4" />
+                  Update Price for this Product
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}

@@ -7,20 +7,17 @@ import { MarketFeed } from '@/components/home/market-feed'
 import { ExpertProfile } from '@/components/home/expert-profile'
 import { FAQSection } from '@/components/home/faq-section'
 import { StatsBar } from '@/components/home/stats-bar'
-import { Product, NewsArticle } from '@/types/database'
+import { NewsArticle } from '@/types/database'
+import { getLiveMarketData } from '@/lib/data/market-data'
 
 export const revalidate = 60 // revalidate page every 60s
 
 export default async function HomePage() {
   const supabase = createPublicServerClient()
 
-  // Fetch top products and latest news in parallel
-  const [productsRes, newsRes] = await Promise.all([
-    supabase
-      .from('products')
-      .select('*')
-      .order('is_featured', { ascending: false })
-      .limit(5),
+  // Fetch real market index, top products, and latest news in parallel
+  const [marketData, newsRes] = await Promise.all([
+    getLiveMarketData(),
     supabase
       .from('news')
       .select('*')
@@ -29,7 +26,7 @@ export default async function HomePage() {
       .limit(3),
   ])
 
-  const products = productsRes.data
+  const { countryData, topProducts } = marketData
   const news = newsRes.data
 
   return (
@@ -43,11 +40,11 @@ export default async function HomePage() {
       {/* Rest of page content — constrained */}
       <div className="space-y-16 py-12 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
 
-        {/* 2. Main European Seafood Index */}
-        <SeafoodIndexCard />
+        {/* 2. Main European Seafood Index with real live verified market data */}
+        <SeafoodIndexCard initialCountryData={countryData} />
 
-        {/* 3. Top Seafood Products */}
-        <TopProducts products={(products as Product[]) || []} />
+        {/* 3. Top Seafood Products corresponding directly to real active products */}
+        <TopProducts topProducts={topProducts} />
 
         {/* 3.5 Expert Profile — Hassan Abdulkadir */}
         <ExpertProfile />

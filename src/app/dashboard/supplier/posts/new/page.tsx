@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { addSupplierPost } from '@/lib/data/products-data'
+import { ProductMarketGraph } from '@/components/market/product-market-graph'
 import {
   ArrowLeft,
   Fish,
@@ -422,23 +423,33 @@ export default function PostStockPage() {
                 1. Product Name *
               </label>
               {form.productName ? (
-                <div className="flex items-center justify-between p-4 bg-blue-50/60 border border-blue-200 rounded-2xl">
-                  <div className="flex items-center gap-3">
-                    <div className="h-10 w-10 rounded-xl bg-[#022B96] text-white flex items-center justify-center font-bold">
-                      <Fish className="h-5 w-5" />
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between p-4 bg-blue-50/60 border border-blue-200 rounded-2xl">
+                    <div className="flex items-center gap-3">
+                      <div className="h-10 w-10 rounded-xl bg-[#022B96] text-white flex items-center justify-center font-bold">
+                        <Fish className="h-5 w-5" />
+                      </div>
+                      <div>
+                        <p className="font-extrabold text-slate-900 text-base leading-tight">{form.productName}</p>
+                        <p className="text-xs text-slate-500 mt-0.5">{selectedProductMeta?.category || 'Seafood Item'}</p>
+                      </div>
                     </div>
-                    <div>
-                      <p className="font-extrabold text-slate-900 text-base leading-tight">{form.productName}</p>
-                      <p className="text-xs text-slate-500 mt-0.5">{selectedProductMeta?.category || 'Seafood Item'}</p>
-                    </div>
+                    <button
+                      type="button"
+                      onClick={() => { set('productName', ''); setPickerOpen(true) }}
+                      className="text-xs font-bold text-[#022B96] hover:underline cursor-pointer"
+                    >
+                      Change Species
+                    </button>
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => { set('productName', ''); setPickerOpen(true) }}
-                    className="text-xs font-bold text-[#022B96] hover:underline cursor-pointer"
-                  >
-                    Change Species
-                  </button>
+
+                  {/* Live Real-time Market Graph & Benchmark for this product */}
+                  <ProductMarketGraph
+                    productName={form.productName}
+                    supplierPrice={parseFloat(form.pricePerKg) || undefined}
+                    currency={form.currency}
+                    compact={true}
+                  />
                 </div>
               ) : (
                 <button

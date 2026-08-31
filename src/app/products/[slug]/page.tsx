@@ -11,6 +11,7 @@ import {
 import { BlurGate } from '@/components/blur-gate'
 import { getFishImageForProduct } from '@/lib/data/products-data'
 import { createClient } from '@/lib/supabase/client'
+import { ProductMarketGraph } from '@/components/market/product-market-graph'
 
 const COUNTRY_FLAGS: Record<string, string> = {
   Norway: '🇳🇴', Spain: '🇪🇸', Greece: '🇬🇷', Iceland: '🇮🇸',
@@ -192,6 +193,12 @@ export default function ProductDetailsPage({ params }: { params: Promise<{ slug:
       </div>
 
       <div className="max-w-6xl mx-auto px-4 sm:px-6 mt-8 relative z-10 space-y-6">
+
+        {/* Live Market Benchmark & Trend Graph */}
+        <ProductMarketGraph
+          productName={productName}
+          currency={offers[0]?.currency || 'EUR'}
+        />
 
         {/* Supplier Offers Table */}
         <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden">
