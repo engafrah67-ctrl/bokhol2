@@ -1,5 +1,4 @@
 import { createClient } from '@/lib/supabase/client'
-import { createPublicServerClient } from '@/lib/supabase/server'
 import { getFishImageForProduct } from '@/lib/data/products-data'
 
 export interface SpeciesTrendPoint {
@@ -310,7 +309,7 @@ export async function getLiveMarketData(): Promise<{
   topProducts: TopMarketProduct[]
 }> {
   try {
-    const supabase = typeof window === 'undefined' ? createPublicServerClient() : createClient()
+    const supabase = createClient()
     const { data: posts } = await supabase
       .from('supplier_posts')
       .select('id, title, content, created_at, updated_at')
