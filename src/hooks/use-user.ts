@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
-import type { User } from '@supabase/supabase-js'
+import type { User, Session, AuthChangeEvent } from '@supabase/supabase-js'
 import type { UserRole } from '@/types/database'
 
 interface UserProfile {
@@ -22,25 +22,35 @@ interface UseUserReturn {
   isAuthenticated: boolean
 }
 
-// Module-level cache for instant client-side transitions
+// Module-level cache — survives client-side navigation, gives instant results
 let cachedUser: User | null = null
 let cachedProfile: UserProfile | null = null
-let cachedLoading = true
 let profileFetchPromise: Promise<UserProfile | null> | null = null
 
 export function useUser(): UseUserReturn {
   const [user, setUser] = useState<User | null>(cachedUser)
   const [profile, setProfile] = useState<UserProfile | null>(cachedProfile)
-  const [isLoading, setIsLoading] = useState<boolean>(cachedLoading && !cachedUser)
+  const [isLoading, setIsLoading] = useState<boolean>(!cachedUser)
   const supabase = createClient()
 
   useEffect(() => {
     let isMounted = true
 
+    function createDefaultProfile(currentUser: User): UserProfile {
+      const role = (currentUser.user_metadata?.role as UserRole) || 'buyer'
+      return {
+        id: currentUser.id,
+        role: currentUser.email === 'admin@gmail.com' ? 'admin' : role,
+        full_name: currentUser.user_metadata?.full_name || currentUser.email || 'User',
+        avatar_url: currentUser.user_metadata?.avatar_url || null,
+        company_id: currentUser.user_metadata?.company_id || null,
+      }
+    }
+
     async function fetchProfile(currentUser: User): Promise<UserProfile> {
-      if (profileFetchPromise && cachedUser?.id === currentUser.id) {
-        const p = await profileFetchPromise
-        if (p) return p
+      // If already fetching for this user, reuse the in-flight promise
+      if (profileFetchPromise && cachedProfile?.id === currentUser.id) {
+        return (await profileFetchPromise) || createDefaultProfile(currentUser)
       }
 
       profileFetchPromise = (async () => {
@@ -51,90 +61,65 @@ export function useUser(): UseUserReturn {
             .eq('id', currentUser.id)
             .maybeSingle()
 
-          const isAdmin = currentUser.email === 'admin@gmail.com'
-
-          let finalProfile: UserProfile
           if (data) {
-            finalProfile = {
-              ...data,
-              role: isAdmin ? 'admin' : data.role,
-            }
-          } else {
-            const fallbackRole = isAdmin ? 'admin' : (currentUser.user_metadata?.role as UserRole) || 'buyer'
-            finalProfile = {
-              id: currentUser.id,
-              role: fallbackRole,
-              full_name: currentUser.user_metadata?.full_name || currentUser.email || 'User',
-              avatar_url: null,
-              company_id: null,
-            }
+            const isAdmin = currentUser.email === 'admin@gmail.com'
+            const fullProfile: UserProfile = { ...data, role: isAdmin ? 'admin' : data.role }
+            cachedProfile = fullProfile
+            return fullProfile
           }
-          cachedProfile = finalProfile
-          return finalProfile
+          return createDefaultProfile(currentUser)
         } catch (_) {
-          const isAdmin = currentUser.email === 'admin@gmail.com'
-          const fallbackRole = isAdmin ? 'admin' : (currentUser.user_metadata?.role as UserRole) || 'buyer'
-          const fallbackProfile: UserProfile = {
-            id: currentUser.id,
-            role: fallbackRole,
-            full_name: currentUser.user_metadata?.full_name || currentUser.email || 'User',
-            avatar_url: null,
-            company_id: null,
-          }
-          cachedProfile = fallbackProfile
-          return fallbackProfile
+          return createDefaultProfile(currentUser)
         } finally {
           profileFetchPromise = null
         }
       })()
 
-      return profileFetchPromise as Promise<UserProfile>
+      return (await profileFetchPromise) || createDefaultProfile(currentUser)
     }
 
-    async function syncUserSession(currentUser: User | null) {
+    async function updateSession(currentUser: User | null) {
       if (!isMounted) return
+
+      cachedUser = currentUser
+      setUser(currentUser)
+
       if (currentUser) {
-        cachedUser = currentUser
-        setUser(currentUser)
-        
-        // Fast path: if profile is already cached for this user, use it immediately
+        // Fast path: serve from cache immediately, no network wait
         if (cachedProfile && cachedProfile.id === currentUser.id) {
           setProfile(cachedProfile)
           setIsLoading(false)
-          cachedLoading = false
           return
         }
 
-        const userProf = await fetchProfile(currentUser)
+        // Fast path: build from user_metadata (already in JWT — zero network call)
+        // so navbar renders instantly
+        const quickProfile = createDefaultProfile(currentUser)
         if (isMounted) {
-          setProfile(userProf)
+          setProfile(quickProfile)
           setIsLoading(false)
-          cachedLoading = false
         }
+
+        // Fetch full DB profile in background (non-blocking)
+        fetchProfile(currentUser).then((fullProfile) => {
+          if (isMounted) setProfile(fullProfile)
+        })
       } else {
-        cachedUser = null
         cachedProfile = null
-        cachedLoading = false
-        setUser(null)
         setProfile(null)
         setIsLoading(false)
       }
     }
 
-    // Check current session only if not already loaded or cache is empty
-    if (!cachedUser && cachedLoading) {
-      supabase.auth.getSession().then((res: any) => {
-        const session = res?.data?.session
-        syncUserSession(session?.user ?? null)
-      }).catch(() => {
-        if (isMounted) setIsLoading(false)
-      })
-    }
+    // getSession() reads from local cookie/storage — NO remote network call
+    supabase.auth.getSession().then(({ data }: { data: { session: Session | null } }) => {
+      updateSession(data.session?.user ?? null)
+    })
 
-    // Subscribe to auth state changes
+    // Subscribe to auth state changes (sign-in / sign-out)
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      (_event: string, session: any) => {
-        syncUserSession(session?.user ?? null)
+      (_event: AuthChangeEvent, session: Session | null) => {
+        updateSession(session?.user ?? null)
       }
     )
 
@@ -148,7 +133,7 @@ export function useUser(): UseUserReturn {
   const effectiveRole: UserRole | null =
     user?.email === 'admin@gmail.com'
       ? 'admin'
-      : profile?.role ?? (user?.user_metadata?.role as UserRole) ?? null
+      : (profile?.role ?? (user?.user_metadata?.role as UserRole) ?? null)
 
   return {
     user,
@@ -158,4 +143,3 @@ export function useUser(): UseUserReturn {
     isAuthenticated: !!user,
   }
 }
-

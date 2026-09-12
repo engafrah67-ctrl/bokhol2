@@ -10,8 +10,11 @@ import {
   Tooltip,
   ResponsiveContainer,
 } from 'recharts'
-import { TrendingUp, TrendingDown, DollarSign, BarChart3, Scale, Fish, ArrowUpRight, Sparkles, CheckCircle2 } from 'lucide-react'
+import Link from 'next/link'
+import { TrendingUp, TrendingDown, DollarSign, BarChart3, Scale, Fish, ArrowUpRight, Sparkles, CheckCircle2, Lock } from 'lucide-react'
 import { getProductMarketTrend, SpeciesTrendPoint } from '@/lib/data/market-data'
+import { useUser } from '@/hooks/use-user'
+import { BlurGate } from '@/components/blur-gate'
 
 interface ProductMarketGraphProps {
   productName: string
@@ -26,6 +29,7 @@ export function ProductMarketGraph({
   currency = 'EUR',
   compact = false,
 }: ProductMarketGraphProps) {
+  const { user } = useUser()
   const [trendData, setTrendData] = useState<{
     currentAvg: number
     weekHigh: number
@@ -80,7 +84,6 @@ export function ProductMarketGraph({
 
   if (!trendData) return null
 
-  const isUp = trendData.changePct >= 0
   const symbol = currency === 'USD' ? '$' : currency === 'GBP' ? '£' : '€'
 
   // Comparison analysis if supplier entered a price
@@ -100,73 +103,94 @@ export function ProductMarketGraph({
   }
 
   return (
-    <div className="bg-gradient-to-br from-blue-50/80 via-white to-slate-50 dark:from-slate-900 dark:via-slate-900 dark:to-slate-800/80 border border-blue-200/80 dark:border-slate-700 rounded-3xl p-5 sm:p-6 shadow-sm space-y-5">
+    <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-5 sm:p-6 shadow-xs space-y-5">
       {/* Header Banner */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-100 dark:border-slate-800">
         <div className="flex items-center gap-3">
-          <div className="h-10 w-10 rounded-2xl bg-[#022B96] text-white flex items-center justify-center shadow-md shrink-0">
+          <div className="h-9 w-9 rounded-xl bg-blue-50 dark:bg-blue-950/50 text-[#022B96] dark:text-blue-400 flex items-center justify-center shrink-0">
             <BarChart3 className="h-5 w-5" />
           </div>
           <div>
             <div className="flex items-center gap-2">
-              <h4 className="font-extrabold text-slate-900 dark:text-white text-base leading-tight">
+              <h4 className="font-bold text-slate-900 dark:text-white text-sm">
                 {productName} — Market Benchmark Graph
               </h4>
-              <span className="inline-flex items-center gap-1 text-[10px] font-bold bg-blue-100 text-blue-800 dark:bg-blue-900/50 dark:text-blue-300 px-2 py-0.5 rounded-full">
-                <Sparkles className="h-2.5 w-2.5" /> Real-time
-              </span>
             </div>
-            <p className="text-xs text-slate-500 mt-0.5">
+            <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
               Weekly verified spot market transaction data across European seafood exchanges
             </p>
           </div>
         </div>
 
         {/* Live Avg Price */}
-        <div className="bg-white dark:bg-slate-800 border border-blue-100 dark:border-slate-700 rounded-2xl px-4 py-2.5 shadow-xs text-right self-start sm:self-auto">
-          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Market Benchmark Avg</span>
-          <div className="flex items-baseline justify-end gap-1.5 mt-0.5">
-            <span className="text-lg font-black text-[#022B96] dark:text-blue-400">
-              {symbol}{trendData.currentAvg.toFixed(2)}
-            </span>
+        <div className="bg-slate-50 dark:bg-slate-800 border border-slate-200/80 dark:border-slate-700 rounded-xl px-4 py-2 text-right self-start sm:self-auto">
+          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Benchmark Avg</span>
+          <div className="flex items-baseline justify-end gap-1 mt-0.5">
+            <BlurGate>
+              <span className="text-base font-black text-[#022B96] dark:text-blue-400">
+                {symbol}{trendData.currentAvg.toFixed(2)}
+              </span>
+            </BlurGate>
             <span className="text-xs font-semibold text-slate-400">/ kg</span>
-            <span className={`text-[10px] font-extrabold px-1.5 py-0.5 rounded-md ml-1 ${isUp ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-600'}`}>
-              {isUp ? '▲' : '▼'} {Math.abs(trendData.changePct)}%
-            </span>
           </div>
         </div>
       </div>
 
-      {/* Metrics Row */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
-        <div className="bg-white/80 dark:bg-slate-800/80 p-3 rounded-2xl border border-slate-200/70 dark:border-slate-700">
-          <span className="text-[10px] font-bold uppercase text-slate-400 block">Weekly High</span>
-          <span className="font-extrabold text-slate-800 dark:text-slate-200 text-sm mt-0.5 block">
-            {symbol}{trendData.weekHigh.toFixed(2)} / kg
-          </span>
+      {/* Metrics Row - Simple & Clean */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 text-xs">
+        <div className="bg-slate-50 dark:bg-slate-800/60 p-3 rounded-xl border border-slate-100 dark:border-slate-800">
+          <span className="text-[10px] font-bold uppercase text-slate-400 block">Current Avg Price</span>
+          <div className="font-bold text-slate-800 dark:text-slate-200 text-sm mt-0.5">
+            <BlurGate>
+              <span>{symbol}{trendData.currentAvg.toFixed(2)} / kg</span>
+            </BlurGate>
+          </div>
         </div>
-        <div className="bg-white/80 dark:bg-slate-800/80 p-3 rounded-2xl border border-slate-200/70 dark:border-slate-700">
-          <span className="text-[10px] font-bold uppercase text-slate-400 block">Weekly Low</span>
-          <span className="font-extrabold text-slate-800 dark:text-slate-200 text-sm mt-0.5 block">
-            {symbol}{trendData.weekLow.toFixed(2)} / kg
-          </span>
+        <div className="bg-slate-50 dark:bg-slate-800/60 p-3 rounded-xl border border-slate-100 dark:border-slate-800">
+          <span className="text-[10px] font-bold uppercase text-slate-400 block">Active Verified Suppliers</span>
+          <div className="font-bold text-slate-800 dark:text-slate-200 text-sm mt-0.5">
+            <BlurGate>
+              <span>{trendData.suppliersCount} {trendData.suppliersCount === 1 ? 'Supplier' : 'Suppliers'}</span>
+            </BlurGate>
+          </div>
         </div>
-        <div className="bg-white/80 dark:bg-slate-800/80 p-3 rounded-2xl border border-slate-200/70 dark:border-slate-700">
-          <span className="text-[10px] font-bold uppercase text-slate-400 block">Active Exporters</span>
-          <span className="font-extrabold text-slate-800 dark:text-slate-200 text-sm mt-0.5 block">
-            {trendData.suppliersCount} Verified
-          </span>
-        </div>
-        <div className="bg-white/80 dark:bg-slate-800/80 p-3 rounded-2xl border border-slate-200/70 dark:border-slate-700">
-          <span className="text-[10px] font-bold uppercase text-slate-400 block">Pricing Recommendation</span>
-          <span className="font-extrabold text-emerald-700 dark:text-emerald-400 text-xs mt-0.5 block">
-            {symbol}{(trendData.currentAvg * 0.96).toFixed(2)} – {symbol}{(trendData.currentAvg * 1.04).toFixed(2)}
+        <div className="bg-slate-50 dark:bg-slate-800/60 p-3 rounded-xl border border-slate-100 dark:border-slate-800 col-span-2 sm:col-span-1">
+          <span className="text-[10px] font-bold uppercase text-slate-400 block">Benchmark Currency</span>
+          <span className="font-bold text-slate-800 dark:text-slate-200 text-sm mt-0.5 block">
+            {currency} (EUR Spot)
           </span>
         </div>
       </div>
 
       {/* Recharts 8-Week Trend Graph */}
-      <div className="w-full bg-white dark:bg-slate-900 rounded-2xl p-4 border border-slate-200/70 dark:border-slate-700 shadow-xs" style={{ height: compact ? 180 : 220 }}>
+      <div className="relative w-full bg-white dark:bg-slate-900 rounded-2xl p-4 border border-slate-200/70 dark:border-slate-700 shadow-xs overflow-hidden" style={{ height: compact ? 180 : 220 }}>
+        {!user && (
+          <div className="absolute inset-0 z-20 backdrop-blur-xs bg-white/45 dark:bg-slate-900/50 flex flex-col items-center justify-center p-4 text-center">
+            <div className="h-10 w-10 rounded-2xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-[#022B96] dark:text-blue-400 flex items-center justify-center shadow-xs mb-2">
+              <Lock className="h-4.5 w-4.5" />
+            </div>
+            <p className="text-xs font-bold text-slate-800 dark:text-slate-200">
+              Live European Benchmark Graph
+            </p>
+            <p className="text-[11px] text-slate-500 dark:text-slate-400 max-w-xs mt-0.5 mb-3">
+              Sign in or create an account to view real-time market trends.
+            </p>
+            <div className="flex items-center gap-2">
+              <Link
+                href="/login"
+                className="bg-[#022B96] hover:bg-[#011a5e] text-white text-xs font-semibold px-4 py-1.5 rounded-xl transition shadow-xs"
+              >
+                Sign In
+              </Link>
+              <Link
+                href="/signup"
+                className="bg-white hover:bg-slate-50 text-slate-700 border border-slate-300 dark:bg-slate-800 dark:text-slate-200 dark:border-slate-700 text-xs font-semibold px-4 py-1.5 rounded-xl transition shadow-2xs"
+              >
+                Register Free
+              </Link>
+            </div>
+          </div>
+        )}
         <ResponsiveContainer width="100%" height="100%">
           <AreaChart data={trendData.trendPoints} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
             <defs>

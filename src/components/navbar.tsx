@@ -83,13 +83,21 @@ export function Navbar() {
           {/* Desktop Navigation */}
           <div className="hidden md:flex items-center gap-8">
             {NAV_ITEMS.map((item) => {
-              const isActive = item.href !== '/#indexes' && pathname.startsWith(item.href)
+              const isIndexItem = item.href === '/#indexes'
+              const isActive = !isIndexItem && pathname.startsWith(item.href)
               return (
                 <Link
                   key={item.href} 
                   href={item.href}
                   prefetch={true}
-                  className={`relative text-sm font-semibold transition-all duration-300 py-1 
+                  onClick={(e) => {
+                    if (isIndexItem && pathname === '/') {
+                      e.preventDefault()
+                      const el = document.getElementById('indexes')
+                      if (el) el.scrollIntoView({ behavior: 'smooth' })
+                    }
+                  }}
+                  className={`relative text-sm font-semibold transition-all duration-300 py-1 cursor-pointer 
                     ${isActive ? 'text-[#022B96]' : 'text-foreground/75 hover:text-[#022B96]'}
                     after:content-[''] after:absolute after:-bottom-1 after:left-0 after:w-full after:h-[2px] 
                     after:bg-[#022B96] after:transition-transform after:duration-300 after:origin-center
@@ -203,6 +211,13 @@ export function Navbar() {
                     <Button variant="ghost" size="sm" className="gap-2 cursor-pointer font-semibold rounded-lg hover:bg-muted text-slate-800">
                       <LayoutDashboard className="h-4 w-4 text-[#022B96]" />
                       Buyer Dashboard
+                    </Button>
+                  </Link>
+                ) : activeRole === 'supplier' ? (
+                  <Link href="/dashboard/supplier" prefetch={true}>
+                    <Button variant="ghost" size="sm" className="gap-2 cursor-pointer font-semibold rounded-lg hover:bg-muted text-slate-800">
+                      <LayoutDashboard className="h-4 w-4 text-[#022B96]" />
+                      {t('nav_dashboard')}
                     </Button>
                   </Link>
                 ) : (
@@ -326,7 +341,7 @@ export function Navbar() {
             {user ? (
               <>
                 <Link
-                  href={activeRole === 'buyer' ? '/dashboard/buyer' : activeRole === 'admin' ? '/dashboard/admin' : '/dashboard'}
+                  href={activeRole === 'buyer' ? '/dashboard/buyer' : activeRole === 'supplier' ? '/dashboard/supplier' : activeRole === 'admin' ? '/dashboard/admin' : '/dashboard'}
                   prefetch={true}
                   onClick={() => setIsOpen(false)}
                 >

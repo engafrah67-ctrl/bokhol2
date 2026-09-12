@@ -105,16 +105,16 @@ export default function SupplierDashboardPage() {
   useEffect(() => {
     let isMounted = true
 
-    // Safety timer: Guarantee loading finishes in 1.5 seconds max
+    // Safety timer: Guarantee loading finishes in 400ms max
     const safetyTimer = setTimeout(() => {
       if (isMounted) setLoading(false)
-    }, 1500)
+    }, 400)
 
     async function loadDashboardData() {
       try {
         // Fast race timeout for Supabase auth
         const timeoutPromise = new Promise<{ data: { session: null } }>((resolve) =>
-          setTimeout(() => resolve({ data: { session: null } }), 1000)
+          setTimeout(() => resolve({ data: { session: null } }), 600)
         )
 
         const sessionResult = await Promise.race([
@@ -127,7 +127,7 @@ export default function SupplierDashboardPage() {
         if (!currentUser) {
           const userResult = await Promise.race([
             supabase.auth.getUser(),
-            new Promise<{ data: { user: null } }>((res) => setTimeout(() => res({ data: { user: null } }), 1000))
+            new Promise<{ data: { user: null } }>((res) => setTimeout(() => res({ data: { user: null } }), 400))
           ])
           currentUser = userResult?.data?.user || null
         }
@@ -150,7 +150,6 @@ export default function SupplierDashboardPage() {
             supabase
               .from('countries')
               .select('id, name, flag_emoji')
-              .eq('is_featured', true)
               .order('name'),
             supabase
               .from('buyer_requests')
@@ -168,9 +167,15 @@ export default function SupplierDashboardPage() {
             setUserPhone(userProfile.phone || '')
           }
 
-          // 2. Set Countries & Requests (directly from Supabase buyer_requests)
-          if (countriesRes.data && isMounted) setCountries(countriesRes.data)
-          if (requestsRes.data && isMounted) setBuyerRequests(requestsRes.data)
+          // 2. Set Countries & Requests
+          let loadedCountries: any[] = countriesRes.data ? [...countriesRes.data] : []
+          if (!loadedCountries.some((c: any) => c.name?.toLowerCase() === 'belgium')) {
+            loadedCountries.unshift({ id: 'be-static', name: 'Belgium', flag_emoji: '🇧🇪' })
+          }
+          if (isMounted) {
+            setCountries(loadedCountries)
+            if (requestsRes.data) setBuyerRequests(requestsRes.data)
+          }
 
           // 3. Set Company & Posts
           const companyData = companyRes.data
@@ -183,7 +188,21 @@ export default function SupplierDashboardPage() {
             setCompanyPhone(companyData.phone || '')
             setCompanyAddress(companyData.address || '')
             setCompanyCity(companyData.city || '')
-            setCompanyCountryId(companyData.country_id || '')
+            
+            // Resolve country ID from company or signup metadata
+            let initialCountryId = companyData.country_id || ''
+            if (!initialCountryId && currentUser.user_metadata?.country) {
+              const metaCountry = String(currentUser.user_metadata.country).toLowerCase()
+              const matched = loadedCountries.find((c: any) =>
+                c.name?.toLowerCase() === metaCountry ||
+                (metaCountry.includes('holland') && c.name?.toLowerCase() === 'netherlands') ||
+                (metaCountry.includes('netherlands') && c.name?.toLowerCase() === 'netherlands') ||
+                (metaCountry.includes('belgium') && c.name?.toLowerCase() === 'belgium') ||
+                (metaCountry.includes('germany') && c.name?.toLowerCase() === 'germany')
+              )
+              if (matched) initialCountryId = matched.id
+            }
+            setCompanyCountryId(initialCountryId)
             setCompanyYearFounded(companyData.year_founded ? String(companyData.year_founded) : '')
             setCompanyEmployeeCount(companyData.employee_count || '')
             setCompanyLogoUrl(companyData.logo_url || '')
@@ -731,21 +750,11 @@ export default function SupplierDashboardPage() {
                   )}
                 </div>
 
-                {company && (
+                {company && company.is_verified && (
                   <div className="flex items-center gap-6 pt-2 border-t border-slate-100">
-                    <div>
-                      <p className="text-[10px] font-bold uppercase text-slate-400 tracking-wider">Trust Score</p>
-                      <p className="text-lg font-bold text-slate-800 mt-0.5">{company.trust_score ?? 0} <span className="text-xs font-medium text-slate-400">/ 100</span></p>
-                    </div>
-                    <div>
-                      <p className="text-[10px] font-bold uppercase text-slate-400 tracking-wider">Activity Score</p>
-                      <p className="text-lg font-bold text-slate-800 mt-0.5">{company.activity_score ?? 0} <span className="text-xs font-medium text-slate-400">/ 100</span></p>
-                    </div>
-                    {company.is_verified && (
-                      <span className="ml-auto inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-emerald-50 text-emerald-700 text-xs font-bold border border-emerald-100">
-                        <Award className="h-3.5 w-3.5" /> Verified Supplier
-                      </span>
-                    )}
+                    <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-emerald-50 text-emerald-700 text-xs font-bold border border-emerald-100">
+                      <Award className="h-3.5 w-3.5" /> Verified Supplier
+                    </span>
                   </div>
                 )}
 

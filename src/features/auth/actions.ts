@@ -28,6 +28,8 @@ const signUpSchema = z.object({
   email: z.string().email('Invalid email address'),
   password: z.string().min(8, 'Password must be at least 8 characters'),
   role: z.enum(['buyer', 'supplier']),
+  country: z.string().optional().nullable(),
+  country_code: z.string().optional().nullable(),
 })
 
 const signInSchema = z.object({
@@ -54,20 +56,27 @@ export async function signUp(
       email: formData.get('email'),
       password: formData.get('password'),
       role: formData.get('role'),
+      country: formData.get('country'),
+      country_code: formData.get('country_code'),
     })
 
     if (!parsed.success) {
       return { error: parsed.error.issues[0].message }
     }
 
-    const { full_name, email, password, role } = parsed.data
+    const { full_name, email, password, role, country, country_code } = parsed.data
     const supabase = await createClient()
 
     const { data, error } = await supabase.auth.signUp({
       email,
       password,
       options: {
-        data: { full_name, role },
+        data: {
+          full_name,
+          role,
+          country: country || (role === 'supplier' ? 'Belgium' : null),
+          country_code: country_code || (role === 'supplier' ? 'BE' : null),
+        },
         emailRedirectTo: `${process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000'}/auth/callback`,
       },
     })

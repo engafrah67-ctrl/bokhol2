@@ -8,16 +8,20 @@ import { ExpertProfile } from '@/components/home/expert-profile'
 import { FAQSection } from '@/components/home/faq-section'
 import { StatsBar } from '@/components/home/stats-bar'
 import { NewsArticle } from '@/types/database'
-import { getLiveMarketData } from '@/lib/data/market-data'
+import { parseSupplierPostsToMarketData, getLiveMarketData } from '@/lib/data/market-data'
 
-export const revalidate = 10 // revalidate page every 10s for fast live updates
+export const revalidate = 10 // Cache statically for 10s for instant navigation and fresh sync
 
 export default async function HomePage() {
   const supabase = createPublicServerClient()
 
-  // Fetch real market index, top products, and latest news in parallel
-  const [marketData, newsRes] = await Promise.all([
-    getLiveMarketData(),
+  // Fetch real supplier posts (matching /products catalog 1:1) and latest news in parallel
+  const [postsRes, newsRes] = await Promise.all([
+    supabase
+      .from('supplier_posts')
+      .select('id, title, content, created_at, updated_at')
+      .eq('is_published', true)
+      .order('created_at', { ascending: false }),
     supabase
       .from('news')
       .select('*')
@@ -26,8 +30,13 @@ export default async function HomePage() {
       .limit(3),
   ])
 
+  const posts = postsRes?.data || []
+  const marketData = posts.length > 0
+    ? parseSupplierPostsToMarketData(posts)
+    : await getLiveMarketData()
+
   const { countryData, topProducts } = marketData
-  const news = newsRes.data
+  const news = newsRes?.data
 
   return (
     <div>

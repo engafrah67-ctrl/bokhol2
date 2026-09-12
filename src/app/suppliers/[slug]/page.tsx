@@ -33,6 +33,7 @@ import {
 } from 'lucide-react'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
+import { BlurGate } from '@/components/blur-gate'
 
 interface SupplierProductListing {
   id: string
@@ -63,55 +64,9 @@ export default function SupplierProfilePage() {
   const [products, setProducts] = useState<SupplierProductListing[]>([])
   const [posts, setPosts] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
-  const [bannerBg, setBannerBg] = useState<string | null>(null)
-
   const [showAuthModal, setShowAuthModal] = useState(false)
   const [showContactModal, setShowContactModal] = useState(false)
   const [selectedProductForEnquiry, setSelectedProductForEnquiry] = useState<SupplierProductListing | null>(null)
-
-  // Extract logo corner background color
-  useEffect(() => {
-    if (!company?.logo_url) return
-
-    if (company.banner_color) {
-      setBannerBg(company.banner_color)
-      return
-    }
-
-    const img = new Image()
-    img.crossOrigin = 'Anonymous'
-    img.src = company.logo_url
-    img.onload = () => {
-      try {
-        const canvas = document.createElement('canvas')
-        canvas.width = img.width
-        canvas.height = img.height
-        const ctx = canvas.getContext('2d')
-        if (!ctx) return
-        ctx.drawImage(img, 0, 0)
-
-        // Sample corner pixels
-        const samples = [
-          ctx.getImageData(5, 5, 1, 1).data,
-          ctx.getImageData(img.width - 5, 5, 1, 1).data,
-          ctx.getImageData(5, img.height - 5, 1, 1).data,
-          ctx.getImageData(img.width - 5, img.height - 5, 1, 1).data,
-        ]
-
-        for (const sample of samples) {
-          const [r, g, b, a] = sample
-          // If non-transparent and not pure white
-          if (a > 200 && !(r > 245 && g > 245 && b > 245)) {
-            const hex = `#${((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1)}`
-            setBannerBg(hex)
-            return
-          }
-        }
-      } catch (err) {
-        console.warn('Canvas color extraction note:', err)
-      }
-    }
-  }, [company?.logo_url, company?.banner_color])
 
   useEffect(() => {
     if (!slug) return
@@ -316,6 +271,10 @@ export default function SupplierProfilePage() {
   const [showDirectContact, setShowDirectContact] = useState(false)
 
   const handleContactClick = (product?: SupplierProductListing) => {
+    if (!user) {
+      setShowAuthModal(true)
+      return
+    }
     setSelectedProductForEnquiry(product || null)
     setRfqTargetPrice(product?.pricePerKg ? String(product.pricePerKg) : '')
     setRfqDestination(company?.city ? `${company.city} Port` : 'Rotterdam Port, Netherlands')
@@ -409,21 +368,15 @@ export default function SupplierProfilePage() {
 
   return (
     <div className="min-h-screen bg-transparent pb-16">
-      {/* HERO BANNER */}
-      <div
-        className="relative h-52 sm:h-60 w-full overflow-hidden transition-colors duration-500"
-        style={{
-          backgroundColor: bannerBg || '#022B96',
-          backgroundImage: bannerBg ? 'none' : 'linear-gradient(to right, #022B96, #083abf, #0c45c4)'
-        }}
-      >
-        <div className="absolute inset-0 bg-gradient-to-b from-black/10 via-transparent to-black/25 pointer-events-none" />
+      {/* HERO BANNER - Clean & Minimal */}
+      <div className="relative h-40 sm:h-48 w-full overflow-hidden bg-gradient-to-r from-[#022B96] via-[#043fb3] to-[#011a5e] border-b border-slate-200 dark:border-slate-800">
+        <div className="absolute inset-0 bg-black/5 pointer-events-none" />
 
         {/* Top Left Back Button */}
         <div className="absolute top-4 left-4 sm:left-8 z-20">
           <Link
             href="/"
-            className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-white/15 hover:bg-white/25 backdrop-blur-md text-white text-xs font-semibold transition-all border border-white/20 shadow-xs cursor-pointer"
+            className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-white/20 hover:bg-white/30 backdrop-blur-md text-white text-xs font-semibold transition-all border border-white/25 shadow-xs cursor-pointer"
           >
             <ArrowLeft className="h-3.5 w-3.5" /> Back to Home
           </Link>
@@ -433,36 +386,46 @@ export default function SupplierProfilePage() {
       {/* PROFILE SECTION */}
       <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
         {/* Logo + Name Card */}
-        <div className="bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 rounded-3xl -mt-20 sm:-mt-24 p-6 sm:p-8 shadow-sm relative z-10">
-          <div className="flex flex-col sm:flex-row items-start sm:items-end gap-6">
+        <div className="bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 rounded-3xl -mt-16 sm:-mt-20 p-6 sm:p-8 shadow-xs relative z-10">
+          <div className="flex flex-col sm:flex-row items-start sm:items-end gap-5">
             {/* Logo */}
-            <div className="relative flex-shrink-0 -mt-12 sm:-mt-16">
+            <div className="relative flex-shrink-0 -mt-10 sm:-mt-14">
               {company.logo_url ? (
                 <img
                   src={company.logo_url}
                   alt={company.name}
-                  className="h-28 w-28 sm:h-32 sm:w-32 rounded-2xl object-cover bg-white p-1 border-4 border-white dark:border-slate-900 shadow-md ring-1 ring-slate-200/60"
+                  className="h-24 w-24 sm:h-28 sm:w-28 rounded-2xl object-cover bg-white p-1 border-4 border-white dark:border-slate-900 shadow-md ring-1 ring-slate-200/60"
                 />
               ) : (
-                <div className="h-28 w-28 sm:h-32 sm:w-32 bg-gradient-to-br from-blue-600 to-indigo-700 text-white border-4 border-white dark:border-slate-900 shadow-md rounded-2xl flex items-center justify-center font-bold text-4xl ring-1 ring-slate-200/60">
+                <div className="h-24 w-24 sm:h-28 sm:w-28 bg-gradient-to-br from-blue-600 to-indigo-700 text-white border-4 border-white dark:border-slate-900 shadow-md rounded-2xl flex items-center justify-center font-bold text-3xl ring-1 ring-slate-200/60">
                   {company.name.charAt(0).toUpperCase()}
                 </div>
               )}
               {company.is_verified && (
-                <div className="absolute -bottom-1 -right-1 h-7 w-7 bg-blue-600 rounded-full flex items-center justify-center border-2 border-white dark:border-slate-900 shadow-xs">
-                  <CheckCircle2 className="h-4 w-4 text-white" />
+                <div className="absolute -bottom-1 -right-1 h-6 w-6 bg-blue-600 rounded-full flex items-center justify-center border-2 border-white dark:border-slate-900 shadow-xs">
+                  <CheckCircle2 className="h-3.5 w-3.5 text-white" />
                 </div>
               )}
             </div>
 
             {/* Company Info */}
-            <div className="flex-1 min-w-0 pt-2 sm:pt-0">
+            <div className="flex-1 min-w-0 pt-1 sm:pt-0">
               <div className="flex flex-wrap items-start justify-between gap-4">
                 <div>
-                  <h1 className="text-2xl sm:text-3xl font-bold text-slate-900 dark:text-white tracking-tight">{company.name}</h1>
+                  <div className="flex items-center gap-2">
+                    <h1 className="text-2xl sm:text-3xl font-bold text-slate-900 dark:text-white tracking-tight">
+                      {company.name}
+                    </h1>
+                    {company.is_verified && (
+                      <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-emerald-50 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-400 text-xs font-semibold border border-emerald-200/60 dark:border-emerald-800/50">
+                        <CheckCircle2 className="h-3 w-3" /> Verified
+                      </span>
+                    )}
+                  </div>
+
                   <div className="flex flex-wrap items-center gap-2 mt-2 text-xs sm:text-sm text-slate-500 dark:text-slate-400">
                     {company.country && (
-                      <span className="flex items-center gap-1 font-medium">
+                      <span className="flex items-center gap-1 font-medium text-slate-700 dark:text-slate-300">
                         <span>{company.country.flag_emoji || '🌍'}</span>
                         <span>{company.country.name || company.country}</span>
                       </span>
@@ -495,14 +458,14 @@ export default function SupplierProfilePage() {
                   {isOwner && (
                     <Link
                       href="/dashboard/supplier/posts/new"
-                      className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold px-4 py-2.5 rounded-xl shadow-sm flex items-center gap-1.5 transition"
+                      className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold px-4 py-2.5 rounded-xl shadow-xs flex items-center gap-1.5 transition"
                     >
                       <Plus className="h-4 w-4" /> Add Product
                     </Link>
                   )}
                   <Button
                     onClick={() => handleContactClick()}
-                    className="bg-[#022B96] hover:bg-[#011a5e] text-white text-sm font-semibold px-6 py-2.5 rounded-xl shadow-sm cursor-pointer flex items-center gap-2 transition-all"
+                    className="bg-[#022B96] hover:bg-[#011a5e] text-white text-sm font-semibold px-5 py-2.5 rounded-xl shadow-xs cursor-pointer flex items-center gap-2 transition-all"
                   >
                     <MessageSquare className="h-4 w-4" />
                     Contact Supplier
@@ -510,25 +473,26 @@ export default function SupplierProfilePage() {
                 </div>
               </div>
 
-              {/* Stats Row */}
-              <div className="flex flex-wrap items-center gap-8 mt-5 pt-4 border-t border-slate-100 dark:border-slate-800">
+              {/* Clean Stats Row - Real & Accurate */}
+              <div className="flex flex-wrap items-center gap-6 sm:gap-8 mt-5 pt-4 border-t border-slate-100 dark:border-slate-800 text-xs">
                 <div>
-                  <p className="text-xs font-semibold text-slate-500 dark:text-slate-400">Trust Score</p>
-                  <p className="text-xl font-bold text-slate-800 dark:text-slate-100 mt-0.5">{company.trust_score ?? (company.is_verified ? 98 : 85)}<span className="text-xs font-normal text-slate-400">/100</span></p>
-                </div>
-                <div>
-                  <p className="text-xs font-semibold text-slate-500 dark:text-slate-400">Activity</p>
-                  <p className="text-xl font-bold text-slate-800 dark:text-slate-100 mt-0.5">{company.activity_score ?? (products.length > 0 ? 95 : 60)}<span className="text-xs font-normal text-slate-400">/100</span></p>
-                </div>
-                <div>
-                  <p className="text-xs font-semibold text-slate-500 dark:text-slate-400">Live Products</p>
-                  <p className="text-xl font-bold text-blue-600 dark:text-blue-400 mt-0.5">{products.length}</p>
-                </div>
-                {company.is_verified && (
-                  <span className="ml-auto inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-emerald-50 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-400 text-xs font-semibold border border-emerald-200/60 dark:border-emerald-800/50">
-                    <Award className="h-3.5 w-3.5" /> Verified Supplier
+                  <span className="text-slate-400 font-medium block">Active Sourcing</span>
+                  <span className="text-sm font-bold text-[#022B96] dark:text-blue-400 mt-0.5 block">
+                    {products.length} {products.length === 1 ? 'Live Product' : 'Live Products'}
                   </span>
-                )}
+                </div>
+                <div>
+                  <span className="text-slate-400 font-medium block">Supplier Type</span>
+                  <span className="text-sm font-bold text-slate-800 dark:text-slate-200 mt-0.5 block">
+                    Verified Exporter
+                  </span>
+                </div>
+                <div>
+                  <span className="text-slate-400 font-medium block">Distribution</span>
+                  <span className="text-sm font-bold text-slate-800 dark:text-slate-200 mt-0.5 block">
+                    Europe &amp; International
+                  </span>
+                </div>
               </div>
             </div>
           </div>
@@ -669,9 +633,13 @@ export default function SupplierProfilePage() {
                                   {product.availability}
                                 </span>
                               </div>
-                              <p className="text-base font-extrabold text-[#022B96] dark:text-blue-400 mt-0.5">
-                                {product.priceFormatted}
-                              </p>
+                              <div className="mt-0.5">
+                                <BlurGate>
+                                  <span className="text-base font-extrabold text-[#022B96] dark:text-blue-400">
+                                    {product.priceFormatted}
+                                  </span>
+                                </BlurGate>
+                              </div>
                             </div>
                           </div>
 

@@ -24,12 +24,17 @@ export async function middleware(request: NextRequest) {
 
   // FAST PATH 2: Public pages or unauthenticated users visiting auth pages
   // Do NOT make blocking remote network requests on public routes
-  if (!isDashboardRoute && (!isAuthRoute || !hasAuthCookie)) {
+  if (!isDashboardRoute && !isAuthRoute) {
     return NextResponse.next({ request })
   }
 
-  // 3. For protected dashboard routes with auth cookies OR auth routes with cookies,
-  // initialize Supabase client and verify the session/user
+  // 3. For dashboard routes with cookies, let Next.js stream and render immediately!
+  // Don't stall page transition with a blocking remote network call.
+  if (isDashboardRoute && hasAuthCookie) {
+    return NextResponse.next({ request })
+  }
+
+  // 4. For auth routes (/login, /signup), check if user is already logged in
   let supabaseResponse = NextResponse.next({
     request,
   })
@@ -56,18 +61,11 @@ export async function middleware(request: NextRequest) {
 
   let user = null
   try {
-    const { data } = await supabase.auth.getUser()
-    user = data?.user || null
+    const timeoutPromise = new Promise<null>((res) => setTimeout(() => res(null), 800))
+    const userPromise = supabase.auth.getUser().then((r) => r.data?.user || null).catch(() => null)
+    user = await Promise.race([userPromise, timeoutPromise])
   } catch (err) {
-    // If rate-limited (429) or network glitch, gracefully ignore error
     console.warn('Middleware auth check warn:', err)
-  }
-
-  // If visiting dashboard with invalid/expired cookie
-  if (isDashboardRoute && !user && !hasAuthCookie) {
-    const redirectUrl = new URL('/login', request.url)
-    redirectUrl.searchParams.set('next', pathname)
-    return NextResponse.redirect(redirectUrl)
   }
 
   // If already logged in and visiting login/signup, redirect to dashboard
@@ -80,7 +78,6 @@ export async function middleware(request: NextRequest) {
 
 export const config = {
   matcher: [
-    '/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
+    '/((?!api|_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
   ],
 }
-

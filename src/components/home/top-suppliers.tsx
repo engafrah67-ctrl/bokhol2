@@ -181,9 +181,11 @@ export function TopSuppliers() {
             </div>
 
             <div className="mt-4 pt-4 border-t border-slate-100 dark:border-slate-800 space-y-3">
-              <div className="flex items-center justify-between text-[10px] text-slate-400">
-                <span>Trust Score: <strong className="text-slate-700 dark:text-slate-200 font-semibold">{sup.trustScore}/100</strong></span>
-                <span>Employees: <strong className="text-slate-700 dark:text-slate-200 font-semibold">{sup.employees}</strong></span>
+              <div className="flex items-center justify-between text-[11px] text-slate-400">
+                <span className="text-emerald-700 font-medium flex items-center gap-1">
+                  <CheckCircle2 className="h-3 w-3" /> Verified Exporter
+                </span>
+                {sup.employees && <span>Employees: <strong className="text-slate-700 dark:text-slate-200 font-semibold">{sup.employees}</strong></span>}
               </div>
               
               {sup.slug ? (

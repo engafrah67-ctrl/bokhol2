@@ -100,11 +100,308 @@ const ALL_PRODUCTS = FISH_CATALOG.flatMap((cat) =>
   cat.items.map((item) => ({ name: item, category: cat.category, color: cat.color, image: cat.image }))
 )
 
+// Full world country list — Origin Country = where the product was actually produced/manufactured
 const COUNTRIES = [
-  'Holland (Netherlands)',
+  // Top seafood-producing nations (shown first for convenience)
+  'Norway',
+  'Vietnam',
+  'China',
+  'Chile',
+  'India',
+  'Indonesia',
+  'Ecuador',
+  'Peru',
+  'Thailand',
+  'Bangladesh',
+  'Iceland',
+  'Russia',
+  'Canada',
+  'United States',
+  'Japan',
+  'South Korea',
+  'Morocco',
+  'Mauritania',
+  'Senegal',
+  'Myanmar',
+  'Philippines',
+  'Malaysia',
+  'Australia',
+  'New Zealand',
+  'Argentina',
+  'Brazil',
+  'Mexico',
+  'Cuba',
+  'Ghana',
+  'South Africa',
+  'Madagascar',
+  'Tanzania',
+  'Kenya',
+  'Sri Lanka',
+  'Maldives',
+  'Faroe Islands',
+  'Greenland',
+  // European producing countries
+  'Netherlands',
   'Germany',
   'Belgium',
+  'Denmark',
+  'Sweden',
+  'Finland',
+  'France',
+  'Spain',
+  'Portugal',
+  'Italy',
+  'Greece',
+  'Poland',
+  'United Kingdom',
+  'Ireland',
+  'Turkey',
+  // Rest of world
+  'Afghanistan',
+  'Albania',
+  'Algeria',
+  'Angola',
+  'Armenia',
+  'Austria',
+  'Azerbaijan',
+  'Bahrain',
+  'Belarus',
+  'Belize',
+  'Benin',
+  'Bolivia',
+  'Bosnia and Herzegovina',
+  'Botswana',
+  'Bulgaria',
+  'Burkina Faso',
+  'Cambodia',
+  'Cameroon',
+  'Colombia',
+  'Congo',
+  'Costa Rica',
+  'Croatia',
+  'Cyprus',
+  'Czech Republic',
+  'Côte d\'Ivoire',
+  'Dominican Republic',
+  'Egypt',
+  'El Salvador',
+  'Ethiopia',
+  'Fiji',
+  'Georgia',
+  'Guatemala',
+  'Guinea',
+  'Guinea-Bissau',
+  'Guyana',
+  'Haiti',
+  'Honduras',
+  'Hungary',
+  'Iran',
+  'Iraq',
+  'Israel',
+  'Jamaica',
+  'Jordan',
+  'Kazakhstan',
+  'Kuwait',
+  'Kyrgyzstan',
+  'Laos',
+  'Latvia',
+  'Lebanon',
+  'Liberia',
+  'Libya',
+  'Lithuania',
+  'Luxembourg',
+  'Malawi',
+  'Mali',
+  'Malta',
+  'Mozambique',
+  'Namibia',
+  'Nepal',
+  'Nicaragua',
+  'Niger',
+  'Nigeria',
+  'North Korea',
+  'Oman',
+  'Pakistan',
+  'Panama',
+  'Papua New Guinea',
+  'Paraguay',
+  'Qatar',
+  'Romania',
+  'Saudi Arabia',
+  'Serbia',
+  'Sierra Leone',
+  'Slovakia',
+  'Slovenia',
+  'Solomon Islands',
+  'Somalia',
+  'Sudan',
+  'Suriname',
+  'Syria',
+  'Taiwan',
+  'Tajikistan',
+  'Togo',
+  'Trinidad and Tobago',
+  'Tunisia',
+  'Turkmenistan',
+  'Uganda',
+  'Ukraine',
+  'United Arab Emirates',
+  'Uruguay',
+  'Uzbekistan',
+  'Venezuela',
+  'Yemen',
+  'Zambia',
+  'Zimbabwe',
+  'Other',
 ]
+
+// ISO-2 country code map for flag images (flagcdn.com)
+const COUNTRY_ISO: Record<string, string> = {
+  'Norway': 'no', 'Vietnam': 'vn', 'China': 'cn', 'Chile': 'cl', 'India': 'in',
+  'Indonesia': 'id', 'Ecuador': 'ec', 'Peru': 'pe', 'Thailand': 'th', 'Bangladesh': 'bd',
+  'Iceland': 'is', 'Russia': 'ru', 'Canada': 'ca', 'United States': 'us', 'Japan': 'jp',
+  'South Korea': 'kr', 'Morocco': 'ma', 'Mauritania': 'mr', 'Senegal': 'sn', 'Myanmar': 'mm',
+  'Philippines': 'ph', 'Malaysia': 'my', 'Australia': 'au', 'New Zealand': 'nz',
+  'Argentina': 'ar', 'Brazil': 'br', 'Mexico': 'mx', 'Cuba': 'cu', 'Ghana': 'gh',
+  'South Africa': 'za', 'Madagascar': 'mg', 'Tanzania': 'tz', 'Kenya': 'ke',
+  'Sri Lanka': 'lk', 'Maldives': 'mv', 'Faroe Islands': 'fo', 'Greenland': 'gl',
+  'Netherlands': 'nl', 'Germany': 'de', 'Belgium': 'be', 'Denmark': 'dk',
+  'Sweden': 'se', 'Finland': 'fi', 'France': 'fr', 'Spain': 'es', 'Portugal': 'pt',
+  'Italy': 'it', 'Greece': 'gr', 'Poland': 'pl', 'United Kingdom': 'gb', 'Ireland': 'ie',
+  'Turkey': 'tr', 'Afghanistan': 'af', 'Albania': 'al', 'Algeria': 'dz', 'Angola': 'ao',
+  'Armenia': 'am', 'Austria': 'at', 'Azerbaijan': 'az', 'Bahrain': 'bh', 'Belarus': 'by',
+  'Belize': 'bz', 'Benin': 'bj', 'Bolivia': 'bo', 'Bosnia and Herzegovina': 'ba',
+  'Botswana': 'bw', 'Bulgaria': 'bg', 'Burkina Faso': 'bf', 'Cambodia': 'kh',
+  'Cameroon': 'cm', 'Colombia': 'co', 'Congo': 'cg', 'Costa Rica': 'cr', 'Croatia': 'hr',
+  'Cyprus': 'cy', 'Czech Republic': 'cz', "Côte d'Ivoire": 'ci',
+  'Dominican Republic': 'do', 'Egypt': 'eg', 'El Salvador': 'sv', 'Ethiopia': 'et',
+  'Fiji': 'fj', 'Georgia': 'ge', 'Guatemala': 'gt', 'Guinea': 'gn',
+  'Guinea-Bissau': 'gw', 'Guyana': 'gy', 'Haiti': 'ht', 'Honduras': 'hn',
+  'Hungary': 'hu', 'Iran': 'ir', 'Iraq': 'iq', 'Israel': 'il', 'Jamaica': 'jm',
+  'Jordan': 'jo', 'Kazakhstan': 'kz', 'Kuwait': 'kw', 'Kyrgyzstan': 'kg',
+  'Laos': 'la', 'Latvia': 'lv', 'Lebanon': 'lb', 'Liberia': 'lr', 'Libya': 'ly',
+  'Lithuania': 'lt', 'Luxembourg': 'lu', 'Malawi': 'mw', 'Mali': 'ml', 'Malta': 'mt',
+  'Mozambique': 'mz', 'Namibia': 'na', 'Nepal': 'np', 'Nicaragua': 'ni',
+  'Niger': 'ne', 'Nigeria': 'ng', 'North Korea': 'kp', 'Oman': 'om', 'Pakistan': 'pk',
+  'Panama': 'pa', 'Papua New Guinea': 'pg', 'Paraguay': 'py', 'Qatar': 'qa',
+  'Romania': 'ro', 'Saudi Arabia': 'sa', 'Serbia': 'rs', 'Sierra Leone': 'sl',
+  'Slovakia': 'sk', 'Slovenia': 'si', 'Solomon Islands': 'sb', 'Somalia': 'so',
+  'Sudan': 'sd', 'Suriname': 'sr', 'Syria': 'sy', 'Taiwan': 'tw', 'Tajikistan': 'tj',
+  'Togo': 'tg', 'Trinidad and Tobago': 'tt', 'Tunisia': 'tn', 'Turkmenistan': 'tm',
+  'Uganda': 'ug', 'Ukraine': 'ua', 'United Arab Emirates': 'ae', 'Uruguay': 'uy',
+  'Uzbekistan': 'uz', 'Venezuela': 've', 'Yemen': 'ye', 'Zambia': 'zm', 'Zimbabwe': 'zw',
+}
+
+function getFlagUrl(country: string): string | null {
+  const iso = COUNTRY_ISO[country]
+  return iso ? `https://flagcdn.com/w40/${iso}.png` : null
+}
+
+// Custom searchable country picker with flags
+function CountryOriginPicker({
+  value,
+  onChange,
+}: {
+  value: string
+  onChange: (v: string) => void
+}) {
+  const [open, setOpen] = React.useState(false)
+  const [search, setSearch] = React.useState('')
+  const ref = React.useRef<HTMLDivElement>(null)
+  const inputRef = React.useRef<HTMLInputElement>(null)
+
+  const filtered = search.trim()
+    ? COUNTRIES.filter((c) => c.toLowerCase().includes(search.toLowerCase()))
+    : COUNTRIES
+
+  React.useEffect(() => {
+    function handleOutside(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
+    }
+    if (open) {
+      document.addEventListener('mousedown', handleOutside)
+      setTimeout(() => inputRef.current?.focus(), 50)
+    }
+    return () => document.removeEventListener('mousedown', handleOutside)
+  }, [open])
+
+  const flagUrl = value ? getFlagUrl(value) : null
+
+  return (
+    <div ref={ref} className="relative">
+      {/* Trigger button */}
+      <button
+        type="button"
+        onClick={() => setOpen((p) => !p)}
+        className={`w-full flex items-center gap-3 bg-slate-50 border ${
+          open ? 'border-[#022B96] bg-white' : 'border-slate-200'
+        } rounded-2xl px-4 py-3.5 text-sm font-medium text-slate-800 outline-none transition cursor-pointer`}
+      >
+        {flagUrl ? (
+          <img src={flagUrl} alt={value} className="w-5 h-3.5 object-cover rounded-xs shadow-xs shrink-0" />
+        ) : (
+          <Globe2 className="h-4 w-4 text-slate-400 shrink-0" />
+        )}
+        <span className={`flex-1 text-left ${!value ? 'text-slate-400' : ''}`}>
+          {value || 'Select production country…'}
+        </span>
+        <ChevronDown className={`h-4 w-4 text-slate-400 shrink-0 transition-transform ${open ? 'rotate-180' : ''}`} />
+      </button>
+
+      {/* Dropdown */}
+      {open && (
+        <div className="absolute z-50 top-full left-0 right-0 mt-1.5 bg-white border border-slate-200 rounded-2xl shadow-xl overflow-hidden">
+          {/* Search */}
+          <div className="p-3 border-b border-slate-100">
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+              <input
+                ref={inputRef}
+                type="text"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Search country…"
+                className="w-full pl-9 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:border-[#022B96] transition"
+              />
+            </div>
+          </div>
+          {/* List */}
+          <ul className="max-h-56 overflow-y-auto py-1.5">
+            {filtered.length === 0 && (
+              <li className="px-4 py-3 text-sm text-slate-400 text-center">No countries found</li>
+            )}
+            {filtered.map((c) => {
+              const flag = getFlagUrl(c)
+              const isSelected = c === value
+              return (
+                <li key={c}>
+                  <button
+                    type="button"
+                    onClick={() => { onChange(c); setOpen(false); setSearch('') }}
+                    className={`w-full flex items-center gap-3 px-4 py-2.5 text-sm text-left transition cursor-pointer ${
+                      isSelected
+                        ? 'bg-blue-50 text-[#022B96] font-bold'
+                        : 'text-slate-700 hover:bg-slate-50'
+                    }`}
+                  >
+                    {flag ? (
+                      <img src={flag} alt={c} className="w-5 h-3.5 object-cover rounded-xs shadow-xs shrink-0" />
+                    ) : (
+                      <span className="w-5 h-3.5 bg-slate-200 rounded-xs shrink-0" />
+                    )}
+                    <span>{c}</span>
+                    {isSelected && <span className="ml-auto text-[#022B96]">✓</span>}
+                  </button>
+                </li>
+              )
+            })}
+          </ul>
+        </div>
+      )}
+    </div>
+  )
+}
+
 
 const SIZE_OPTIONS = [
   'Small (< 1 kg)', 'Medium (1–3 kg)', 'Large (3–6 kg)',
@@ -155,7 +452,7 @@ export default function PostStockPage() {
     productName: '',
     pricePerKg: '',
     currency: 'EUR',
-    countryOfOrigin: 'Holland (Netherlands)',
+    countryOfOrigin: '',
     freshFrozen: 'Frozen',
     sizeWeight: 'Medium (1–3 kg)',
     packagingFillet: 'Fillet (Skin On)',
@@ -173,12 +470,12 @@ export default function PostStockPage() {
     let isMounted = true
     const safetyTimer = setTimeout(() => {
       if (isMounted) setLoading(false)
-    }, 1000)
+    }, 300)
 
     async function checkAuth() {
       try {
         const timeoutPromise = new Promise<{ data: { session: null } }>((res) =>
-          setTimeout(() => res({ data: { session: null } }), 800)
+          setTimeout(() => res({ data: { session: null } }), 400)
         )
         const sessionResult = await Promise.race([
           supabase.auth.getSession(),
@@ -332,7 +629,7 @@ export default function PostStockPage() {
   const resetForm = () => {
     setSubmitted(false)
     setForm({
-      productName: '', pricePerKg: '', currency: 'EUR', countryOfOrigin: 'Holland (Netherlands)',
+      productName: '', pricePerKg: '', currency: 'EUR', countryOfOrigin: '',
       freshFrozen: 'Frozen', sizeWeight: 'Medium (1–3 kg)', packagingFillet: 'Fillet (Skin On)',
       availability: 'In Stock — Ready to Ship', location: '', supplierInfoExtra: '', customImage: '',
     })
@@ -351,18 +648,25 @@ export default function PostStockPage() {
               Your 9-field listing for <strong>{form.productName}</strong> is now active on your profile and accessible to global buyers.
             </p>
           </div>
-          <div className="flex flex-col gap-3 pt-2">
+          <div className="flex flex-col gap-2.5 pt-2">
             <button
               type="button"
               onClick={resetForm}
-              className="w-full py-4 bg-[#022B96] hover:bg-[#011a5e] text-white font-bold rounded-full transition cursor-pointer text-sm shadow-lg"
+              className="w-full py-3.5 bg-[#022B96] hover:bg-[#011a5e] text-white font-bold rounded-2xl transition cursor-pointer text-sm shadow-md"
             >
               Post Another Product
             </button>
-            <Link href="/dashboard/supplier">
-              <button type="button" className="w-full py-3.5 border border-slate-200 text-slate-700 font-semibold rounded-full hover:bg-slate-50 transition cursor-pointer text-sm">
-                Back to Dashboard
-              </button>
+            <Link
+              href="/"
+              className="w-full py-3 bg-slate-900 hover:bg-slate-800 text-white font-semibold rounded-2xl transition cursor-pointer text-sm text-center flex items-center justify-center gap-1.5 shadow-sm"
+            >
+              Go to Homepage
+            </Link>
+            <Link
+              href="/dashboard/supplier"
+              className="w-full py-3 border border-slate-200 text-slate-700 font-semibold rounded-2xl hover:bg-slate-50 transition cursor-pointer text-sm text-center"
+            >
+              Back to Dashboard
             </Link>
           </div>
         </div>
@@ -499,24 +803,29 @@ export default function PostStockPage() {
                 </div>
               </div>
 
-              {/* Field 3: Country of Origin */}
+              {/* Field 3: Country of Origin (production country) */}
               <div>
                 <label className="block text-xs font-bold uppercase tracking-wider text-slate-800 mb-2">
                   3. Country of Origin *
                 </label>
-                <div className="relative">
-                  <select
-                    required
-                    value={form.countryOfOrigin}
-                    onChange={(e) => set('countryOfOrigin', e.target.value)}
-                    className="w-full appearance-none bg-slate-50 border border-slate-200 text-slate-800 font-medium rounded-2xl px-4 py-3.5 text-sm outline-none focus:border-[#022B96] focus:bg-white transition cursor-pointer pr-10"
-                  >
-                    {COUNTRIES.map((c) => (
-                      <option key={c} value={c}>{c}</option>
-                    ))}
-                  </select>
-                  <ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 pointer-events-none" />
-                </div>
+                <p className="text-[11px] text-slate-500 mb-2 leading-snug">
+                  <span className="font-semibold text-slate-600">Where was this product produced / manufactured?</span>{' '}
+                  This is <em>not</em> where you are selling it — select the actual production country (e.g. Vietnam, Norway, Chile).
+                </p>
+                <CountryOriginPicker
+                  value={form.countryOfOrigin}
+                  onChange={(v) => set('countryOfOrigin', v)}
+                />
+                {/* Hidden required input to enforce form validation */}
+                <input
+                  type="text"
+                  required
+                  value={form.countryOfOrigin}
+                  onChange={() => {}}
+                  className="sr-only"
+                  tabIndex={-1}
+                  aria-hidden="true"
+                />
               </div>
 
               {/* Field 4: Fresh / Frozen */}

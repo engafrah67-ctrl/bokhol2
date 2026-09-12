@@ -4,13 +4,40 @@ import Link from 'next/link'
 import { useActionState, useState } from 'react'
 import { signUp } from '@/features/auth/actions'
 import { Button } from '@/components/ui/button'
-import { Loader2, Mail, Lock, User, Building2, AlertCircle } from 'lucide-react'
+import { Loader2, Mail, Lock, User, Building2, AlertCircle, Check } from 'lucide-react'
 
 const initialState = { error: undefined, success: undefined }
+
+const SUPPLIER_COUNTRIES = [
+  {
+    id: 'belgium',
+    name: 'Belgium',
+    code: 'BE',
+    flag: '🇧🇪',
+    flagUrl: 'https://flagcdn.com/w40/be.png',
+  },
+  {
+    id: 'netherlands',
+    name: 'Netherlands',
+    subname: 'Holland',
+    code: 'NL',
+    flag: '🇳🇱',
+    flagUrl: 'https://flagcdn.com/w40/nl.png',
+  },
+  {
+    id: 'germany',
+    name: 'Germany',
+    code: 'DE',
+    flag: '🇩🇪',
+    flagUrl: 'https://flagcdn.com/w40/de.png',
+  },
+]
 
 export default function SignupPage() {
   const [state, formAction, isPending] = useActionState(signUp, initialState)
   const [role, setRole] = useState<'buyer' | 'supplier'>('buyer')
+  const [selectedCountry, setSelectedCountry] = useState('Belgium')
+  const [selectedCountryCode, setSelectedCountryCode] = useState('BE')
 
   const errorMessage = typeof state?.error === 'string' && state.error.trim().length > 0 ? state.error : null
 
@@ -122,7 +149,63 @@ export default function SignupPage() {
           </div>
         </div>
 
+        {/* Supplier Country Selector */}
+        {role === 'supplier' && (
+          <div className="space-y-2 pt-1 pb-1">
+            <div className="flex items-center justify-between">
+              <label className="block text-sm font-medium text-foreground">
+                Supplier Country <span className="text-red-500">*</span>
+              </label>
+              <span className="text-xs text-muted-foreground">Select your country</span>
+            </div>
 
+            {/* Hidden inputs to pass selected country to server action */}
+            <input type="hidden" name="country" value={selectedCountry} />
+            <input type="hidden" name="country_code" value={selectedCountryCode} />
+
+            <div className="grid grid-cols-3 gap-2.5">
+              {SUPPLIER_COUNTRIES.map((c) => {
+                const isSelected = selectedCountryCode === c.code
+                return (
+                  <button
+                    key={c.code}
+                    type="button"
+                    onClick={() => {
+                      setSelectedCountry(c.name)
+                      setSelectedCountryCode(c.code)
+                    }}
+                    className={`group relative flex flex-col items-center justify-center p-3 rounded-xl border text-center transition-all cursor-pointer ${
+                      isSelected
+                        ? 'border-[#022B96] bg-blue-50/50 shadow-xs ring-2 ring-[#022B96]/20'
+                        : 'border-border bg-card hover:bg-muted/40 hover:border-muted-foreground/30'
+                    }`}
+                  >
+                    {isSelected && (
+                      <span className="absolute top-1.5 right-1.5 flex h-4 w-4 items-center justify-center rounded-full bg-[#022B96] text-white">
+                        <Check className="h-2.5 w-2.5" />
+                      </span>
+                    )}
+                    <div className="mb-2 flex items-center justify-center h-7 w-9 rounded overflow-hidden border border-black/10 shadow-2xs bg-white">
+                      <img
+                        src={c.flagUrl}
+                        alt={c.name}
+                        className="h-full w-full object-cover"
+                      />
+                    </div>
+                    <span className={`text-xs font-semibold leading-tight ${isSelected ? 'text-[#022B96]' : 'text-foreground'}`}>
+                      {c.name}
+                    </span>
+                    {c.subname && (
+                      <span className="text-[10px] text-muted-foreground mt-0.5">
+                        ({c.subname})
+                      </span>
+                    )}
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+        )}
 
         {/* Submit */}
         <Button

@@ -85,27 +85,6 @@ const COUNTRIES_MARKET_DATA: CountryIndexData[] = [
         ],
       },
       {
-        id: 'shrimp',
-        label: 'Pacific Shrimp',
-        currency: 'EUR',
-        unit: 'kg',
-        latest: 5.80,
-        weekHigh: 6.50,
-        weekLow: 5.10,
-        change: 0.8,
-        color: '#8b5cf6',
-        data: [
-          { week: 'W1', price: 5.40 },
-          { week: 'W2', price: 5.55 },
-          { week: 'W3', price: 5.60 },
-          { week: 'W4', price: 5.50 },
-          { week: 'W5', price: 5.65 },
-          { week: 'W6', price: 5.75 },
-          { week: 'W7', price: 5.70 },
-          { week: 'W8', price: 5.80 },
-        ],
-      },
-      {
         id: 'tuna',
         label: 'Yellowfin Tuna',
         currency: 'EUR',
@@ -175,27 +154,6 @@ const COUNTRIES_MARKET_DATA: CountryIndexData[] = [
           { week: 'W6', price: 4.50 },
           { week: 'W7', price: 4.48 },
           { week: 'W8', price: 4.45 },
-        ],
-      },
-      {
-        id: 'shrimp',
-        label: 'Pacific Shrimp',
-        currency: 'EUR',
-        unit: 'kg',
-        latest: 6.20,
-        weekHigh: 6.80,
-        weekLow: 5.50,
-        change: 1.2,
-        color: '#8b5cf6',
-        data: [
-          { week: 'W1', price: 5.80 },
-          { week: 'W2', price: 5.90 },
-          { week: 'W3', price: 5.95 },
-          { week: 'W4', price: 6.05 },
-          { week: 'W5', price: 6.10 },
-          { week: 'W6', price: 6.15 },
-          { week: 'W7', price: 6.18 },
-          { week: 'W8', price: 6.20 },
         ],
       },
       {
@@ -271,27 +229,6 @@ const COUNTRIES_MARKET_DATA: CountryIndexData[] = [
         ],
       },
       {
-        id: 'shrimp',
-        label: 'Pacific Shrimp',
-        currency: 'EUR',
-        unit: 'kg',
-        latest: 5.90,
-        weekHigh: 6.40,
-        weekLow: 5.20,
-        change: 0.9,
-        color: '#8b5cf6',
-        data: [
-          { week: 'W1', price: 5.50 },
-          { week: 'W2', price: 5.60 },
-          { week: 'W3', price: 5.68 },
-          { week: 'W4', price: 5.72 },
-          { week: 'W5', price: 5.80 },
-          { week: 'W6', price: 5.82 },
-          { week: 'W7', price: 5.86 },
-          { week: 'W8', price: 5.90 },
-        ],
-      },
-      {
         id: 'tuna',
         label: 'Yellowfin Tuna',
         currency: 'EUR',
@@ -361,27 +298,6 @@ const COUNTRIES_MARKET_DATA: CountryIndexData[] = [
           { week: 'W6', price: 4.38 },
           { week: 'W7', price: 4.32 },
           { week: 'W8', price: 4.30 },
-        ],
-      },
-      {
-        id: 'shrimp',
-        label: 'Pacific Shrimp',
-        currency: 'EUR',
-        unit: 'kg',
-        latest: 6.15,
-        weekHigh: 6.75,
-        weekLow: 5.40,
-        change: 1.5,
-        color: '#8b5cf6',
-        data: [
-          { week: 'W1', price: 5.70 },
-          { week: 'W2', price: 5.82 },
-          { week: 'W3', price: 5.88 },
-          { week: 'W4', price: 5.95 },
-          { week: 'W5', price: 6.02 },
-          { week: 'W6', price: 6.08 },
-          { week: 'W7', price: 6.10 },
-          { week: 'W8', price: 6.15 },
         ],
       },
       {
@@ -589,17 +505,38 @@ export function SeafoodIndexCard({ initialCountryData }: SeafoodIndexCardProps) 
           <hr className="border-border" />
 
           <div className="grid grid-cols-2 gap-4">
-            {[
-              { label: 'Weekly high',  value: `${activeSpecies.currency === 'EUR' ? 'EUR' : '$'} ${activeSpecies.weekHigh.toFixed(2)}` },
-              { label: 'Weekly low',   value: `${activeSpecies.currency === 'EUR' ? 'EUR' : '$'} ${activeSpecies.weekLow.toFixed(2)}` },
-              { label: 'Source',       value: currentCountry.source },
-              { label: 'Components',   value: `${currentCountry.species.length} species` },
-            ].map(({ label, value }) => (
-              <div key={label} className="space-y-0.5">
-                <p className="text-xs font-semibold text-muted-foreground">{label}</p>
-                <p className="text-sm font-bold text-foreground truncate" title={value}>{value}</p>
-              </div>
-            ))}
+            {activeSpecies.weekHigh === activeSpecies.weekLow ? (
+              // Single supplier — only one price point, show it honestly
+              <>
+                <div className="space-y-0.5 col-span-2">
+                  <p className="text-xs font-semibold text-muted-foreground">Supplier price</p>
+                  <p className="text-sm font-bold text-foreground">
+                    {activeSpecies.currency === 'EUR' ? 'EUR' : '$'} {activeSpecies.weekHigh.toFixed(2)}
+                    <span className="ml-2 text-[11px] font-normal text-amber-600 dark:text-amber-400">(1 offer — no range yet)</span>
+                  </p>
+                </div>
+                <div className="space-y-0.5">
+                  <p className="text-xs font-semibold text-muted-foreground">Source</p>
+                  <p className="text-sm font-bold text-foreground truncate" title={currentCountry.source}>{currentCountry.source}</p>
+                </div>
+                <div className="space-y-0.5">
+                  <p className="text-xs font-semibold text-muted-foreground">Components</p>
+                  <p className="text-sm font-bold text-foreground">{currentCountry.species.length} species</p>
+                </div>
+              </>
+            ) : (
+              [
+                { label: 'Weekly high', value: `${activeSpecies.currency === 'EUR' ? 'EUR' : '$'} ${activeSpecies.weekHigh.toFixed(2)}` },
+                { label: 'Weekly low',  value: `${activeSpecies.currency === 'EUR' ? 'EUR' : '$'} ${activeSpecies.weekLow.toFixed(2)}` },
+                { label: 'Source',      value: currentCountry.source },
+                { label: 'Components',  value: `${currentCountry.species.length} species` },
+              ].map(({ label, value }) => (
+                <div key={label} className="space-y-0.5">
+                  <p className="text-xs font-semibold text-muted-foreground">{label}</p>
+                  <p className="text-sm font-bold text-foreground truncate" title={value}>{value}</p>
+                </div>
+              ))
+            )}
           </div>
 
           {/* Color legend chips */}
