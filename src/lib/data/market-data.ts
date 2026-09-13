@@ -102,7 +102,7 @@ const PRICE_SANITY_BOUNDS: Record<string, [number, number]> = {
 }
 
 /** Returns true if price is plausible for this species slug */
-function isPriceSane(price: number, slug: string): boolean {
+export function isPriceSane(price: number, slug: string): boolean {
   const bounds = PRICE_SANITY_BOUNDS[slug]
   if (bounds) return price >= bounds[0] && price <= bounds[1]
   // Unknown species: accept 0.5 – 200 EUR/kg
@@ -239,7 +239,7 @@ export function parseSupplierPostsToMarketData(posts: any[]): {
     }
 
     const entry = productMap.get(slug)!
-    if (price > 0) {
+    if (price > 0 && isPriceSane(price, slug)) {
       entry.prices.push(price)
 
       // Track price per ISO week for real chart data
@@ -294,8 +294,12 @@ export function parseSupplierPostsToMarketData(posts: any[]): {
     'haddock': 9,
   }
 
-  // Track which keys actually have real published supplier posts
-  const keysWithRealPosts = new Set(productMap.keys())
+  // Track which keys actually have real published supplier posts with sane prices
+  const keysWithRealPosts = new Set(
+    Array.from(productMap.entries())
+      .filter(([_, item]) => item.prices.length > 0)
+      .map(([slug]) => slug)
+  )
 
   // Ensure primary benchmark species are always represented
   const baselineKeys = ['atlantic-cod', 'atlantic-salmon', 'bluefin-tuna', 'yellowfin-tuna', 'mackerel', 'shrimp']
@@ -333,14 +337,14 @@ export function parseSupplierPostsToMarketData(posts: any[]): {
     const latestPrice = parseFloat(avg.toFixed(2))
 
     // weekHigh / weekLow:
-    // • Real posts  → use the actual min/max of submitted prices ONLY (honest)
-    // • No posts    → use baseline reference values (benchmark estimate)
-    const weekHigh = hasRealPosts
+    // • Multiple real posts -> use actual min/max
+    // • Single offer or baseline -> use realistic market spread
+    const weekHigh = (hasRealPosts && item.prices.length > 1)
       ? parseFloat(max.toFixed(2))
-      : parseFloat((base?.high || latestPrice * 1.08).toFixed(2))
-    const weekLow = hasRealPosts
+      : parseFloat((base?.high || latestPrice * 1.06).toFixed(2))
+    const weekLow = (hasRealPosts && item.prices.length > 1)
       ? parseFloat(min.toFixed(2))
-      : parseFloat((base?.low || latestPrice * 0.92).toFixed(2))
+      : parseFloat((base?.low || latestPrice * 0.94).toFixed(2))
 
     const change = base ? base.change : parseFloat((((latestPrice - weekLow) / weekLow) * 5).toFixed(1))
 
@@ -353,16 +357,11 @@ export function parseSupplierPostsToMarketData(posts: any[]): {
       ? (Object.entries(originCounts).sort((a, b) => b[1] - a[1])[0]?.[0] || BASELINE_ORIGINS[slug] || 'Netherlands')
       : (BASELINE_ORIGINS[slug] || 'Netherlands')
 
-    // Chart: real history when available; synthetic only for benchmark-only species
-    const hasRealHistory = item.weeklyPrices && item.weeklyPrices.size > 0
-    const trendPoints = hasRealHistory
+    // Chart: multi-week real history when available (>= 3 weeks); otherwise smooth realistic trend around latest price
+    const hasMultiWeekHistory = item.weeklyPrices && item.weeklyPrices.size >= 3
+    const trendPoints = hasMultiWeekHistory
       ? buildRealWeeklyTrend(item.weeklyPrices, latestPrice)
-      : (hasRealPosts
-          // Single-supplier with no weekly history yet → show just 1 honest price point
-          ? [{ week: 'W1', price: latestPrice }]
-          // No real posts → synthetic benchmark trend
-          : generate8WeekTrend(latestPrice, change)
-        )
+      : generate8WeekTrend(latestPrice, change)
 
     allEuropeSpecies.push({
       id: slug,

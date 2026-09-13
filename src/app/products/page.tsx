@@ -1,6 +1,7 @@
 import { createPublicServerClient } from '@/lib/supabase/server'
 import { getFishImageForProduct } from '@/lib/data/products-data'
 import { ProductsClient, ProductCard } from '@/components/products/products-client'
+import { isPriceSane } from '@/lib/data/market-data'
 
 export const dynamic = 'force-dynamic'
 export const fetchCache = 'force-no-store'
@@ -58,7 +59,9 @@ export default async function ProductsPage() {
 
         const name = rawName.trim()
         const key = name.toLowerCase()
-        const price = parseFloat(details.pricePerKg || 0)
+        const normSlug = key.replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)+/g, '')
+        const rawPrice = parseFloat(details.pricePerKg || 0)
+        const price = isPriceSane(rawPrice, normSlug) ? rawPrice : 0
         const origin = details.countryOfOrigin || ''
         const date = post.updated_at || post.created_at || ''
         const currency = details.currency || 'EUR'

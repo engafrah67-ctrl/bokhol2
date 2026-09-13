@@ -7,6 +7,7 @@ import Image from 'next/image'
 import { BlurGate } from '@/components/blur-gate'
 import { createClient } from '@/lib/supabase/client'
 import { getFishImageForProduct } from '@/lib/data/products-data'
+import { isPriceSane } from '@/lib/data/market-data'
 
 const CATEGORIES = ['All', 'Finfish', 'Shellfish', 'Cephalopods']
 
@@ -82,7 +83,9 @@ export function ProductsClient({ initialProducts }: ProductsClientProps) {
 
         const name = rawName.trim()
         const key = name.toLowerCase()
-        const price = parseFloat(details.pricePerKg || 0)
+        const normSlug = key.replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)+/g, '')
+        const rawPrice = parseFloat(details.pricePerKg || 0)
+        const price = isPriceSane(rawPrice, normSlug) ? rawPrice : 0
         const origin = details.countryOfOrigin || ''
         const date = post.updated_at || post.created_at || ''
         const currency = details.currency || 'EUR'
