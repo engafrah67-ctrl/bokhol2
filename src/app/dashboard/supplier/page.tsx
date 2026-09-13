@@ -36,6 +36,7 @@ import {
   TrendingUp,
   Mail,
   Phone,
+  Trash2,
 } from 'lucide-react'
 import { performSignOut } from '@/lib/auth-helpers'
 import Link from 'next/link'
@@ -98,6 +99,10 @@ export default function SupplierDashboardPage() {
   const [updatePriceInput, setUpdatePriceInput] = useState<string>('')
   const [updateCurrencyInput, setUpdateCurrencyInput] = useState<string>('EUR')
   const [updateAvailabilityInput, setUpdateAvailabilityInput] = useState<string>('In Stock — Ready to Ship')
+
+  // Delete Confirmation Modal states
+  const [deletingPost, setDeletingPost] = useState<any | null>(null)
+  const [isDeleting, setIsDeleting] = useState(false)
 
   // Settings Form States
   const [userFullName, setUserFullName] = useState('')
@@ -443,6 +448,60 @@ export default function SupplierDashboardPage() {
       setMessage({ type: 'error', text: 'Error updating settings: ' + error.message })
     } else {
       setMessage({ type: 'success', text: 'Account settings updated!' })
+    }
+  }
+
+  // Handle Confirm Delete Post
+  async function confirmDeletePost() {
+    if (!deletingPost) return
+    setIsDeleting(true)
+    const postId = deletingPost.id
+    const isDbPost = /^[0-9a-f-]{36}$/i.test(postId)
+
+    try {
+      // 1. Optimistically update local dashboard state immediately
+      setSupplierPosts((prev: any[]) => prev.filter((p: any) => p.id !== postId))
+
+      // 2. Clean from localStorage
+      const updated = supplierPosts.filter((p: any) => p.id !== postId)
+      saveSupplierPosts(updated)
+
+      if (isDbPost) {
+        // 3. Call server deletion API
+        try {
+          await fetch(`/api/supplier/posts?id=${postId}`, { method: 'DELETE' })
+        } catch (_) {}
+
+        // 4. Direct delete and soft-delete in Supabase
+        try {
+          const { error: delErr } = await supabase
+            .from('supplier_posts')
+            .delete()
+            .eq('id', postId)
+          if (delErr) {
+            await supabase
+              .from('supplier_posts')
+              .update({ is_published: false })
+              .eq('id', postId)
+          }
+        } catch (_) {}
+
+        // 5. Trigger on-demand ISR revalidation for /products and home
+        try {
+          await fetch('/api/revalidate?path=/products', { method: 'POST' })
+        } catch (_) {}
+      }
+
+      // 6. Invalidate market cache and refresh Next.js router
+      invalidateMarketCache()
+      router.refresh()
+      setMessage({ type: 'success', text: 'Product listing removed successfully.' })
+    } catch (err: any) {
+      console.error('Failed to delete post:', err)
+      setMessage({ type: 'error', text: 'Failed to delete listing.' })
+    } finally {
+      setIsDeleting(false)
+      setDeletingPost(null)
     }
   }
 
@@ -1029,48 +1088,10 @@ export default function SupplierDashboardPage() {
                             Update Price
                           </button>
                           <button
-                            onClick={async () => {
-                              const postId = post.id
-                              const isDbPost = /^[0-9a-f-]{36}$/i.test(postId)
-
-                              // Optimistically remove from state immediately
-                              setSupplierPosts((prev: any[]) => prev.filter((p: any) => p.id !== postId))
-
-                              // Clean from localStorage
-                              const updated = supplierPosts.filter((p: any) => p.id !== postId)
-                              saveSupplierPosts(updated)
-
-                              if (isDbPost) {
-                                // 1. Server-side delete + Next.js ISR revalidation
-                                try {
-                                  await fetch(`/api/supplier/posts?id=${postId}`, { method: 'DELETE' })
-                                } catch (_) {}
-
-                                // 2. Direct Supabase delete from client
-                                try {
-                                  const { error: delErr } = await supabase
-                                    .from('supplier_posts')
-                                    .delete()
-                                    .eq('id', postId)
-                                  if (delErr) {
-                                    await supabase
-                                      .from('supplier_posts')
-                                      .update({ is_published: false })
-                                      .eq('id', postId)
-                                  }
-                                } catch (_) {}
-
-                                // 3. Revalidate paths
-                                try {
-                                  await fetch('/api/revalidate?path=/products', { method: 'POST' })
-                                } catch (_) {}
-                              }
-
-                              invalidateMarketCache()
-                              router.refresh()
-                            }}
-                            className="text-xs text-red-500 hover:underline cursor-pointer font-medium px-2 py-1"
+                            onClick={() => setDeletingPost(post)}
+                            className="text-xs text-red-500 hover:text-red-700 hover:bg-red-50 rounded-xl cursor-pointer font-medium px-2.5 py-1.5 transition flex items-center gap-1"
                           >
+                            <Trash2 className="h-3.5 w-3.5" />
                             Delete
                           </button>
                         </div>
@@ -1571,6 +1592,59 @@ export default function SupplierDashboardPage() {
                   Update Price for this Product
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ══ SIMPLE CONFIRMATION MODAL: DELETE PRODUCT ══════════════════════════════════ */}
+      {deletingPost && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-xs p-4 animate-in fade-in duration-150">
+          <div className="bg-white rounded-3xl border border-slate-200/80 max-w-sm w-full shadow-2xl overflow-hidden p-6 text-center space-y-4">
+            <div className="w-12 h-12 bg-red-50 text-red-600 rounded-2xl flex items-center justify-center mx-auto border border-red-100">
+              <Trash2 className="w-6 h-6" />
+            </div>
+
+            <div>
+              <h3 className="text-lg font-bold text-slate-900">Are you sure?</h3>
+              <p className="text-xs text-slate-500 mt-1.5 leading-relaxed">
+                Do you want to delete <span className="font-bold text-slate-800">
+                  {(() => {
+                    let p = deletingPost
+                    if (typeof p.content === 'string') { try { p = { ...p, ...JSON.parse(p.content) } } catch (_) {} }
+                    return p.product_name || p.productName || p.title?.split(' —')[0] || 'this product'
+                  })()}
+                </span>? It will disappear from the market, products directory, and seafood index immediately.
+              </p>
+            </div>
+
+            <div className="flex gap-2.5 pt-2">
+              <button
+                type="button"
+                onClick={() => setDeletingPost(null)}
+                disabled={isDeleting}
+                className="flex-1 py-2.5 px-4 rounded-xl border border-slate-200 text-slate-600 font-semibold text-xs hover:bg-slate-50 transition cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={confirmDeletePost}
+                disabled={isDeleting}
+                className="flex-1 py-2.5 px-4 rounded-xl bg-red-600 hover:bg-red-700 text-white font-bold text-xs transition cursor-pointer flex items-center justify-center gap-1.5 shadow-sm"
+              >
+                {isDeleting ? (
+                  <>
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    Deleting...
+                  </>
+                ) : (
+                  <>
+                    <Trash2 className="w-3.5 h-3.5" />
+                    Yes, Delete
+                  </>
+                )}
+              </button>
             </div>
           </div>
         </div>
