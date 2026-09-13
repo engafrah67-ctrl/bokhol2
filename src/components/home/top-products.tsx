@@ -17,10 +17,11 @@ const COUNTRY_ISO: Record<string, string> = {
   Chile: 'cl', Vietnam: 'vn', China: 'cn', Japan: 'jp', India: 'in',
   Indonesia: 'id', Thailand: 'th', Philippines: 'ph', Taiwan: 'tw', 'South Korea': 'kr',
   Ecuador: 'ec', Peru: 'pe', Argentina: 'ar', Brazil: 'br', Mexico: 'mx',
-  Morocco: 'ma', Senegal: 'sn', Egypt: 'eg', 'South Africa': 'za', Ghana: 'gh',
+  Morocco: 'ma', Senegal: 'sn', Mauritania: 'mr', Egypt: 'eg', 'South Africa': 'za', Ghana: 'gh',
   'United States': 'us', Canada: 'ca', Australia: 'au', 'New Zealand': 'nz',
   Russia: 'ru', Turkey: 'tr', Ukraine: 'ua', Myanmar: 'mm', Bangladesh: 'bd',
   Malaysia: 'my', 'Sri Lanka': 'lk', Pakistan: 'pk', 'Saudi Arabia': 'sa',
+  Namibia: 'na', Oman: 'om', Maldives: 'mv', Faroe: 'fo', 'Faroe Islands': 'fo',
 }
 
 function getFlagUrl(country: string): string | null {
