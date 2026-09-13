@@ -1,4 +1,4 @@
-﻿import { createClient } from '@/lib/supabase/client'
+import { createClient } from '@/lib/supabase/client'
 import { getFishImageForProduct } from '@/lib/data/products-data'
 
 export interface SpeciesTrendPoint {
@@ -144,13 +144,32 @@ function generate8WeekTrend(targetLatest: number, weeklyChangePct: number): Spec
   }))
 }
 
+const DEFAULT_SPECIES_BENCHMARK_PRICES: Record<string, number> = {
+  'atlantic-salmon': 7.85,
+  'salmon': 7.85,
+  'bluefin-tuna': 42.00,
+  'yellowfin-tuna': 9.20,
+  'tuna-loin': 12.50,
+  'tuna': 9.20,
+  'atlantic-cod': 4.60,
+  'cod': 4.60,
+  'mackerel': 2.35,
+  'shrimp': 6.40,
+  'sea-bass': 6.90,
+  'sea-bream': 6.50,
+  'haddock': 3.80,
+  'halibut': 14.50,
+  'lobster': 24.00,
+  'crab': 12.00,
+}
+
 export function parseSupplierPostsToMarketData(posts: any[]): {
   countryData: LiveCountryMarketData[]
   topProducts: TopMarketProduct[]
 } {
   const productMap = new Map<string, {
     name: string; slug: string; prices: number[]; origins: string[]
-    currencies: string[]; images: string[]; lastUpdated: string
+    currencies: string[]; images: string[]; lastUpdated: string; totalPosts: number
     countryBreakdown: Map<string, number[]>; weeklyPrices: Map<string, number[]>
   }>()
 
@@ -170,23 +189,30 @@ export function parseSupplierPostsToMarketData(posts: any[]): {
     const startOfYear = new Date(postDate.getFullYear(), 0, 1)
     const isoWeek = Math.ceil(((postDate.getTime() - startOfYear.getTime()) / 86400000 + startOfYear.getDay() + 1) / 7)
     const weekLabel = `${postDate.getFullYear()}-W${String(isoWeek).padStart(2, '0')}`
+
     if (!productMap.has(slug)) {
-      productMap.set(slug, { name, slug, prices: [], origins: [], currencies: [], images: [],
+      productMap.set(slug, {
+        name, slug, prices: [], origins: [], currencies: [], images: [], totalPosts: 0,
         lastUpdated: post.updated_at || post.created_at || new Date().toISOString(),
-        countryBreakdown: new Map<string, number[]>(), weeklyPrices: new Map<string, number[]>() })
+        countryBreakdown: new Map<string, number[]>(), weeklyPrices: new Map<string, number[]>()
+      })
     }
     const entry = productMap.get(slug)!
+    entry.totalPosts++
     const thisDate = new Date(post.updated_at || post.created_at || Date.now())
     if (thisDate > new Date(entry.lastUpdated)) entry.lastUpdated = post.updated_at || post.created_at
+
+    const normCountry = origin.includes('Netherlands') || origin.includes('Holland') ? 'Netherlands'
+      : origin.includes('Germany') ? 'Germany' : origin.includes('Belgium') ? 'Belgium' : 'Other'
+    if (!entry.countryBreakdown.has(normCountry)) entry.countryBreakdown.set(normCountry, [])
+
     if (price > 0 && isPriceSane(price, slug)) {
       entry.prices.push(price)
       if (!entry.weeklyPrices.has(weekLabel)) entry.weeklyPrices.set(weekLabel, [])
       entry.weeklyPrices.get(weekLabel)!.push(price)
-      const normCountry = origin.includes('Netherlands') || origin.includes('Holland') ? 'Netherlands'
-        : origin.includes('Germany') ? 'Germany' : origin.includes('Belgium') ? 'Belgium' : 'Other'
-      if (!entry.countryBreakdown.has(normCountry)) entry.countryBreakdown.set(normCountry, [])
       entry.countryBreakdown.get(normCountry)!.push(price)
     }
+
     if (origin) entry.origins.push(origin)
     if (currency) entry.currencies.push(currency)
     if (customImg) entry.images.push(customImg)
@@ -194,23 +220,39 @@ export function parseSupplierPostsToMarketData(posts: any[]): {
 
   const allEuropeSpecies: LiveSpeciesIndex[] = []
   for (const [slug, item] of productMap.entries()) {
-    if (item.prices.length === 0) continue
-    const avg = item.prices.reduce((a, b) => a + b, 0) / item.prices.length
-    const min = Math.min(...item.prices)
-    const max = Math.max(...item.prices)
-    const latestPrice = parseFloat(avg.toFixed(2))
-    const weekHigh = item.prices.length > 1 ? parseFloat(max.toFixed(2)) : parseFloat((latestPrice * 1.06).toFixed(2))
-    const weekLow = item.prices.length > 1 ? parseFloat(min.toFixed(2)) : parseFloat((latestPrice * 0.94).toFixed(2))
+    if (item.totalPosts === 0 && item.prices.length === 0) continue
+
+    let latestPrice: number
+    let weekHigh: number
+    let weekLow: number
+
+    if (item.prices.length > 0) {
+      const avg = item.prices.reduce((a, b) => a + b, 0) / item.prices.length
+      const min = Math.min(...item.prices)
+      const max = Math.max(...item.prices)
+      latestPrice = parseFloat(avg.toFixed(2))
+      weekHigh = item.prices.length > 1 ? parseFloat(max.toFixed(2)) : parseFloat((latestPrice * 1.06).toFixed(2))
+      weekLow = item.prices.length > 1 ? parseFloat(min.toFixed(2)) : parseFloat((latestPrice * 0.94).toFixed(2))
+    } else {
+      // Product exists in active supplier posts without a specified price (e.g. quote on demand)
+      latestPrice = DEFAULT_SPECIES_BENCHMARK_PRICES[slug] || 8.50
+      weekHigh = parseFloat((latestPrice * 1.06).toFixed(2))
+      weekLow = parseFloat((latestPrice * 0.94).toFixed(2))
+    }
+
     const change = KNOWN_CHANGE_RATES[slug] ?? parseFloat((((latestPrice - weekLow) / weekLow) * 5).toFixed(1))
     const originCounts = item.origins.reduce((acc: Record<string, number>, o) => { acc[o] = (acc[o] || 0) + 1; return acc }, {})
     const topOrigin = Object.entries(originCounts).sort((a, b) => b[1] - a[1])[0]?.[0] || 'Europe'
+    const suppliersCount = Math.max(item.prices.length, item.totalPosts, 1)
+
     const trendPoints = item.weeklyPrices.size >= 3
       ? buildRealWeeklyTrend(item.weeklyPrices, latestPrice)
       : generate8WeekTrend(latestPrice, change)
+
     allEuropeSpecies.push({
       id: slug, slug, label: item.name, currency: item.currencies[0] || 'EUR', unit: 'kg',
       latest: latestPrice, weekHigh, weekLow, change, color: SPECIES_COLORS[slug] || '#0284c7',
-      suppliersCount: item.prices.length, topOrigin,
+      suppliersCount, topOrigin,
       imageUrl: item.images[0] || getFishImageForProduct(item.name), data: trendPoints,
     })
   }
@@ -255,7 +297,7 @@ export function parseSupplierPostsToMarketData(posts: any[]): {
     const symbol = sp.currency === 'USD' ? '$' : sp.currency === 'GBP' ? '£' : '€'
     return {
       name: sp.label, slug: sp.slug, origin: sp.topOrigin,
-      avgPrice: `${symbol}${sp.latest.toFixed(2)}`, avgPriceNum: sp.latest,
+      avgPrice: `${symbol}${sp.latest.toFixed(2)} / kg`, avgPriceNum: sp.latest,
       suppliersCount: sp.suppliersCount, imageUrl: sp.imageUrl || getFishImageForProduct(sp.label),
       category: ['shrimp', 'crab', 'lobster'].includes(sp.slug) ? 'Shellfish' : 'Finfish',
     }
