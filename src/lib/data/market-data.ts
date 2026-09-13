@@ -211,7 +211,40 @@ export function parseSupplierPostsToMarketData(posts: any[]): {
     if (!rawName.trim()) continue
 
     const name = rawName.trim()
-    const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)+/g, '')
+    const rawSlug = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)+/g, '')
+
+    // Normalize processed/variant product names → canonical species slug
+    const SLUG_ALIASES: Record<string, string> = {
+      'tuna-loin': 'yellowfin-tuna',
+      'tuna-fillet': 'yellowfin-tuna',
+      'tuna-steak': 'yellowfin-tuna',
+      'fresh-tuna': 'yellowfin-tuna',
+      'tuna': 'yellowfin-tuna',
+      'salmon-fillet': 'atlantic-salmon',
+      'salmon-steak': 'atlantic-salmon',
+      'fresh-salmon': 'atlantic-salmon',
+      'smoked-salmon': 'atlantic-salmon',
+      'salmon': 'atlantic-salmon',
+      'cod-fillet': 'atlantic-cod',
+      'fresh-cod': 'atlantic-cod',
+      'cod': 'atlantic-cod',
+      'haddock-fillet': 'haddock',
+      'fresh-haddock': 'haddock',
+      'king-prawn': 'shrimp',
+      'prawns': 'shrimp',
+      'fresh-shrimp': 'shrimp',
+      'tiger-prawn': 'shrimp',
+      'sea-bass-fillet': 'sea-bass',
+      'fresh-sea-bass': 'sea-bass',
+      'sea-bream-fillet': 'sea-bream',
+      'fresh-sea-bream': 'sea-bream',
+      'atlantic-mackerel': 'mackerel',
+      'fresh-mackerel': 'mackerel',
+      'mackerel-fillet': 'mackerel',
+      'bluefin': 'bluefin-tuna',
+      'blue-fin-tuna': 'bluefin-tuna',
+    }
+    const slug = SLUG_ALIASES[rawSlug] ?? rawSlug
     const price = parseFloat(details.pricePerKg || 0)
     const origin = details.countryOfOrigin || 'Holland (Netherlands)'
     const currency = details.currency || 'EUR'
@@ -302,7 +335,10 @@ export function parseSupplierPostsToMarketData(posts: any[]): {
   )
 
   // Ensure primary benchmark species are always represented
-  const baselineKeys = ['atlantic-cod', 'atlantic-salmon', 'bluefin-tuna', 'yellowfin-tuna', 'mackerel', 'shrimp']
+  const baselineKeys = [
+    'atlantic-salmon', 'atlantic-cod', 'yellowfin-tuna', 'bluefin-tuna',
+    'mackerel', 'shrimp', 'sea-bass', 'sea-bream', 'haddock',
+  ]
   for (const bKey of baselineKeys) {
     if (!productMap.has(bKey)) {
       const bInfo = BENCHMARK_BASELINES[bKey] || { price: 6.5, high: 7.2, low: 5.8, change: 1.0 }
