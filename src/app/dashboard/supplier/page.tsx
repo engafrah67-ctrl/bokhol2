@@ -48,6 +48,7 @@ import {
   SupplierPost,
 } from '@/lib/data/products-data'
 import { getStoredCompanies, CompanyProfile } from '@/lib/data/companies-data'
+import { invalidateMarketCache } from '@/lib/data/market-data'
 
 function getFishImage(productName: string, customImage?: string): string {
   return getFishImageForProduct(productName, customImage)
@@ -1030,17 +1031,43 @@ export default function SupplierDashboardPage() {
                           <button
                             onClick={async () => {
                               const postId = post.id
-                              const isDbPost = /^[0-9a-f-]{36}$/.test(postId)
-                              if (isDbPost) {
-                                await supabase
-                                  .from('supplier_posts')
-                                  .update({ is_published: false })
-                                  .eq('id', postId)
-                              } else {
-                                const updated = supplierPosts.filter((p: any) => p.id !== postId)
-                                saveSupplierPosts(updated)
-                              }
+                              const isDbPost = /^[0-9a-f-]{36}$/i.test(postId)
+
+                              // Optimistically remove from state immediately
                               setSupplierPosts((prev: any[]) => prev.filter((p: any) => p.id !== postId))
+
+                              // Clean from localStorage
+                              const updated = supplierPosts.filter((p: any) => p.id !== postId)
+                              saveSupplierPosts(updated)
+
+                              if (isDbPost) {
+                                // 1. Server-side delete + Next.js ISR revalidation
+                                try {
+                                  await fetch(`/api/supplier/posts?id=${postId}`, { method: 'DELETE' })
+                                } catch (_) {}
+
+                                // 2. Direct Supabase delete from client
+                                try {
+                                  const { error: delErr } = await supabase
+                                    .from('supplier_posts')
+                                    .delete()
+                                    .eq('id', postId)
+                                  if (delErr) {
+                                    await supabase
+                                      .from('supplier_posts')
+                                      .update({ is_published: false })
+                                      .eq('id', postId)
+                                  }
+                                } catch (_) {}
+
+                                // 3. Revalidate paths
+                                try {
+                                  await fetch('/api/revalidate?path=/products', { method: 'POST' })
+                                } catch (_) {}
+                              }
+
+                              invalidateMarketCache()
+                              router.refresh()
                             }}
                             className="text-xs text-red-500 hover:underline cursor-pointer font-medium px-2 py-1"
                           >

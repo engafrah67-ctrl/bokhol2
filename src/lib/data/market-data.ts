@@ -200,6 +200,8 @@ export function parseSupplierPostsToMarketData(posts: any[]): {
   }>()
 
   for (const post of posts || []) {
+    if (post.is_published === false) continue
+
     let details: any = {}
     try {
       details = typeof post.content === 'string' ? JSON.parse(post.content || '{}') : post.content || {}
@@ -478,8 +480,8 @@ export async function getLiveMarketData(): Promise<{
 }> {
   const now = Date.now()
 
-  // If cache is fresh (< 30s), return immediately
-  if (cachedMarketData && now - cachedMarketData.timestamp < 30000) {
+  // If cache is fresh (< 2s), return immediately
+  if (cachedMarketData && now - cachedMarketData.timestamp < 2000) {
     return cachedMarketData.data
   }
 

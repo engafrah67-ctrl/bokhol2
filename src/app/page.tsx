@@ -10,7 +10,9 @@ import { StatsBar } from '@/components/home/stats-bar'
 import { NewsArticle } from '@/types/database'
 import { parseSupplierPostsToMarketData, getLiveMarketData } from '@/lib/data/market-data'
 
-export const revalidate = 10 // Cache statically for 10s for instant navigation and fresh sync
+export const dynamic = 'force-dynamic'
+export const fetchCache = 'force-no-store'
+export const revalidate = 0
 
 export default async function HomePage() {
   const supabase = createPublicServerClient()

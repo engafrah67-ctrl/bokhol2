@@ -2,9 +2,9 @@ import { createPublicServerClient } from '@/lib/supabase/server'
 import { getFishImageForProduct } from '@/lib/data/products-data'
 import { ProductsClient, ProductCard } from '@/components/products/products-client'
 
-export const revalidate = 10 // Cache statically and revalidate every 10 seconds
-
-let cachedProductCards: { cards: ProductCard[]; timestamp: number } | null = null
+export const dynamic = 'force-dynamic'
+export const fetchCache = 'force-no-store'
+export const revalidate = 0
 
 function getCategory(name: string): string {
   const lower = name.toLowerCase()
@@ -14,10 +14,6 @@ function getCategory(name: string): string {
 }
 
 export default async function ProductsPage() {
-  const now = Date.now()
-  if (cachedProductCards && now - cachedProductCards.timestamp < 20000) {
-    return <ProductsClient initialProducts={cachedProductCards.cards} />
-  }
 
   const supabase = createPublicServerClient()
 
@@ -122,7 +118,6 @@ export default async function ProductsPage() {
 
     // Sort: most offers first
     cards.sort((a, b) => b.suppliersCount - a.suppliersCount || a.name.localeCompare(b.name))
-    cachedProductCards = { cards, timestamp: now }
   } catch (err) {
     console.error('Failed to load products on server:', err)
   }
