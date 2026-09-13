@@ -79,18 +79,16 @@ export default function ProductDetailsPage({ params }: { params: Promise<{ slug:
           .from('supplier_posts')
           .select(`
             id, title, content, created_at, updated_at,
-            companies!inner(id, name, slug, logo_url, city, country_id)
+            companies(id, name, slug, logo_url, city, country_id)
           `)
           .eq('is_published', true)
           .order('created_at', { ascending: false })
-
-        if (!posts) { setLoading(false); return }
 
         // Filter to posts matching this product slug
         const matchingOffers: SupplierOffer[] = []
         const countrySet = new Set<string>()
 
-        for (const post of posts as any[]) {
+        for (const post of (posts || []) as any[]) {
           let details: any = {}
           try { details = JSON.parse(post.content || '{}') } catch (_) {}
 
