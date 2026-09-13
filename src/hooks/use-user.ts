@@ -40,7 +40,7 @@ export function useUser(): UseUserReturn {
       const role = (currentUser.user_metadata?.role as UserRole) || 'buyer'
       return {
         id: currentUser.id,
-        role: currentUser.email === 'admin@gmail.com' ? 'admin' : role,
+        role: currentUser.email?.toLowerCase() === 'superadminbkhol@gmail.com' ? 'admin' : role,
         full_name: currentUser.user_metadata?.full_name || currentUser.email || 'User',
         avatar_url: currentUser.user_metadata?.avatar_url || null,
         company_id: currentUser.user_metadata?.company_id || null,
@@ -62,7 +62,7 @@ export function useUser(): UseUserReturn {
             .maybeSingle()
 
           if (data) {
-            const isAdmin = currentUser.email === 'admin@gmail.com'
+            const isAdmin = currentUser.email?.toLowerCase() === 'superadminbkhol@gmail.com'
             const fullProfile: UserProfile = { ...data, role: isAdmin ? 'admin' : data.role }
             cachedProfile = fullProfile
             return fullProfile
@@ -131,7 +131,7 @@ export function useUser(): UseUserReturn {
   }, [])
 
   const effectiveRole: UserRole | null =
-    user?.email === 'admin@gmail.com'
+    user?.email?.toLowerCase() === 'superadminbkhol@gmail.com'
       ? 'admin'
       : (profile?.role ?? (user?.user_metadata?.role as UserRole) ?? null)
 

@@ -97,7 +97,7 @@ export default function BuyerRequestsPage() {
   const [replyMessage, setReplyMessage] = useState('')
   const [replySubmitted, setReplySubmitted] = useState(false)
 
-  const isSupplierOrAdmin = role === 'supplier' || role === 'admin' || user?.email === 'admin@gmail.com'
+  const isSupplierOrAdmin = role === 'supplier' || role === 'admin' || user?.email?.toLowerCase() === 'superadminbkhol@gmail.com'
 
   useEffect(() => {
     async function loadRequests() {
@@ -402,7 +402,7 @@ export default function BuyerRequestsPage() {
                     {/* Supplier Replies Status (Confidential Privacy Protection) */}
                     {reqReplies.length > 0 ? (
                       <div className="pt-3 border-t border-slate-100 space-y-2">
-                        {user?.email === 'admin@gmail.com' ? (
+                        {user?.email === 'SuperAdminbkhol@gmail.com' ? (
                           /* Admin View: Full Details */
                           <>
                             <p className="text-[10px] font-black uppercase tracking-wider text-slate-400">

@@ -11,7 +11,7 @@ export default async function DashboardRedirectPage() {
   }
 
   // Check if user is the admin account
-  const isAdminEmail = user.email === 'admin@gmail.com'
+  const isAdminEmail = user.email?.toLowerCase() === 'superadminbkhol@gmail.com'
 
   // Try to get user profile from public.users
   const { data: profile } = await supabase

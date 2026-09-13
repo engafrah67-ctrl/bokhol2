@@ -213,7 +213,7 @@ export default function AdminDashboardPage() {
           return
         }
 
-        const isAdminEmail = user.email === 'admin@gmail.com'
+        const isAdminEmail = user.email?.toLowerCase() === 'superadminbkhol@gmail.com'
 
         let userRole = user.user_metadata?.role
         try {
