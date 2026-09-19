@@ -28,6 +28,7 @@ import {
   CompanyProfile,
   INITIAL_COMPANIES,
   getStoredCompanies,
+  syncWithServerClaims,
 } from '@/lib/data/companies-data'
 import { ClaimProfileModal } from '@/components/directory/claim-profile-modal'
 import { CompanyDetailModal } from '@/components/directory/company-detail-modal'
@@ -66,12 +67,28 @@ export default function OurNetworkDirectoryPage() {
   const [isClaimModalOpen, setIsClaimModalOpen] = useState(false)
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false)
 
-  const reloadData = () => {
+  const reloadData = async () => {
     setCompanies(getStoredCompanies())
+    try {
+      const synced = await syncWithServerClaims()
+      setCompanies([...synced])
+    } catch (_) {}
   }
 
   useEffect(() => {
     reloadData()
+
+    const onClaimsChange = () => reloadData()
+    window.addEventListener('bokhol-claims-change', onClaimsChange)
+    window.addEventListener('storage', onClaimsChange)
+
+    const poll = setInterval(() => reloadData(), 4000)
+
+    return () => {
+      window.removeEventListener('bokhol-claims-change', onClaimsChange)
+      window.removeEventListener('storage', onClaimsChange)
+      clearInterval(poll)
+    }
   }, [])
 
   // Filtering logic
@@ -226,8 +243,9 @@ export default function OurNetworkDirectoryPage() {
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {filteredCompanies.map((company, index) => {
-              const isUnclaimed = company.status === 'unclaimed'
+              const isClaimed = company.status === 'claimed'
               const isPending = company.status === 'claim_requested'
+              const isUnclaimed = !isClaimed && !isPending
 
               return (
                 <div
@@ -306,12 +324,12 @@ export default function OurNetworkDirectoryPage() {
                   {/* Card Actions */}
                   <div className="p-5 pt-2">
                     <div className="grid grid-cols-2 gap-2">
-                      {isUnclaimed ? (
+                      {isClaimed ? (
                         <Button
-                          onClick={() => handleOpenClaim(company)}
-                          className="w-full bg-[#022B96] hover:bg-[#022B96]/90 text-white font-bold text-xs rounded-xl py-2.5 shadow-xs"
+                          onClick={() => handleOpenDetail(company)}
+                          className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl py-2.5 shadow-xs"
                         >
-                          Claim Profile
+                          Request a Quote
                         </Button>
                       ) : isPending ? (
                         <Button
@@ -322,10 +340,10 @@ export default function OurNetworkDirectoryPage() {
                         </Button>
                       ) : (
                         <Button
-                          onClick={() => handleOpenDetail(company)}
-                          className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl py-2.5 shadow-xs"
+                          onClick={() => handleOpenClaim(company)}
+                          className="w-full bg-[#022B96] hover:bg-[#022B96]/90 text-white font-bold text-xs rounded-xl py-2.5 shadow-xs"
                         >
-                          Request a Quote
+                          Claim Profile
                         </Button>
                       )}
 

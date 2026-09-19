@@ -19,10 +19,20 @@ export async function performSignOut(redirectTo = '/login') {
   } catch (_) {}
 
   try {
-    // 3. Clear local & session storage
+    // 3. Clear auth tokens and session storage only (preserve app cache)
     if (typeof window !== 'undefined') {
-      localStorage.clear()
-      sessionStorage.clear()
+      try {
+        Object.keys(localStorage).forEach((key) => {
+          if (
+            key.startsWith('sb-') ||
+            key.includes('supabase') ||
+            key.includes('auth-token')
+          ) {
+            localStorage.removeItem(key)
+          }
+        })
+        sessionStorage.clear()
+      } catch (_) {}
 
       // Clear accessible cookies
       document.cookie.split(';').forEach((c) => {

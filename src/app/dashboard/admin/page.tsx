@@ -18,6 +18,7 @@ import {
   Eye,
   Loader2,
   AlertCircle,
+  Info,
   X,
   User,
   Calendar,
@@ -43,8 +44,10 @@ import { performSignOut } from '@/lib/auth-helpers'
 import {
   CompanyProfile,
   getStoredCompanies,
+  syncWithServerClaims,
   approveProfileClaim,
   rejectProfileClaim,
+  revokeProfileClaim,
   deleteCompany,
 } from '@/lib/data/companies-data'
 import ReactCountryFlag from 'react-country-flag'
@@ -56,6 +59,7 @@ import {
 } from '@/lib/data/products-data'
 import {
   getStoredNewsArticles,
+  fetchNewsArticles,
   addNewsArticle,
   deleteNewsArticle,
   NewsArticle,
@@ -112,6 +116,36 @@ export default function AdminDashboardPage() {
     if (typeof window !== 'undefined') return getStoredCompanies()
     return []
   })
+
+  // ── Profile Claims (source of truth for Verification tab) ──
+  const [profileClaims, setProfileClaims] = useState<any[]>([])
+  const [claimsLoading, setClaimsLoading] = useState(false)
+
+  const fetchProfileClaims = async () => {
+    setClaimsLoading(true)
+    try {
+      const res = await fetch('/api/profile-claims')
+      const json = await res.json()
+      if (json.success && Array.isArray(json.claims)) {
+        setProfileClaims(json.claims)
+      } else {
+        const { data } = await supabase
+          .from('profile_claims')
+          .select('*')
+          .order('created_at', { ascending: false })
+        if (data) setProfileClaims(data)
+      }
+    } catch (_) {
+      try {
+        const { data } = await supabase
+          .from('profile_claims')
+          .select('*')
+          .order('created_at', { ascending: false })
+        if (data) setProfileClaims(data)
+      } catch (_) {}
+    }
+    setClaimsLoading(false)
+  }
   const [supplierPosts, setSupplierPosts] = useState<SupplierPost[]>(() => {
     if (typeof window !== 'undefined') return getStoredSupplierPosts()
     return []
@@ -145,6 +179,8 @@ export default function AdminDashboardPage() {
   const [newsImageUrl, setNewsImageUrl] = useState('https://images.unsplash.com/photo-1544551763-46a013bb70d5?w=800&q=80')
   const [newsAuthor, setNewsAuthor] = useState('Bokhol Research')
   const [newsFormError, setNewsFormError] = useState<string | null>(null)
+  const [newsSuccessMsg, setNewsSuccessMsg] = useState<string | null>(null)
+  const [newsDeleting, setNewsDeleting] = useState<string | null>(null)
 
   const handleNewsImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
@@ -175,8 +211,13 @@ export default function AdminDashboardPage() {
   const [selectedCompanyModal, setSelectedCompanyModal] = useState<CompanyProfile | null>(null)
   const [rejectionReasonInput, setRejectionReasonInput] = useState('')
 
-  const reloadCompanies = () => {
+  const reloadCompanies = async () => {
     setCompanies(getStoredCompanies())
+    try {
+      const synced = await syncWithServerClaims()
+      setCompanies([...synced])
+    } catch (_) {}
+    fetchProfileClaims()
   }
 
   useEffect(() => {
@@ -202,8 +243,13 @@ export default function AdminDashboardPage() {
 
     async function initAdminAuthAndData() {
       try {
-        const { data: { session } } = await supabase.auth.getSession()
-        const user = session?.user
+        const { data: sessionData } = await supabase.auth.getSession()
+        let user = sessionData?.session?.user
+
+        if (!user) {
+          const { data: userData } = await supabase.auth.getUser().catch(() => ({ data: { user: null } }))
+          user = userData?.user
+        }
 
         if (!user) {
           if (isMounted) {
@@ -237,8 +283,11 @@ export default function AdminDashboardPage() {
           setAuthorized(true)
           reloadCompanies()
           setSupplierPosts(getStoredSupplierPosts())
-          setNewsArticles(getStoredNewsArticles())
           setPartnerBuyers(getStoredPartnerBuyers())
+          // Always fetch fresh news from Supabase so articles survive re-login
+          fetchNewsArticles().then((articles) => {
+            if (isMounted) setNewsArticles(articles)
+          })
         }
 
         // Fetch stats in non-blocking background
@@ -280,25 +329,157 @@ export default function AdminDashboardPage() {
     }
   }, [router, supabase])
 
-  const handleApproveClaim = (companyId: string) => {
-    approveProfileClaim(companyId)
-    reloadCompanies()
-    if (selectedCompanyModal?.id === companyId) setSelectedCompanyModal(null)
-  }
+  // ── Ref to pause polling while a confirmation modal is open ──
+  const isConfirmModalOpen = React.useRef(false)
 
-  const handleRejectClaim = (companyId: string) => {
-    rejectProfileClaim(companyId, rejectionReasonInput || undefined)
-    reloadCompanies()
-    setRejectionReasonInput('')
-    if (selectedCompanyModal?.id === companyId) setSelectedCompanyModal(null)
-  }
-
-  const handleDeleteCompany = (companyId: string, companyName: string) => {
-    if (confirm(`Are you sure you want to permanently delete "${companyName}"?`)) {
-      deleteCompany(companyId)
-      reloadCompanies()
-      if (selectedCompanyModal?.id === companyId) setSelectedCompanyModal(null)
+  // ── Live claim sync: reload companies whenever a claim is submitted ──
+  useEffect(() => {
+    // fires on same tab (dispatched manually by ClaimProfileModal)
+    const onClaimsChange = () => {
+      if (!isConfirmModalOpen.current) reloadCompanies()
     }
+    // fires on OTHER tabs via native browser storage event
+    const onStorage = (e: StorageEvent) => {
+      if (!isConfirmModalOpen.current && (!e.key || e.key.includes('bokhol'))) reloadCompanies()
+    }
+
+    window.addEventListener('bokhol-claims-change', onClaimsChange)
+    window.addEventListener('storage', onStorage)
+
+    // Poll every 3 seconds as a reliable fallback — skip when modal is open
+    const poll = setInterval(() => {
+      if (!isConfirmModalOpen.current) reloadCompanies()
+    }, 3000)
+
+    return () => {
+      window.removeEventListener('bokhol-claims-change', onClaimsChange)
+      window.removeEventListener('storage', onStorage)
+      clearInterval(poll)
+    }
+  }, [])
+
+  const handleApproveClaim = async (companyId: string) => {
+    approveProfileClaim(companyId)
+    try {
+      await fetch('/api/profile-claims', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ company_id: companyId, action: 'approve' }),
+      })
+    } catch (_) {}
+    try {
+      await supabase
+        .from('profile_claims')
+        .update({ status: 'approved', updated_at: new Date().toISOString() })
+        .eq('company_id', companyId)
+    } catch (_) {}
+    await reloadCompanies()
+    if (selectedCompanyModal?.id === companyId) setSelectedCompanyModal(null)
+  }
+
+  const handleRejectClaim = async (companyId: string) => {
+    const reason = rejectionReasonInput || 'Business verification could not be completed.'
+    rejectProfileClaim(companyId, reason)
+    try {
+      await fetch('/api/profile-claims', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ company_id: companyId, action: 'reject', rejection_reason: reason }),
+      })
+    } catch (_) {}
+    try {
+      await supabase
+        .from('profile_claims')
+        .update({
+          status: 'rejected',
+          rejection_reason: reason,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('company_id', companyId)
+    } catch (_) {}
+    setRejectionReasonInput('')
+    await reloadCompanies()
+    if (selectedCompanyModal?.id === companyId) setSelectedCompanyModal(null)
+  }
+
+  // ── Confirmation Modal States ──
+  const [companyToDelete, setCompanyToDelete] = useState<{ id: string; name: string } | null>(null)
+  const [companyToRevoke, setCompanyToRevoke] = useState<{ id: string; name: string } | null>(null)
+  const [actionToast, setActionToast] = useState<{ type: 'success' | 'info'; message: string } | null>(null)
+  const [isActionProcessing, setIsActionProcessing] = useState(false)
+
+  const requestDeleteCompany = (companyId: string, companyName: string) => {
+    isConfirmModalOpen.current = true
+    setCompanyToDelete({ id: companyId, name: companyName })
+  }
+
+  const confirmDeleteCompany = async () => {
+    if (!companyToDelete) return
+    const { id, name } = companyToDelete
+    setIsActionProcessing(true)
+
+    // 1. Delete from local storage
+    deleteCompany(id)
+
+    // 2. Delete server claim
+    try {
+      await fetch(`/api/profile-claims?company_id=${encodeURIComponent(id)}`, {
+        method: 'DELETE',
+      })
+    } catch (_) {}
+
+    // 3. Delete from Supabase
+    try {
+      await supabase.from('companies').delete().eq('id', id)
+    } catch (_) {}
+    try {
+      await supabase.from('profile_claims').delete().eq('company_id', id)
+    } catch (_) {}
+
+    await reloadCompanies()
+    if (selectedCompanyModal?.id === id) setSelectedCompanyModal(null)
+    isConfirmModalOpen.current = false
+    setCompanyToDelete(null)
+    setIsActionProcessing(false)
+
+    setActionToast({ type: 'success', message: `Supplier "${name}" was permanently deleted.` })
+    setTimeout(() => setActionToast(null), 4000)
+  }
+
+  const requestRevokeCompany = (companyId: string, companyName: string) => {
+    isConfirmModalOpen.current = true
+    setCompanyToRevoke({ id: companyId, name: companyName })
+  }
+
+  const confirmRevokeCompany = async () => {
+    if (!companyToRevoke) return
+    const { id, name } = companyToRevoke
+    setIsActionProcessing(true)
+
+    // 1. Reset status in companies data to 'unclaimed'
+    revokeProfileClaim(id)
+
+    // 2. Revoke claim record on server
+    try {
+      await fetch('/api/profile-claims', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ company_id: id, action: 'revoke' }),
+      })
+    } catch (_) {}
+
+    try {
+      await supabase.from('profile_claims').delete().eq('company_id', id)
+    } catch (_) {}
+
+    await reloadCompanies()
+    if (selectedCompanyModal?.id === id) setSelectedCompanyModal(null)
+    isConfirmModalOpen.current = false
+    setCompanyToRevoke(null)
+    setIsActionProcessing(false)
+
+    setActionToast({ type: 'info', message: `Claim ownership for "${name}" was revoked. Profile is now unclaimed.` })
+    setTimeout(() => setActionToast(null), 4000)
   }
 
   // ── Partner Buyer Handlers ──
@@ -577,6 +758,19 @@ export default function AdminDashboardPage() {
                             </div>
                           </div>
 
+                          {/* Claimant Details */}
+                          {company.claimRequest && (
+                            <div className="mt-3 p-2.5 bg-emerald-50/80 border border-emerald-200/80 rounded-xl text-xs space-y-0.5">
+                              <p className="font-bold text-emerald-900 flex items-center gap-1.5">
+                                <BadgeCheck className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                                <span className="truncate">{company.claimRequest.fullName || company.claimRequest.username}</span>
+                              </p>
+                              <p className="text-[10px] text-emerald-700 truncate pl-5">
+                                {company.claimRequest.businessEmail} {company.claimRequest.jobTitle ? `· ${company.claimRequest.jobTitle}` : ''}
+                              </p>
+                            </div>
+                          )}
+
                           {/* Species & Products */}
                           <div className="mt-4 pt-3 border-t border-slate-100">
                             <span className="text-[10px] font-extrabold uppercase text-slate-400 tracking-wider block mb-2">
@@ -605,7 +799,14 @@ export default function AdminDashboardPage() {
                             View Profile
                           </Link>
                           <button
-                            onClick={() => handleDeleteCompany(company.id, company.name)}
+                            onClick={() => requestRevokeCompany(company.id, company.name)}
+                            className="px-3 py-2 rounded-xl border border-amber-200 text-amber-700 bg-amber-50 hover:bg-amber-100 transition cursor-pointer shrink-0 text-xs font-bold"
+                            title="Revoke Claim Status"
+                          >
+                            Revoke
+                          </button>
+                          <button
+                            onClick={() => requestDeleteCompany(company.id, company.name)}
                             className="p-2.5 rounded-xl border border-rose-200 text-rose-600 hover:bg-rose-50 transition cursor-pointer shrink-0"
                             title="Delete Supplier"
                           >
@@ -725,7 +926,7 @@ export default function AdminDashboardPage() {
                               View Profile
                             </Link>
                             <button
-                              onClick={() => handleDeleteCompany(company.id, company.name)}
+                              onClick={() => requestDeleteCompany(company.id, company.name)}
                               className="p-2.5 rounded-xl border border-rose-200 text-rose-600 hover:bg-rose-50 transition cursor-pointer shrink-0"
                               title="Delete Supplier"
                             >
@@ -936,6 +1137,7 @@ export default function AdminDashboardPage() {
                   </div>
                 </div>
 
+
                 {filteredClaims.length === 0 ? (
                   <div className="bg-white border border-slate-200/90 rounded-2xl p-14 text-center space-y-3 shadow-xs">
                     <div className="w-12 h-12 rounded-2xl bg-blue-50 text-[#022B96] flex items-center justify-center mx-auto">
@@ -943,24 +1145,16 @@ export default function AdminDashboardPage() {
                     </div>
                     <h3 className="text-base font-bold text-slate-900">No Verification Requests</h3>
                     <p className="text-xs text-slate-500 max-w-md mx-auto leading-relaxed">
-                      No claims are currently pending. When a supplier clicks <strong>&quot;Claim Profile&quot;</strong> and submits their business email, their application will appear here for your review and approval.
+                      No claims are currently pending in this filter. When a supplier submits a claim, their application will appear here for your review and approval.
                     </p>
                   </div>
                 ) : (
-                  <div className="space-y-3">
-                    <div className="hidden md:grid grid-cols-12 gap-4 px-6 py-2 text-[10px] font-extrabold uppercase tracking-wider text-slate-400">
-                      <div className="col-span-3">Company / Id</div>
-                      <div className="col-span-3">Applicant Info</div>
-                      <div className="col-span-2">Domain Check</div>
-                      <div className="col-span-2">Status</div>
-                      <div className="col-span-2 text-right">Action</div>
-                    </div>
-
+                  <div className="space-y-4">
                     {filteredClaims.map((company) => {
                       const req = company.claimRequest
                       const companyDomain = company.domain || company.email?.split('@')[1] || ''
                       const applicantDomain = req?.businessEmail ? req.businessEmail.split('@')[1] : ''
-                      const domainMatches = companyDomain && applicantDomain && companyDomain.toLowerCase() === applicantDomain.toLowerCase()
+                      const domainMatches = Boolean(companyDomain && applicantDomain && companyDomain.toLowerCase() === applicantDomain.toLowerCase())
                       const isPending = company.status === 'claim_requested'
                       const isClaimed = company.status === 'claimed'
                       const isRejected = company.status === 'rejected'
@@ -968,106 +1162,152 @@ export default function AdminDashboardPage() {
                       return (
                         <div
                           key={company.id}
-                          className="grid grid-cols-1 md:grid-cols-12 gap-4 px-6 py-4 rounded-2xl border border-slate-200/80 bg-white hover:border-slate-300 shadow-xs transition-all duration-200 items-center"
+                          className="p-5 rounded-2xl border border-slate-200/80 bg-white hover:border-slate-300 hover:shadow-md transition-all duration-200 space-y-4"
                         >
-                          <div className="col-span-3 flex items-center gap-3">
-                            <div className="w-9 h-9 rounded-xl bg-slate-900 text-white font-black text-xs flex items-center justify-center shrink-0">
-                              {company.name.slice(0, 2).toUpperCase()}
-                            </div>
-                            <div className="min-w-0">
-                              <p className="font-bold text-slate-900 text-xs truncate">{company.name}</p>
-                              <p className="text-[10px] text-slate-400 truncate">{company.country} · #{company.id.slice(0, 6)}</p>
-                            </div>
-                          </div>
-
-                          <div className="col-span-3 min-w-0">
-                            {req ? (
-                              <div>
-                                <p className="font-bold text-slate-800 text-xs truncate">{req.fullName}</p>
-                                <p className="text-[10px] text-slate-400 truncate">{req.businessEmail}</p>
+                          {/* Card Header: Company Info + Status Badge */}
+                          <div className="flex flex-wrap items-center justify-between gap-3 pb-3.5 border-b border-slate-100">
+                            <div className="flex items-center gap-3 min-w-0">
+                              <div className="w-10 h-10 rounded-xl bg-[#022B96] text-white font-black text-sm flex items-center justify-center shrink-0 shadow-xs">
+                                {company.name.slice(0, 2).toUpperCase()}
                               </div>
-                            ) : (
-                              <p className="text-xs text-slate-400 italic">No claim submitted</p>
-                            )}
+                              <div className="min-w-0">
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  <h3 className="font-bold text-slate-900 text-sm truncate">{company.name}</h3>
+                                  <span className="text-[10px] font-bold bg-slate-100 text-slate-700 px-2 py-0.5 rounded-md shrink-0">
+                                    {company.country}
+                                  </span>
+                                  <span className="text-[10px] text-slate-400 font-mono">
+                                    #{company.id.slice(0, 6)}
+                                  </span>
+                                </div>
+                                <p className="text-[11px] text-slate-500 truncate mt-0.5">
+                                  Official Listing Website: <strong className="text-slate-700">{company.website || companyDomain || 'N/A'}</strong>
+                                </p>
+                              </div>
+                            </div>
+
+                            {/* Status Badge */}
+                            <div className="shrink-0">
+                              {isPending && (
+                                <span className="inline-flex items-center gap-1.5 text-xs font-bold text-blue-700 bg-blue-50 border border-blue-200/80 px-3 py-1.5 rounded-full">
+                                  <span className="h-2 w-2 rounded-full bg-blue-500 animate-pulse" />
+                                  Pending Review
+                                </span>
+                              )}
+                              {isClaimed && (
+                                <span className="inline-flex items-center gap-1.5 text-xs font-bold text-emerald-700 bg-emerald-50 border border-emerald-200/80 px-3 py-1.5 rounded-full">
+                                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                                  Approved &amp; Claimed
+                                </span>
+                              )}
+                              {isRejected && (
+                                <span className="inline-flex items-center gap-1.5 text-xs font-bold text-rose-700 bg-rose-50 border border-rose-200/80 px-3 py-1.5 rounded-full">
+                                  <AlertCircle className="w-3.5 h-3.5 text-rose-600" />
+                                  Rejected
+                                </span>
+                              )}
+                              {!isPending && !isClaimed && !isRejected && (
+                                <span className="inline-flex items-center gap-1.5 text-xs font-bold text-slate-600 bg-slate-100 px-3 py-1.5 rounded-full">
+                                  Unclaimed
+                                </span>
+                              )}
+                            </div>
                           </div>
 
-                          <div className="col-span-2">
-                            {req ? (
-                              <span className={`inline-flex items-center gap-1 text-[10px] font-bold px-2.5 py-1 rounded-full ${domainMatches ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-700'}`}>
-                                {domainMatches ? <Check className="w-3 h-3 text-emerald-600" /> : <AlertCircle className="w-3 h-3 text-slate-500" />}
-                                {domainMatches ? 'Match' : 'Mismatch'}
-                              </span>
-                            ) : (
-                              <span className="text-[10px] text-slate-400 font-medium">—</span>
-                            )}
-                          </div>
+                          {/* Card Body: Applicant Details + Domain Check + Action Buttons */}
+                          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+                            {/* Details Grid */}
+                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 text-xs flex-1">
+                              <div>
+                                <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">Applicant</span>
+                                <p className="font-bold text-slate-900 mt-0.5">
+                                  {req?.fullName || 'Anonymous'}
+                                  {req?.username ? <span className="text-slate-400 font-normal ml-1">(@{req.username})</span> : null}
+                                </p>
+                                <p className="text-[11px] text-slate-500">{req?.jobTitle || 'Representative'}</p>
+                              </div>
 
-                          <div className="col-span-2">
-                            {isPending && (
-                              <span className="inline-flex items-center gap-1.5 text-xs font-black text-blue-700 bg-blue-50 border border-blue-200/80 px-2.5 py-1 rounded-full">
-                                <span className="h-2 w-2 rounded-full bg-blue-500 animate-pulse" />
-                                Pending Review
-                              </span>
-                            )}
-                            {isClaimed && (
-                              <span className="inline-flex items-center gap-1.5 text-xs font-black text-emerald-700 bg-emerald-50 border border-emerald-200/80 px-2.5 py-1 rounded-full">
-                                <span className="h-2 w-2 rounded-full bg-emerald-500" />
-                                Approved
-                              </span>
-                            )}
-                            {isRejected && (
-                              <span className="inline-flex items-center gap-1.5 text-xs font-black text-rose-700 bg-rose-50 border border-rose-200/80 px-2.5 py-1 rounded-full">
-                                <span className="h-2 w-2 rounded-full bg-rose-500" />
-                                Rejected
-                              </span>
-                            )}
-                            {!isPending && !isClaimed && !isRejected && (
-                              <span className="inline-flex items-center gap-1.5 text-xs font-bold text-slate-600 bg-slate-100 px-2.5 py-1 rounded-full">
-                                <span className="h-2 w-2 rounded-full bg-slate-400" />
-                                Unclaimed
-                              </span>
-                            )}
-                          </div>
+                              <div>
+                                <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">Business Email</span>
+                                <p className="font-semibold text-slate-800 mt-0.5 truncate">{req?.businessEmail || 'N/A'}</p>
+                                {req?.phone && <p className="text-[11px] text-slate-400">{req.phone}</p>}
+                              </div>
 
-                          <div className="col-span-2 flex items-center justify-end gap-2">
-                            {isPending ? (
-                              <>
+                              <div>
+                                <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">Domain Check</span>
+                                <div className="mt-0.5">
+                                  {domainMatches ? (
+                                    <span
+                                      className="inline-flex items-center gap-1.5 text-[11px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200/80 px-2.5 py-1 rounded-lg"
+                                      title={`The applicant's email domain matches the official website domain (${applicantDomain}).`}
+                                    >
+                                      <Check className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                                      Match (@{applicantDomain})
+                                    </span>
+                                  ) : (
+                                    <span
+                                      className="inline-flex items-center gap-1.5 text-[11px] font-bold text-amber-800 bg-amber-50 border border-amber-200/80 px-2.5 py-1 rounded-lg"
+                                      title={`Email domain (@${applicantDomain || 'unknown'}) differs from website domain (@${companyDomain || 'website'}).`}
+                                    >
+                                      <Info className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+                                      Different Domain (@{applicantDomain || 'unknown'})
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+
+                            {/* Actions: Guaranteed generous spacing and never overlapping */}
+                            <div className="flex items-center gap-2 shrink-0 border-t lg:border-t-0 pt-3 lg:pt-0 border-slate-100 justify-end">
+                              {isPending ? (
+                                <>
+                                  <button
+                                    onClick={() => handleApproveClaim(company.id)}
+                                    className="flex items-center gap-1.5 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl shadow-xs transition cursor-pointer"
+                                  >
+                                    <Check className="w-3.5 h-3.5" />
+                                    <span>Approve</span>
+                                  </button>
+                                  <button
+                                    onClick={() => handleRejectClaim(company.id)}
+                                    className="flex items-center gap-1.5 px-3.5 py-2 bg-rose-50 hover:bg-rose-100 text-rose-600 font-bold text-xs rounded-xl border border-rose-200 transition cursor-pointer"
+                                    title="Reject Claim"
+                                  >
+                                    <X className="w-3.5 h-3.5" />
+                                    <span>Reject</span>
+                                  </button>
+                                </>
+                              ) : isClaimed ? (
+                                <button
+                                  onClick={() => requestRevokeCompany(company.id, company.name)}
+                                  className="px-3.5 py-2 bg-amber-50 hover:bg-amber-100 text-amber-700 font-bold text-xs rounded-xl border border-amber-200 transition cursor-pointer"
+                                >
+                                  Revoke
+                                </button>
+                              ) : (
                                 <button
                                   onClick={() => handleApproveClaim(company.id)}
-                                  className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl shadow-xs transition cursor-pointer"
+                                  className="px-4 py-2 bg-[#022B96] hover:bg-[#011a5e] text-white font-bold text-xs rounded-xl shadow-xs transition cursor-pointer"
                                 >
-                                  ✓ Approve
+                                  Approve
                                 </button>
-                                <button
-                                  onClick={() => handleRejectClaim(company.id)}
-                                  className="px-3 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-600 font-bold text-xs rounded-xl border border-rose-200 transition cursor-pointer"
-                                  title="Reject Claim"
-                                >
-                                  ✕ Reject
-                                </button>
-                              </>
-                            ) : isClaimed ? (
+                              )}
                               <button
-                                onClick={() => handleRejectClaim(company.id)}
-                                className="px-3 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-600 font-bold text-xs rounded-xl border border-rose-200 transition cursor-pointer"
+                                onClick={() => setSelectedCompanyModal(company)}
+                                className="flex items-center gap-1.5 px-3.5 py-2 text-slate-700 hover:text-slate-900 bg-slate-50 hover:bg-slate-100 border border-slate-200/80 rounded-xl text-xs font-bold transition cursor-pointer"
+                                title="View Full Details"
                               >
-                                Revoke
+                                <Eye className="w-3.5 h-3.5" />
+                                <span>Details</span>
                               </button>
-                            ) : (
                               <button
-                                onClick={() => handleApproveClaim(company.id)}
-                                className="px-3.5 py-1.5 bg-[#022B96] hover:bg-[#011a5e] text-white font-bold text-xs rounded-xl shadow-xs transition cursor-pointer"
+                                onClick={() => requestDeleteCompany(company.id, company.name)}
+                                className="p-2 text-rose-500 hover:text-rose-700 hover:bg-rose-50 border border-rose-200 rounded-xl transition cursor-pointer"
+                                title="Delete Supplier"
                               >
-                                Approve
+                                <Trash2 className="w-3.5 h-3.5" />
                               </button>
-                            )}
-                            <button
-                              onClick={() => setSelectedCompanyModal(company)}
-                              className="p-1.5 text-slate-400 hover:text-slate-800 hover:bg-slate-100 rounded-xl transition cursor-pointer"
-                              title="View Details"
-                            >
-                              <Eye className="w-4 h-4" />
-                            </button>
+                            </div>
                           </div>
                         </div>
                       )
@@ -1231,26 +1471,39 @@ export default function AdminDashboardPage() {
                   </button>
                 </div>
 
+                {/* Delete success toast */}
+                {newsSuccessMsg && (
+                  <div className="flex items-center justify-between p-4 bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-2xl text-xs font-bold animate-in fade-in">
+                    <div className="flex items-center gap-2">
+                      <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                      <span>{newsSuccessMsg}</span>
+                    </div>
+                    <button onClick={() => setNewsSuccessMsg(null)} className="text-emerald-500 hover:text-emerald-800 p-1">
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                )}
+
                 {newsArticles.length > 0 ? (
                   <div className="grid grid-cols-1 gap-4">
                     {newsArticles.map((article) => (
-                      <div key={article.id} className="bg-white border border-slate-200 rounded-2xl p-5 shadow-xs hover:border-[#022B96]/30 transition flex flex-col sm:flex-row gap-5 items-start sm:items-center justify-between">
-                        <div className="flex items-start gap-4 flex-1 min-w-0">
+                      <div key={article.id} className="bg-white border border-slate-200 rounded-2xl p-5 shadow-xs hover:border-[#022B96]/30 transition flex flex-col sm:flex-row gap-5 items-start sm:items-center justify-between overflow-hidden">
+                        <div className="flex items-start gap-4 flex-1 min-w-0 overflow-hidden">
                           {article.image ? (
                             <img src={article.image} alt={article.title} className="w-20 h-20 rounded-xl object-cover border border-slate-200 flex-shrink-0" />
                           ) : (
                             <div className="w-20 h-20 rounded-xl bg-blue-50 text-[#022B96] font-bold text-xs flex items-center justify-center flex-shrink-0">News</div>
                           )}
-                          <div className="space-y-1">
-                            <div className="flex items-center gap-2">
-                              <span className="text-[10px] font-extrabold uppercase tracking-wider bg-blue-50 text-[#022B96] px-2.5 py-0.5 rounded-full border border-blue-100">
+                          <div className="space-y-1 min-w-0 overflow-hidden flex-1">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span className="text-[10px] font-extrabold uppercase tracking-wider bg-blue-50 text-[#022B96] px-2.5 py-0.5 rounded-full border border-blue-100 shrink-0">
                                 {article.category}
                               </span>
-                              <span className="text-[11px] text-slate-400 font-medium">{article.readTime}</span>
+                              <span className="text-[11px] text-slate-400 font-medium shrink-0">{article.readTime}</span>
                             </div>
-                            <h3 className="font-extrabold text-slate-900 text-sm line-clamp-1">{article.title}</h3>
-                            <p className="text-xs text-slate-500 line-clamp-2 leading-relaxed">{article.excerpt}</p>
-                            <p className="text-[10px] text-slate-400 font-medium">By {article.author} · {article.date}</p>
+                            <h3 className="font-extrabold text-slate-900 text-sm line-clamp-1 break-words">{article.title}</h3>
+                            <p className="text-xs text-slate-500 line-clamp-2 leading-relaxed break-words">{article.excerpt}</p>
+                            <p className="text-[10px] text-slate-400 font-medium truncate">By {article.author} · {article.date}</p>
                           </div>
                         </div>
 
@@ -1260,17 +1513,28 @@ export default function AdminDashboardPage() {
                               Preview
                             </button>
                           </Link>
-                          {article.id.startsWith('news-admin-') && (
-                            <button
-                              onClick={() => {
-                                deleteNewsArticle(article.id)
-                                setNewsArticles(getStoredNewsArticles())
-                              }}
-                              className="px-3.5 py-1.5 border border-rose-200 text-rose-600 hover:bg-rose-50 text-xs font-bold rounded-xl transition cursor-pointer"
-                            >
-                              Delete
-                            </button>
-                          )}
+                          <button
+                            onClick={() => {
+                              if (!confirm(`Delete "${article.title}"? This cannot be undone.`)) return
+                              setNewsDeleting(article.id)
+                              deleteNewsArticle(article.id).then(() =>
+                                fetchNewsArticles()
+                              ).then((articles) => {
+                                setNewsArticles(articles)
+                                setNewsSuccessMsg(`Article "${article.title.slice(0, 40)}${article.title.length > 40 ? '…' : ''}" was deleted.`)
+                                setTimeout(() => setNewsSuccessMsg(null), 4000)
+                              }).finally(() => setNewsDeleting(null))
+                            }}
+                            disabled={newsDeleting === article.id}
+                            className="inline-flex items-center gap-1.5 px-3.5 py-1.5 border border-rose-200 text-rose-600 hover:bg-rose-50 text-xs font-bold rounded-xl transition cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                          >
+                            {newsDeleting === article.id ? (
+                              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                            ) : (
+                              <Trash2 className="w-3.5 h-3.5" />
+                            )}
+                            Delete
+                          </button>
                         </div>
                       </div>
                     ))}
@@ -1451,13 +1715,61 @@ export default function AdminDashboardPage() {
 
             <div className="p-6 space-y-4 text-xs text-slate-700">
               {selectedCompanyModal.claimRequest && (
-                <div className="bg-slate-50 border border-slate-200/80 p-4 rounded-2xl space-y-1.5">
-                  <p className="font-bold text-slate-900 text-xs mb-2 border-b border-slate-200 pb-1">Applicant Details</p>
-                  <p><strong className="text-slate-900">Name:</strong> {selectedCompanyModal.claimRequest.fullName}</p>
-                  <p><strong className="text-slate-900">Job Title:</strong> {selectedCompanyModal.claimRequest.jobTitle}</p>
-                  <p><strong className="text-slate-900">Business Email:</strong> {selectedCompanyModal.claimRequest.businessEmail}</p>
-                  <p><strong className="text-slate-900">Phone:</strong> {selectedCompanyModal.claimRequest.phone}</p>
-                </div>
+                <>
+                  <div className="bg-slate-50 border border-slate-200/80 p-4 rounded-2xl space-y-1.5">
+                    <p className="font-bold text-slate-900 text-xs mb-2 border-b border-slate-200 pb-1">Applicant Details</p>
+                    <p><strong className="text-slate-900">Name:</strong> {selectedCompanyModal.claimRequest.fullName}</p>
+                    {selectedCompanyModal.claimRequest.username && (
+                      <p><strong className="text-slate-900">Username:</strong> @{selectedCompanyModal.claimRequest.username}</p>
+                    )}
+                    <p><strong className="text-slate-900">Job Title:</strong> {selectedCompanyModal.claimRequest.jobTitle}</p>
+                    <p><strong className="text-slate-900">Business Email:</strong> {selectedCompanyModal.claimRequest.businessEmail}</p>
+                    {selectedCompanyModal.claimRequest.phone && (
+                      <p><strong className="text-slate-900">Phone:</strong> {selectedCompanyModal.claimRequest.phone}</p>
+                    )}
+                  </div>
+
+                  {/* Domain Comparison in Modal */}
+                  {(() => {
+                    const cDomain = selectedCompanyModal.domain || selectedCompanyModal.email?.split('@')[1] || selectedCompanyModal.website?.replace(/https?:\/\/(www\.)?/, '').split('/')[0] || ''
+                    const aDomain = selectedCompanyModal.claimRequest.businessEmail?.split('@')[1] || ''
+                    const isMatch = Boolean(cDomain && aDomain && cDomain.toLowerCase() === aDomain.toLowerCase())
+
+                    return (
+                      <div className="bg-slate-50 border border-slate-200/80 p-4 rounded-2xl space-y-2">
+                        <div className="flex items-center justify-between border-b border-slate-200 pb-1.5">
+                          <span className="font-bold text-slate-900">Domain Verification Check</span>
+                          {isMatch ? (
+                            <span className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-700 bg-emerald-100/80 px-2 py-0.5 rounded-full">
+                              <Check className="w-3 h-3 text-emerald-600" />
+                              Corporate Email Match
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 text-[11px] font-bold text-amber-800 bg-amber-100/80 px-2 py-0.5 rounded-full">
+                              <Info className="w-3 h-3 text-amber-600" />
+                              Different Email Domain
+                            </span>
+                          )}
+                        </div>
+                        <div className="grid grid-cols-2 gap-2 pt-1 text-slate-600">
+                          <div>
+                            <span className="text-[10px] uppercase font-bold text-slate-400 block">Website Domain</span>
+                            <span className="font-semibold text-slate-800 font-mono text-[11px]">@{cDomain || 'N/A'}</span>
+                          </div>
+                          <div>
+                            <span className="text-[10px] uppercase font-bold text-slate-400 block">Applicant Domain</span>
+                            <span className="font-semibold text-slate-800 font-mono text-[11px]">@{aDomain || 'N/A'}</span>
+                          </div>
+                        </div>
+                        {!isMatch && (
+                          <p className="text-[11px] text-amber-900 bg-amber-50/90 border border-amber-200/70 p-2.5 rounded-xl leading-relaxed mt-1.5">
+                            <strong>What this means:</strong> The applicant used <code>@{aDomain}</code> instead of the website domain <code>@{cDomain}</code>. This is common when suppliers apply with personal emails (Gmail) or agency accounts. As admin, you can approve if you know the applicant.
+                          </p>
+                        )}
+                      </div>
+                    )
+                  })()}
+                </>
               )}
               <div className="space-y-1 text-slate-600">
                 <p><strong className="text-slate-900">Official Website:</strong> {selectedCompanyModal.website}</p>
@@ -1645,6 +1957,8 @@ export default function AdminDashboardPage() {
                   'Sustainability': 'bg-teal-50 text-teal-700',
                 }
 
+                // addNewsArticle is async — must await so Supabase write
+                // and localStorage cache update complete before we reload state
                 addNewsArticle({
                   slug,
                   title: newsTitle.trim(),
@@ -1655,9 +1969,13 @@ export default function AdminDashboardPage() {
                   date: new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' }),
                   readTime: newsReadTime.trim() || '3 min read',
                   image: newsImageUrl.trim() || 'https://images.unsplash.com/photo-1544551763-46a013bb70d5?w=800&q=80',
+                }).then(() => {
+                  // Re-fetch from Supabase so the list is authoritative
+                  return fetchNewsArticles()
+                }).then((articles) => {
+                  setNewsArticles(articles)
                 })
 
-                setNewsArticles(getStoredNewsArticles())
                 setShowAddNewsModal(false)
                 setNewsTitle('')
                 setNewsExcerpt('')
@@ -1959,6 +2277,104 @@ export default function AdminDashboardPage() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* ══ ACTION TOAST NOTIFICATION ════════════════════════════════════ */}
+      {actionToast && (
+        <div
+          className={`fixed bottom-6 right-6 z-50 px-4 py-3 rounded-2xl shadow-xl border flex items-center gap-3 text-xs font-bold animate-in slide-in-from-bottom-5 duration-200 ${
+            actionToast.type === 'success'
+              ? 'bg-emerald-50 border-emerald-200 text-emerald-800'
+              : 'bg-blue-50 border-blue-200 text-blue-800'
+          }`}
+        >
+          {actionToast.type === 'success' ? (
+            <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+          ) : (
+            <Info className="w-4 h-4 text-blue-600 shrink-0" />
+          )}
+          <span>{actionToast.message}</span>
+          <button
+            onClick={() => setActionToast(null)}
+            className="ml-2 text-slate-400 hover:text-slate-600 p-0.5"
+          >
+            <X className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      )}
+
+      {/* ══ DELETE CONFIRMATION MODAL ══════════════════════════════════════ */}
+      {companyToDelete && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-150">
+          <div className="bg-white rounded-3xl p-6 sm:p-7 max-w-sm w-full shadow-2xl border border-slate-100 text-center space-y-4 animate-in zoom-in-95 duration-150">
+            <div className="w-13 h-13 rounded-2xl bg-rose-50 text-rose-600 flex items-center justify-center mx-auto border border-rose-100">
+              <Trash2 className="w-6 h-6" />
+            </div>
+            <div className="space-y-1.5">
+              <h3 className="text-base font-black text-slate-900">Delete Supplier Profile?</h3>
+              <p className="text-xs text-slate-500 leading-relaxed">
+                Are you sure you want to permanently delete <strong className="text-slate-800">&quot;{companyToDelete.name}&quot;</strong>? 
+                This will remove the company and any associated claims completely.
+              </p>
+            </div>
+            <div className="grid grid-cols-2 gap-2.5 pt-2">
+              <button
+                type="button"
+                disabled={isActionProcessing}
+                onClick={() => { isConfirmModalOpen.current = false; setCompanyToDelete(null) }}
+                className="w-full py-2.5 px-4 rounded-xl border border-slate-200 text-slate-700 font-bold text-xs hover:bg-slate-50 transition cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={isActionProcessing}
+                onClick={confirmDeleteCompany}
+                className="w-full py-2.5 px-4 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs shadow-sm transition cursor-pointer flex items-center justify-center gap-1.5"
+              >
+                {isActionProcessing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
+                <span>Yes, Delete</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ══ REVOKE CONFIRMATION MODAL ══════════════════════════════════════ */}
+      {companyToRevoke && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-150">
+          <div className="bg-white rounded-3xl p-6 sm:p-7 max-w-sm w-full shadow-2xl border border-slate-100 text-center space-y-4 animate-in zoom-in-95 duration-150">
+            <div className="w-13 h-13 rounded-2xl bg-amber-50 text-amber-600 flex items-center justify-center mx-auto border border-amber-100">
+              <AlertCircle className="w-6 h-6" />
+            </div>
+            <div className="space-y-1.5">
+              <h3 className="text-base font-black text-slate-900">Revoke Claim Ownership?</h3>
+              <p className="text-xs text-slate-500 leading-relaxed">
+                Are you sure you want to revoke the claim on <strong className="text-slate-800">&quot;{companyToRevoke.name}&quot;</strong>? 
+                The company will stay in the directory, but the applicant will lose access and the profile will become unclaimed again.
+              </p>
+            </div>
+            <div className="grid grid-cols-2 gap-2.5 pt-2">
+              <button
+                type="button"
+                disabled={isActionProcessing}
+                onClick={() => { isConfirmModalOpen.current = false; setCompanyToRevoke(null) }}
+                className="w-full py-2.5 px-4 rounded-xl border border-slate-200 text-slate-700 font-bold text-xs hover:bg-slate-50 transition cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={isActionProcessing}
+                onClick={confirmRevokeCompany}
+                className="w-full py-2.5 px-4 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs shadow-sm transition cursor-pointer flex items-center justify-center gap-1.5"
+              >
+                {isActionProcessing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : null}
+                <span>Yes, Revoke</span>
+              </button>
+            </div>
           </div>
         </div>
       )}

@@ -1,8 +1,7 @@
 'use client'
 
 import React, { useState } from 'react'
-import { X, CheckCircle2, ShieldCheck, Mail, User, Briefcase, Lock, AlertTriangle, Eye, EyeOff } from 'lucide-react'
-import { Button } from '@/components/ui/button'
+import { X, CheckCircle2, Eye, EyeOff, Loader2 } from 'lucide-react'
 import { CompanyProfile, requestProfileClaim } from '@/lib/data/companies-data'
 import { createClient } from '@/lib/supabase/client'
 
@@ -14,33 +13,52 @@ interface ClaimProfileModalProps {
 }
 
 export function ClaimProfileModal({ company, isOpen, onClose, onSuccess }: ClaimProfileModalProps) {
+  const [username, setUsername] = useState('')
   const [fullName, setFullName] = useState('')
-  const [businessEmail, setBusinessEmail] = useState('')
   const [jobTitle, setJobTitle] = useState('')
+  const [businessEmail, setBusinessEmail] = useState('')
   const [password, setPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
-
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [submitted, setSubmitted] = useState(false)
 
   if (!isOpen || !company) return null
 
-  // Extract expected domain e.g. amacore.nl
-  const expectedDomain = company.domain || company.email.split('@')[1] || ''
+  const expectedDomain = company.domain || (company.email ? company.email.split('@')[1] : '')
+
+  const handleUsernameChange = (val: string) => {
+    setUsername(val.toLowerCase().replace(/[^a-z0-9_.-]/g, ''))
+  }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     if (!company) return
     setError(null)
 
-    if (!fullName.trim() || !businessEmail.trim() || !jobTitle.trim() || !password) {
-      setError('Please fill in all required fields.')
+    const cleanUsername = username.trim().toLowerCase()
+    const cleanFullName = fullName.trim()
+    const cleanTitle = jobTitle.trim()
+    const cleanEmail = businessEmail.trim().toLowerCase()
+
+    if (!cleanUsername || cleanUsername.length < 3) {
+      setError('Username must be at least 3 characters.')
       return
     }
-
-    if (password.length < 6) {
-      setError('Password must be at least 6 characters long.')
+    if (!cleanFullName) {
+      setError('Please enter your full name.')
+      return
+    }
+    if (!cleanTitle) {
+      setError('Please enter your job title.')
+      return
+    }
+    if (!cleanEmail || !cleanEmail.includes('@')) {
+      setError('Please enter a valid business email.')
+      return
+    }
+    if (!password || password.length < 6) {
+      setError('Password must be at least 6 characters.')
       return
     }
 
@@ -48,55 +66,55 @@ export function ClaimProfileModal({ company, isOpen, onClose, onSuccess }: Claim
     const companyId = company.id
 
     try {
-      // 1. Immediately record pending claim in local/state database
       const res = requestProfileClaim(companyId, {
-        fullName: fullName.trim(),
-        businessEmail: businessEmail.trim(),
-        jobTitle: jobTitle.trim(),
-        phone: '',
+        username: cleanUsername,
+        fullName: cleanFullName,
+        businessEmail: cleanEmail,
+        jobTitle: cleanTitle,
       })
 
       if (!res.success) {
         setLoading(false)
-        setError(res.error || 'Failed to submit claim request. Please try again.')
+        setError(res.error || 'Failed to submit. Please try again.')
         return
       }
 
-      // 2. Attempt Supabase Auth account creation with safety timeout (max 1.5s so it never hangs)
+      // Persist claim to backend server API
+      try {
+        await fetch('/api/profile-claims', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            company_id: companyId,
+            company_name: company.name,
+            username: cleanUsername,
+            full_name: cleanFullName,
+            job_title: cleanTitle,
+            business_email: cleanEmail,
+            password: password,
+          }),
+        })
+      } catch (apiErr) {
+        console.warn('Backend claims API call fallback:', apiErr)
+      }
+
+      // Also try Supabase table directly if available
       try {
         const supabase = createClient()
-        const authAction = async () => {
-          const { data: authData } = await supabase.auth.signUp({
-            email: businessEmail.trim(),
-            password: password,
-            options: {
-              data: {
-                role: 'supplier',
-                full_name: fullName.trim(),
-                company_id: companyId,
-                company_name: company.name,
-                job_title: jobTitle.trim(),
-                claim_status: 'pending',
-              },
-            },
-          })
+        await supabase.from('profile_claims').insert({
+          company_id: companyId,
+          company_name: company.name,
+          username: cleanUsername,
+          full_name: cleanFullName,
+          job_title: cleanTitle,
+          business_email: cleanEmail,
+          status: 'pending',
+        })
+      } catch (_) {}
 
-          if (authData?.user) {
-            try {
-              await supabase.from('users').upsert({
-                id: authData.user.id,
-                role: 'supplier',
-                full_name: fullName.trim(),
-                company_id: companyId,
-              })
-            } catch (_) {}
-          }
-        }
-
-        const timeout = new Promise((resolve) => setTimeout(resolve, 1500))
-        await Promise.race([authAction(), timeout])
-      } catch (authErr) {
-        console.warn('Auth registration notice:', authErr)
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new Event('bokhol-claims-change'))
+        window.dispatchEvent(new Event('storage'))
       }
 
       setLoading(false)
@@ -106,180 +124,183 @@ export function ClaimProfileModal({ company, isOpen, onClose, onSuccess }: Claim
         onClose()
         setSubmitted(false)
       }, 3000)
-    } catch (err: any) {
+    } catch (err: unknown) {
       setLoading(false)
-      setError(err?.message || 'Failed to submit claim request. Please try again.')
+      setError(err instanceof Error ? err.message : 'Failed to submit. Please try again.')
     }
   }
 
+  const inputClass =
+    'w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm text-gray-900 placeholder-gray-400 bg-white focus:outline-none focus:border-[#022B96] focus:ring-1 focus:ring-[#022B96]/20 transition'
+  const labelClass = 'block text-xs font-medium text-gray-600 mb-1.5'
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4 overflow-y-auto font-sans">
-      <div className="relative w-full max-w-lg rounded-2xl bg-white shadow-2xl border border-slate-100 overflow-hidden animate-in fade-in zoom-in-95 duration-200">
-        
-        {/* Header with REAL Company Logo */}
-        <div className="bg-gradient-to-r from-[#022B96] to-blue-800 text-white p-6 relative">
-          <button
-            onClick={onClose}
-            aria-label="Close"
-            className="absolute top-4 right-4 text-white/80 hover:text-white p-1.5 rounded-full hover:bg-white/10 transition"
-          >
-            <X className="w-5 h-5" />
-          </button>
-          
-          <div className="flex items-center gap-3.5 mb-2">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.45)' }}>
+      <div className="relative w-full max-w-md bg-white rounded-2xl shadow-xl overflow-hidden">
+
+        {/* Header */}
+        <div className="flex items-start justify-between p-5 border-b border-gray-100">
+          <div className="flex items-center gap-3">
             {company.logoUrl ? (
-              <div className="w-12 h-12 rounded-xl bg-white border border-white/40 shadow-sm p-1.5 flex items-center justify-center shrink-0 overflow-hidden">
-                <img
-                  src={company.logoUrl}
-                  alt={company.name}
-                  className="w-full h-full object-contain"
-                />
+              <div className="w-10 h-10 rounded-lg border border-gray-200 flex items-center justify-center overflow-hidden shrink-0 bg-gray-50">
+                <img src={company.logoUrl} alt={company.name} className="w-full h-full object-contain" />
               </div>
             ) : (
-              <div className="w-12 h-12 rounded-xl bg-white/15 text-white font-black text-base flex items-center justify-center border border-white/20 shrink-0">
-                {company.name.slice(0, 2).toUpperCase()}
+              <div className="w-10 h-10 rounded-lg bg-[#022B96]/10 flex items-center justify-center shrink-0">
+                <span className="text-[#022B96] font-bold text-sm">{company.name.charAt(0)}</span>
               </div>
             )}
-
             <div>
-              <span className="inline-block text-[11px] font-semibold text-blue-100 bg-white/15 px-2.5 py-0.5 rounded-full mb-1">
-                Claim Profile Ownership
-              </span>
-              <h2 className="text-xl font-extrabold leading-tight text-white">{company.name}</h2>
+              <p className="text-xs text-gray-400 font-medium">Claim Profile</p>
+              <h2 className="text-sm font-bold text-gray-900 leading-tight">{company.name}</h2>
             </div>
           </div>
-          
-          <p className="text-xs text-blue-100/90 mt-1 leading-relaxed">
-            Claim this profile to manage company details, upload products, post market offers, and connect directly with verified buyers.
-          </p>
+          <button
+            onClick={onClose}
+            className="text-gray-400 hover:text-gray-600 transition cursor-pointer p-1 rounded-lg hover:bg-gray-100 mt-0.5"
+          >
+            <X className="w-4 h-4" />
+          </button>
         </div>
 
         {submitted ? (
-          <div className="p-8 text-center space-y-4">
-            <div className="w-16 h-16 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mx-auto animate-bounce">
-              <CheckCircle2 className="w-10 h-10" />
+          /* Success */
+          <div className="p-8 text-center space-y-3">
+            <div className="w-12 h-12 bg-green-100 rounded-full flex items-center justify-center mx-auto">
+              <CheckCircle2 className="w-6 h-6 text-green-600" />
             </div>
-            <h3 className="text-xl font-bold text-slate-900">Claim Submitted Successfully</h3>
-            <p className="text-xs text-slate-600 max-w-sm mx-auto leading-relaxed">
-              Your claim for <strong>{company.name}</strong> is now pending admin review.
+            <h3 className="font-bold text-gray-900">Request Submitted</h3>
+            <p className="text-sm text-gray-500 leading-relaxed">
+              Your claim for <strong className="text-gray-800">{company.name}</strong> is under review.
+              The admin will approve or reject your request.
             </p>
-            <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 text-xs text-left space-y-1.5">
-              <p className="font-bold text-slate-800">Your Login Credentials:</p>
-              <p className="text-slate-600">Email: <strong className="text-[#022B96]">{businessEmail}</strong></p>
-              <p className="text-slate-600">Password: <strong className="text-slate-800">••••••••</strong></p>
-              <p className="text-[11px] text-emerald-700 font-semibold pt-1">
-                Once the admin clicks Approve in the Admin Panel, you can sign in at <strong>/login</strong> using this email and password.
-              </p>
+            <div className="text-left bg-gray-50 rounded-lg p-3 text-xs text-gray-600 space-y-1 border border-gray-100">
+              <p><span className="text-gray-400">Username:</span> <strong>@{username}</strong></p>
+              <p><span className="text-gray-400">Name:</span> <strong>{fullName}</strong></p>
+              <p><span className="text-gray-400">Email:</span> <strong>{businessEmail}</strong></p>
             </div>
           </div>
         ) : (
-          <form onSubmit={handleSubmit} className="p-6 space-y-4">
-            
+          /* Form — autocomplete="off" prevents browser from filling admin credentials */
+          <form onSubmit={handleSubmit} autoComplete="off" noValidate className="p-5 space-y-4">
+
             {error && (
-              <div className="flex items-center gap-2 bg-rose-50 border border-rose-200 text-rose-700 p-3.5 rounded-xl text-xs">
-                <AlertTriangle className="w-4 h-4 shrink-0" />
-                <span>{error}</span>
+              <div className="text-xs text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
+                {error}
               </div>
             )}
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              {/* Full Name */}
-              <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">
-                  Full Name <span className="text-rose-500">*</span>
-                </label>
-                <div className="relative">
-                  <User className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
-                  <input
-                    type="text"
-                    required
-                    placeholder="e.g. John De Jong"
-                    value={fullName}
-                    onChange={(e) => setFullName(e.target.value)}
-                    className="w-full pl-9 pr-3 py-2 border border-slate-200 rounded-xl text-xs focus:ring-2 focus:ring-[#022B96]/20 focus:border-[#022B96] outline-none transition"
-                  />
-                </div>
-              </div>
-
-              {/* Job Title */}
-              <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">
-                  Job Title <span className="text-rose-500">*</span>
-                </label>
-                <div className="relative">
-                  <Briefcase className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
-                  <input
-                    type="text"
-                    required
-                    placeholder="e.g. Sales Manager / CEO"
-                    value={jobTitle}
-                    onChange={(e) => setJobTitle(e.target.value)}
-                    className="w-full pl-9 pr-3 py-2 border border-slate-200 rounded-xl text-xs focus:ring-2 focus:ring-[#022B96]/20 focus:border-[#022B96] outline-none transition"
-                  />
-                </div>
-              </div>
+            {/* Username */}
+            <div>
+              <label className={labelClass}>Username <span className="text-red-400">*</span></label>
+              <input
+                type="text"
+                name="claim-username"
+                autoComplete="off"
+                placeholder="e.g. john_supplier"
+                value={username}
+                onChange={(e) => handleUsernameChange(e.target.value)}
+                className={inputClass}
+              />
             </div>
 
-            {/* Login Email Address */}
+            {/* Full Name */}
             <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1">
-                Login Email Address <span className="text-rose-500">*</span>
-              </label>
-              <div className="relative">
-                <Mail className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
-                <input
-                  type="email"
-                  required
-                  placeholder={`e.g. name@${expectedDomain || 'company.com'}`}
-                  value={businessEmail}
-                  onChange={(e) => setBusinessEmail(e.target.value)}
-                  className="w-full pl-9 pr-3 py-2 border border-slate-200 rounded-xl text-xs focus:ring-2 focus:ring-[#022B96]/20 focus:border-[#022B96] outline-none transition"
-                />
-              </div>
-              <p className="text-[11px] text-slate-500 mt-1">
-                You will use this email address to log in to your Supplier Dashboard.
-              </p>
+              <label className={labelClass}>Full Name <span className="text-red-400">*</span></label>
+              <input
+                type="text"
+                name="claim-fullname"
+                autoComplete="off"
+                placeholder="e.g. John De Jong"
+                value={fullName}
+                onChange={(e) => setFullName(e.target.value)}
+                className={inputClass}
+              />
             </div>
 
-            {/* Password with View Toggle */}
+            {/* Job Title */}
             <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1">
-                Account Password <span className="text-rose-500">*</span>
+              <label className={labelClass}>Job Title <span className="text-red-400">*</span></label>
+              <input
+                type="text"
+                name="claim-title"
+                autoComplete="off"
+                placeholder="e.g. Sales Manager, CEO"
+                value={jobTitle}
+                onChange={(e) => setJobTitle(e.target.value)}
+                className={inputClass}
+              />
+            </div>
+
+            {/* Business Email */}
+            <div>
+              <label className={labelClass}>Business Email <span className="text-red-400">*</span></label>
+              <input
+                type="text"
+                name="claim-email"
+                autoComplete="off"
+                placeholder={expectedDomain ? `name@${expectedDomain}` : 'you@company.com'}
+                value={businessEmail}
+                onChange={(e) => setBusinessEmail(e.target.value)}
+                className={inputClass}
+              />
+            </div>
+
+            {/* Password */}
+            <div>
+              <label className={labelClass}>
+                Password <span className="text-red-400">*</span>
+                <span className="text-gray-300 ml-1 font-normal">— min. 6 characters</span>
               </label>
               <div className="relative">
-                <Lock className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
                 <input
                   type={showPassword ? 'text' : 'password'}
-                  required
-                  placeholder="••••••••"
+                  name="claim-new-password"
+                  autoComplete="new-password"
+                  placeholder="Create a password for your account"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  className="w-full pl-9 pr-10 py-2 border border-slate-200 rounded-xl text-xs focus:ring-2 focus:ring-[#022B96]/20 focus:border-[#022B96] outline-none transition"
+                  className={inputClass + ' pr-10'}
                 />
                 <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3 top-2.5 text-slate-400 hover:text-slate-700 transition cursor-pointer"
-                  title={showPassword ? 'Hide password' : 'Show password'}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 transition cursor-pointer"
                 >
                   {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                 </button>
               </div>
-              <p className="text-[11px] text-slate-400 mt-1">Minimum 6 characters. You will use this password to sign in.</p>
             </div>
 
+            {/* Notice */}
+            <p className="text-xs text-gray-400 leading-relaxed">
+              After submitting, the admin will review and approve your request. You can then sign in with your email and password.
+            </p>
+
             {/* Actions */}
-            <div className="pt-3 flex items-center justify-end gap-3 border-t border-slate-100">
-              <Button type="button" variant="outline" onClick={onClose} className="rounded-xl text-xs font-semibold">
+            <div className="flex items-center gap-2 pt-1">
+              <button
+                type="button"
+                onClick={onClose}
+                disabled={loading}
+                className="flex-1 py-2.5 text-sm font-medium text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50 transition cursor-pointer disabled:opacity-50"
+              >
                 Cancel
-              </Button>
-              <Button
+              </button>
+              <button
                 type="submit"
                 disabled={loading}
-                className="bg-[#022B96] hover:bg-[#022B96]/90 text-white rounded-xl text-xs font-bold px-6 py-2 shadow"
+                className="flex-1 py-2.5 text-sm font-semibold text-white bg-[#022B96] rounded-lg hover:bg-[#011a5e] transition cursor-pointer disabled:opacity-50 flex items-center justify-center gap-2"
               >
-                {loading ? 'Submitting Claim...' : 'Claim This Profile'}
-              </Button>
+                {loading ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    Submitting...
+                  </>
+                ) : (
+                  'Claim Profile'
+                )}
+              </button>
             </div>
           </form>
         )}

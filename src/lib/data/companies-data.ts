@@ -22,10 +22,11 @@ export interface CompanyProfile {
   species: string[]
   tags: string[]
   claimRequest?: {
+    username?: string
     fullName: string
     businessEmail: string
     jobTitle: string
-    phone: string
+    phone?: string
     requestedAt: string
     rejectionReason?: string
   }
@@ -179,21 +180,32 @@ export const INITIAL_COMPANIES: CompanyProfile[] = [
 ]
 
 const STORAGE_KEY = 'bokhol_fishmarket_companies_v10'
+const DELETED_KEY = 'bokhol_deleted_companies_list'
+
+export function getDeletedCompanyIds(): string[] {
+  if (typeof window === 'undefined') return []
+  try {
+    const raw = localStorage.getItem(DELETED_KEY)
+    return raw ? JSON.parse(raw) : []
+  } catch {
+    return []
+  }
+}
 
 export function getStoredCompanies(): CompanyProfile[] {
   if (typeof window === 'undefined') return INITIAL_COMPANIES
   try {
+    const deleted = getDeletedCompanyIds()
     const raw = localStorage.getItem(STORAGE_KEY)
+    let list: CompanyProfile[] = []
     if (!raw) {
+      list = INITIAL_COMPANIES
       localStorage.setItem(STORAGE_KEY, JSON.stringify(INITIAL_COMPANIES))
-      return INITIAL_COMPANIES
+    } else {
+      const parsed = JSON.parse(raw)
+      list = Array.isArray(parsed) && parsed.length > 0 ? parsed : INITIAL_COMPANIES
     }
-    const parsed = JSON.parse(raw)
-    if (!Array.isArray(parsed) || parsed.length === 0) {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(INITIAL_COMPANIES))
-      return INITIAL_COMPANIES
-    }
-    return parsed
+    return list.filter((c) => !deleted.includes(c.id))
   } catch (_) {
     return INITIAL_COMPANIES
   }
@@ -203,18 +215,70 @@ export function saveCompanies(companies: CompanyProfile[]) {
   if (typeof window === 'undefined') return
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(companies))
+    window.dispatchEvent(new Event('bokhol-claims-change'))
+    window.dispatchEvent(new Event('storage'))
   } catch (err) {
     console.error('Failed to save companies to localStorage:', err)
   }
 }
 
+export async function syncWithServerClaims(): Promise<CompanyProfile[]> {
+  if (typeof window === 'undefined') return getStoredCompanies()
+  try {
+    const res = await fetch('/api/profile-claims')
+    const json = await res.json()
+    if (json.success && Array.isArray(json.claims)) {
+      const companies = getStoredCompanies()
+      let updated = false
+      for (const claim of json.claims) {
+        const idx = companies.findIndex(
+          (c) => c.id === claim.company_id || (claim.company_name && c.name.toLowerCase() === claim.company_name.toLowerCase())
+        )
+        if (idx !== -1) {
+          const mappedStatus =
+            claim.status === 'approved' ? 'claimed' :
+            claim.status === 'pending' ? 'claim_requested' :
+            'rejected'
+          
+          const hasDifferentStatus = companies[idx].status !== mappedStatus
+          const hasMissingRequest = !companies[idx].claimRequest || companies[idx].claimRequest?.businessEmail !== claim.business_email
+
+          if (hasDifferentStatus || hasMissingRequest) {
+            companies[idx].status = mappedStatus
+            if (claim.status === 'approved') {
+              companies[idx].isVerified = true
+              companies[idx].completenessScore = Math.max(companies[idx].completenessScore, 85)
+            }
+            companies[idx].claimRequest = {
+              username: claim.username,
+              fullName: claim.full_name,
+              businessEmail: claim.business_email,
+              jobTitle: claim.job_title,
+              phone: claim.phone,
+              requestedAt: claim.created_at,
+              rejectionReason: claim.rejection_reason,
+            }
+            updated = true
+          }
+        }
+      }
+      if (updated) {
+        saveCompanies(companies)
+      }
+      return companies
+    }
+  } catch (_) {}
+  return getStoredCompanies()
+}
+
 export function requestProfileClaim(
   companyId: string,
   claimData: {
+    username?: string
     fullName: string
     businessEmail: string
     jobTitle: string
-    phone: string
+    phone?: string
   }
 ): { success: boolean; error?: string } {
   const companies = getStoredCompanies()
@@ -280,10 +344,33 @@ export function rejectProfileClaim(companyId: string, reason?: string): boolean 
   return true
 }
 
+export function revokeProfileClaim(companyId: string): boolean {
+  const companies = getStoredCompanies()
+  const idx = companies.findIndex((c) => c.id === companyId)
+  if (idx === -1) return false
+
+  companies[idx] = {
+    ...companies[idx],
+    status: 'unclaimed',
+    claimRequest: undefined,
+  }
+
+  saveCompanies(companies)
+  return true
+}
+
 export function deleteCompany(companyId: string): boolean {
+  if (typeof window !== 'undefined') {
+    try {
+      const deleted = getDeletedCompanyIds()
+      if (!deleted.includes(companyId)) {
+        deleted.push(companyId)
+        localStorage.setItem(DELETED_KEY, JSON.stringify(deleted))
+      }
+    } catch (_) {}
+  }
   const companies = getStoredCompanies()
   const filtered = companies.filter((c) => c.id !== companyId)
-  if (filtered.length === companies.length) return false
   saveCompanies(filtered)
   return true
 }

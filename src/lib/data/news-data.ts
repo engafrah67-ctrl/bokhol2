@@ -80,74 +80,95 @@ export async function fetchNewsArticles(): Promise<NewsArticle[]> {
           created_at: item.created_at,
         }))
 
-      // Merge with admin-added local articles (by slug to avoid duplicates)
-      const local = getStoredNewsArticles().filter((a) => !SEED_SLUGS.has(a.slug))
-      const seen = new Set(dbArticles.map((a) => a.slug))
-      const extraLocal = local.filter((a) => !seen.has(a.slug))
-      return [...dbArticles, ...extraLocal]
-    }
-  } catch (_) {}
+      // Persist latest database state into localStorage
+      if (typeof window !== 'undefined') {
+        try {
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(dbArticles))
+        } catch (_) {}
+      }
 
-  // Fallback: only local admin-added articles
+      return dbArticles
+    }
+  } catch (err) {
+    console.warn('fetchNewsArticles error:', err)
+  }
+
+  // Fallback: cached admin articles
   return getStoredNewsArticles().filter((a) => !SEED_SLUGS.has(a.slug))
 }
 
-export function addNewsArticle(article: Omit<NewsArticle, 'id'>): NewsArticle {
-  const newArticle: NewsArticle = {
+export async function addNewsArticle(article: Omit<NewsArticle, 'id'>): Promise<NewsArticle> {
+  let createdArticle: NewsArticle = {
     ...article,
     id: 'news-admin-' + Date.now(),
   }
 
+  // 1. Insert into Supabase
+  try {
+    const supabase = createClient()
+    const { data, error } = await supabase
+      .from('news')
+      .insert({
+        title: article.title,
+        slug: article.slug,
+        summary: article.excerpt,
+        content: article.excerpt,
+        category: article.category,
+        author: article.author || 'Bokhol Research',
+        cover_image_url: article.image,
+        is_published: true,
+        published_at: new Date().toISOString(),
+      })
+      .select()
+      .single()
+
+    if (!error && data) {
+      createdArticle = {
+        ...article,
+        id: data.id,
+        created_at: data.created_at,
+      }
+    } else if (error) {
+      console.warn('Supabase news insert warning:', error.message)
+    }
+  } catch (err) {
+    console.error('Error inserting news article:', err)
+  }
+
+  // 2. Keep local cache up to date
   if (typeof window !== 'undefined') {
     try {
       const stored = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]')
-      const updated = [newArticle, ...stored]
+      const filtered = stored.filter((a: any) => a.slug !== article.slug && a.id !== createdArticle.id)
+      const updated = [createdArticle, ...filtered]
       localStorage.setItem(STORAGE_KEY, JSON.stringify(updated))
       window.dispatchEvent(new Event('news-articles-updated'))
     } catch (_) {}
-
-    // Asynchronously insert to Supabase database
-    try {
-      const supabase = createClient()
-      supabase
-        .from('news')
-        .insert({
-          title: article.title,
-          slug: article.slug,
-          summary: article.excerpt,
-          content: article.excerpt,
-          category: article.category,
-          cover_image_url: article.image,
-          is_published: true,
-          published_at: new Date().toISOString(),
-        })
-        .then(({ error }: { error: { message: string } | null }) => {
-          if (error) console.warn('Supabase news insert warning:', error.message)
-        })
-        .catch(() => {})
-    } catch (_) {}
   }
 
-  return newArticle
+  return createdArticle
 }
 
-export function deleteNewsArticle(id: string): void {
+export async function deleteNewsArticle(id: string): Promise<void> {
+  // 1. Delete from Supabase
+  try {
+    const supabase = createClient()
+    await supabase
+      .from('news')
+      .delete()
+      .or(`id.eq.${id},slug.eq.${id}`)
+  } catch (err) {
+    console.error('Error deleting news article from Supabase:', err)
+  }
+
+  // 2. Remove from local cache
   if (typeof window !== 'undefined') {
     try {
       const stored: NewsArticle[] = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]')
-      const updated = stored.filter((a) => a.id !== id)
+      const updated = stored.filter((a) => a.id !== id && a.slug !== id)
       localStorage.setItem(STORAGE_KEY, JSON.stringify(updated))
       window.dispatchEvent(new Event('news-articles-updated'))
     } catch (_) {}
-
-    try {
-      const supabase = createClient()
-      supabase
-        .from('news')
-        .delete()
-        .or(`id.eq.${id},slug.eq.${id}`)
-        .then(() => {})
-        .catch(() => {})
-    } catch (_) {}
   }
 }
+

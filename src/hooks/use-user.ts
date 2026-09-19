@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
+import { usePathname } from 'next/navigation'
 import type { User, Session, AuthChangeEvent } from '@supabase/supabase-js'
 import type { UserRole } from '@/types/database'
 
@@ -28,6 +29,7 @@ let cachedProfile: UserProfile | null = null
 let profileFetchPromise: Promise<UserProfile | null> | null = null
 
 export function useUser(): UseUserReturn {
+  const pathname = usePathname()
   const [user, setUser] = useState<User | null>(cachedUser)
   const [profile, setProfile] = useState<UserProfile | null>(cachedProfile)
   const [isLoading, setIsLoading] = useState<boolean>(!cachedUser)
@@ -111,24 +113,63 @@ export function useUser(): UseUserReturn {
       }
     }
 
-    // getSession() reads from local cookie/storage — NO remote network call
-    supabase.auth.getSession().then(({ data }: { data: { session: Session | null } }) => {
-      updateSession(data.session?.user ?? null)
-    })
+    async function checkAuth() {
+      try {
+        // 1. Try local session first
+        const { data: sessionData } = await supabase.auth.getSession()
+        let currentUser = sessionData?.session?.user ?? null
+
+        // 2. If getSession returns null, actively call getUser() to validate auth cookies
+        if (!currentUser) {
+          const { data: userData } = await supabase.auth.getUser().catch(() => ({ data: { user: null } }))
+          currentUser = userData?.user ?? null
+        }
+
+        if (isMounted) {
+          await updateSession(currentUser)
+        }
+      } catch (_) {
+        if (isMounted) {
+          setIsLoading(false)
+        }
+      }
+    }
+
+    // Always check on mount and whenever route changes
+    checkAuth()
 
     // Subscribe to auth state changes (sign-in / sign-out)
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      (_event: AuthChangeEvent, session: Session | null) => {
-        updateSession(session?.user ?? null)
+      async (_event: AuthChangeEvent, session: Session | null) => {
+        if (!isMounted) return
+        let currentUser = session?.user ?? null
+        if (!currentUser && (_event === 'SIGNED_IN' || _event === 'TOKEN_REFRESHED' || _event === 'USER_UPDATED' || _event === 'INITIAL_SESSION')) {
+          const { data: userData } = await supabase.auth.getUser().catch(() => ({ data: { user: null } }))
+          currentUser = userData?.user ?? null
+        }
+        await updateSession(currentUser)
       }
     )
+
+    // Global custom event for instant sync
+    const handleCustomAuth = () => {
+      checkAuth()
+    }
+    if (typeof window !== 'undefined') {
+      window.addEventListener('bokhol-auth-change', handleCustomAuth)
+      window.addEventListener('storage', handleCustomAuth)
+    }
 
     return () => {
       isMounted = false
       subscription.unsubscribe()
+      if (typeof window !== 'undefined') {
+        window.removeEventListener('bokhol-auth-change', handleCustomAuth)
+        window.removeEventListener('storage', handleCustomAuth)
+      }
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  }, [pathname])
 
   const effectiveRole: UserRole | null =
     user?.email?.toLowerCase() === 'superadminbkhol@gmail.com'
