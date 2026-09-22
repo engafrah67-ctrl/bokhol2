@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { Button } from '@/components/ui/button'
@@ -37,23 +37,47 @@ import {
   Mail,
   Phone,
   Trash2,
+  ChevronDown,
+  Check,
 } from 'lucide-react'
 import { performSignOut } from '@/lib/auth-helpers'
 import Link from 'next/link'
 import { ProductMarketGraph } from '@/components/market/product-market-graph'
 import {
-  getStoredSupplierPosts,
-  updateProductPrice,
   getFishImageForProduct,
-  saveSupplierPosts,
   SupplierPost,
 } from '@/lib/data/products-data'
-import { getStoredCompanies, CompanyProfile } from '@/lib/data/companies-data'
+
 import { invalidateMarketCache } from '@/lib/data/market-data'
 
 function getFishImage(productName: string, customImage?: string): string {
   return getFishImageForProduct(productName, customImage)
 }
+
+// Strictly the 3 supported supplier countries with verified flag URLs
+const SUPPLIER_ALLOWED_COUNTRIES = [
+  {
+    name: 'Netherlands',
+    code: 'NL',
+    subname: 'Holland',
+    flag_emoji: '🇳🇱',
+    flag_url: 'https://flagcdn.com/w40/nl.png',
+  },
+  {
+    name: 'Germany',
+    code: 'DE',
+    subname: 'Deutschland',
+    flag_emoji: '🇩🇪',
+    flag_url: 'https://flagcdn.com/w40/de.png',
+  },
+  {
+    name: 'Belgium',
+    code: 'BE',
+    subname: 'België',
+    flag_emoji: '🇧🇪',
+    flag_url: 'https://flagcdn.com/w40/be.png',
+  },
+]
 
 
 
@@ -81,6 +105,20 @@ export default function SupplierDashboardPage() {
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
   const [editingProfile, setEditingProfile] = useState(false)
 
+  // Custom Country Dropdown state
+  const [isCountryDropdownOpen, setIsCountryDropdownOpen] = useState(false)
+  const countryDropdownRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (countryDropdownRef.current && !countryDropdownRef.current.contains(e.target as Node)) {
+        setIsCountryDropdownOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [])
+
   // Profile Form States
   const [companyName, setCompanyName] = useState('')
   const [companyDescription, setCompanyDescription] = useState('')
@@ -90,6 +128,12 @@ export default function SupplierDashboardPage() {
   const [companyAddress, setCompanyAddress] = useState('')
   const [companyCity, setCompanyCity] = useState('')
   const [companyCountryId, setCompanyCountryId] = useState('')
+
+  const selectedCountryObj =
+    countries.find((c: any) => c.id === companyCountryId) ||
+    countries.find((c: any) => c.code?.toLowerCase() === companyCountryId?.toLowerCase()) ||
+    countries.find((c: any) => c.name?.toLowerCase() === companyCountryId?.toLowerCase()) ||
+    countries[0]
   const [companyYearFounded, setCompanyYearFounded] = useState('')
   const [companyEmployeeCount, setCompanyEmployeeCount] = useState('')
   const [companyLogoUrl, setCompanyLogoUrl] = useState('')
@@ -173,11 +217,43 @@ export default function SupplierDashboardPage() {
             setUserPhone(userProfile.phone || '')
           }
 
-          // 2. Set Countries & Requests
-          let loadedCountries: any[] = countriesRes.data ? [...countriesRes.data] : []
-          if (!loadedCountries.some((c: any) => c.name?.toLowerCase() === 'belgium')) {
-            loadedCountries.unshift({ id: 'be-static', name: 'Belgium', flag_emoji: '🇧🇪' })
+          // 2. Set Countries & Requests (STRICTLY the 3 allowed supplier countries)
+          const dbCountries = countriesRes.data ? [...countriesRes.data] : []
+          
+          let belgiumDb = dbCountries.find((c: any) => c.name?.toLowerCase() === 'belgium')
+          if (!belgiumDb) {
+            try {
+              const { data: insertedBel } = await supabase
+                .from('countries')
+                .upsert(
+                  { name: 'Belgium', slug: 'belgium', flag_emoji: '🇧🇪', iso_code: 'BE', region: 'Europe', is_featured: true },
+                  { onConflict: 'name' }
+                )
+                .select('id, name, flag_emoji')
+                .maybeSingle()
+              if (insertedBel) {
+                belgiumDb = insertedBel
+                dbCountries.push(insertedBel)
+              }
+            } catch (_) {}
           }
+
+          const loadedCountries = SUPPLIER_ALLOWED_COUNTRIES.map((sac) => {
+            const dbMatch = dbCountries.find(
+              (dbc: any) =>
+                dbc.name?.toLowerCase() === sac.name.toLowerCase() ||
+                (sac.name === 'Netherlands' && dbc.name?.toLowerCase().includes('holland'))
+            )
+            return {
+              id: dbMatch?.id || sac.code.toLowerCase(),
+              name: sac.name,
+              code: sac.code,
+              subname: sac.subname,
+              flag_emoji: sac.flag_emoji,
+              flag_url: sac.flag_url,
+            }
+          })
+
           if (isMounted) {
             setCountries(loadedCountries)
             if (requestsRes.data) setBuyerRequests(requestsRes.data)
@@ -185,6 +261,23 @@ export default function SupplierDashboardPage() {
 
           // 3. Set Company & Posts
           const companyData = companyRes.data
+          let initialCountryId = companyData?.country_id || ''
+          if (!initialCountryId && currentUser.user_metadata?.country) {
+            const metaCountry = String(currentUser.user_metadata.country).toLowerCase()
+            const matched = loadedCountries.find((c: any) =>
+              c.name?.toLowerCase() === metaCountry ||
+              c.code?.toLowerCase() === metaCountry ||
+              (metaCountry.includes('holland') && c.name?.toLowerCase() === 'netherlands') ||
+              (metaCountry.includes('netherlands') && c.name?.toLowerCase() === 'netherlands') ||
+              (metaCountry.includes('belgium') && c.name?.toLowerCase() === 'belgium') ||
+              (metaCountry.includes('germany') && c.name?.toLowerCase() === 'germany')
+            )
+            if (matched) initialCountryId = matched.id
+          }
+          if (!initialCountryId && loadedCountries.length > 0) {
+            initialCountryId = loadedCountries[0].id
+          }
+
           if (companyData && isMounted) {
             setCompany(companyData)
             setCompanyName(companyData.name || '')
@@ -194,20 +287,6 @@ export default function SupplierDashboardPage() {
             setCompanyPhone(companyData.phone || '')
             setCompanyAddress(companyData.address || '')
             setCompanyCity(companyData.city || '')
-            
-            // Resolve country ID from company or signup metadata
-            let initialCountryId = companyData.country_id || ''
-            if (!initialCountryId && currentUser.user_metadata?.country) {
-              const metaCountry = String(currentUser.user_metadata.country).toLowerCase()
-              const matched = loadedCountries.find((c: any) =>
-                c.name?.toLowerCase() === metaCountry ||
-                (metaCountry.includes('holland') && c.name?.toLowerCase() === 'netherlands') ||
-                (metaCountry.includes('netherlands') && c.name?.toLowerCase() === 'netherlands') ||
-                (metaCountry.includes('belgium') && c.name?.toLowerCase() === 'belgium') ||
-                (metaCountry.includes('germany') && c.name?.toLowerCase() === 'germany')
-              )
-              if (matched) initialCountryId = matched.id
-            }
             setCompanyCountryId(initialCountryId)
             setCompanyYearFounded(companyData.year_founded ? String(companyData.year_founded) : '')
             setCompanyEmployeeCount(companyData.employee_count || '')
@@ -246,42 +325,16 @@ export default function SupplierDashboardPage() {
               })
               setSupplierPosts(normalized)
             } else if (isMounted) {
-              setSupplierPosts(getStoredSupplierPosts())
+              setSupplierPosts([])
             }
           } else if (isMounted) {
-            // Check stored company profiles from claim
-            const userCompanyId = currentUser.user_metadata?.company_id || userProfile?.company_id
-            const storedCompanies = getStoredCompanies()
-            const matchedCompany = storedCompanies.find(
-              (c) => c.id === userCompanyId || (c.claimRequest?.businessEmail && c.claimRequest.businessEmail.toLowerCase() === currentUser.email?.toLowerCase())
-            )
-
-            if (matchedCompany) {
-              setCompany({
-                id: matchedCompany.id,
-                name: matchedCompany.name,
-                description: matchedCompany.description,
-                website: matchedCompany.website,
-                email: matchedCompany.email,
-                phone: matchedCompany.phone,
-                address: matchedCompany.address,
-                city: matchedCompany.country,
-                logo_url: matchedCompany.logoUrl,
-                status: matchedCompany.status,
-                is_verified: matchedCompany.isVerified,
-              })
-              setCompanyName(matchedCompany.name)
-              setCompanyDescription(matchedCompany.description || '')
-              setCompanyWebsite(matchedCompany.website || '')
-              setCompanyEmail(matchedCompany.email || '')
-              setCompanyPhone(matchedCompany.phone || '')
-              setCompanyAddress(matchedCompany.address || '')
-              setCompanyLogoUrl(matchedCompany.logoUrl || '')
-            }
-            setSupplierPosts(getStoredSupplierPosts())
+            // No company found yet
+            setSupplierPosts([])
+            setCompanyCountryId(initialCountryId)
+            setCompanyName(currentUser.user_metadata?.company_name || currentUser.user_metadata?.full_name || '')
+            setCompanyEmail(currentUser.email || '')
           }
         }
-
       } catch (err) {
         console.error('Supplier dashboard load warning:', err)
       } finally {
@@ -307,7 +360,7 @@ export default function SupplierDashboardPage() {
     const postId = updatingPostModal.id
     const now = new Date().toISOString()
 
-    // Update in DB if this is a real DB post (UUID format)
+    // Update in DB
     const isDbPost = /^[0-9a-f-]{36}$/.test(postId)
     if (isDbPost && company?.id) {
       // Fetch current content, update price fields, re-save
@@ -327,10 +380,7 @@ export default function SupplierDashboardPage() {
           .update({ content: JSON.stringify(details) })
           .eq('id', postId)
       }
-    } else {
-      // Fallback: update localStorage
-      updateProductPrice(postId, numPrice, updateCurrencyInput, updateAvailabilityInput)
-    }
+    } // UUID post only — no localStorage fallback
 
     // Update local state
     setSupplierPosts((prev: any[]) =>
@@ -461,10 +511,6 @@ export default function SupplierDashboardPage() {
     try {
       // 1. Optimistically update local dashboard state immediately
       setSupplierPosts((prev: any[]) => prev.filter((p: any) => p.id !== postId))
-
-      // 2. Clean from localStorage
-      const updated = supplierPosts.filter((p: any) => p.id !== postId)
-      saveSupplierPosts(updated)
 
       if (isDbPost) {
         // 3. Call server deletion API
@@ -756,7 +802,16 @@ export default function SupplierDashboardPage() {
                       <h2 className="text-2xl font-bold text-slate-900">{company?.name || 'Your Company'}</h2>
                       <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1 text-sm text-slate-500">
                         {company?.country_id && countries.find((c: any) => c.id === company.country_id) && (
-                          <span>{countries.find((c: any) => c.id === company.country_id)?.flag_emoji} {countries.find((c: any) => c.id === company.country_id)?.name}</span>
+                          <span className="inline-flex items-center gap-1.5 font-medium text-slate-700">
+                            {countries.find((c: any) => c.id === company.country_id)?.flag_url && (
+                              <img
+                                src={countries.find((c: any) => c.id === company.country_id)?.flag_url}
+                                alt="Flag"
+                                className="w-4.5 h-3 object-cover rounded shadow-2xs border border-black/10 inline"
+                              />
+                            )}
+                            <span>{countries.find((c: any) => c.id === company.country_id)?.name}</span>
+                          </span>
                         )}
                         {company?.city && <span>• {company.city}</span>}
                         {company?.year_founded && <span>• Est. {company.year_founded}</span>}
@@ -877,15 +932,78 @@ export default function SupplierDashboardPage() {
                         className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-sm outline-none focus:border-blue-500 focus:bg-white transition"
                         placeholder="Enter company name" />
                     </div>
-                    <div>
-                      <label className="block text-xs font-bold uppercase text-slate-400 tracking-wider mb-2">Country</label>
-                      <select value={companyCountryId} onChange={(e) => setCompanyCountryId(e.target.value)}
-                        className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-sm outline-none focus:border-blue-500 focus:bg-white transition">
-                        <option value="">Select country...</option>
-                        {countries.map((c) => (
-                          <option key={c.id} value={c.id}>{c.flag_emoji} {c.name}</option>
-                        ))}
-                      </select>
+                    <div className="relative" ref={countryDropdownRef}>
+                      <label className="block text-xs font-bold uppercase text-slate-400 tracking-wider mb-2">
+                        Supplier Country <span className="text-blue-600">*</span>
+                      </label>
+                      <button
+                        type="button"
+                        onClick={() => setIsCountryDropdownOpen(!isCountryDropdownOpen)}
+                        className="w-full bg-slate-50 hover:bg-white border border-slate-200 rounded-xl px-4 py-2.5 text-sm outline-none focus:border-blue-500 focus:bg-white transition flex items-center justify-between cursor-pointer"
+                      >
+                        {selectedCountryObj ? (
+                          <div className="flex items-center gap-2.5">
+                            <img
+                              src={selectedCountryObj.flag_url}
+                              alt={selectedCountryObj.name}
+                              className="w-6 h-4 object-cover rounded shadow-2xs border border-black/10 flex-shrink-0"
+                            />
+                            <span className="font-semibold text-slate-800">{selectedCountryObj.name}</span>
+                            {selectedCountryObj.subname && (
+                              <span className="text-xs text-slate-400 font-normal">({selectedCountryObj.subname})</span>
+                            )}
+                            <span className="text-[11px] font-bold text-slate-500 bg-slate-200/80 px-1.5 py-0.5 rounded ml-1">
+                              {selectedCountryObj.code}
+                            </span>
+                          </div>
+                        ) : (
+                          <span className="text-slate-400">Select country...</span>
+                        )}
+                        <ChevronDown className={`w-4 h-4 text-slate-400 transition-transform duration-200 ${isCountryDropdownOpen ? 'rotate-180 text-blue-600' : ''}`} />
+                      </button>
+
+                      {isCountryDropdownOpen && (
+                        <div className="absolute left-0 right-0 top-full mt-1.5 z-30 bg-white border border-slate-200 rounded-2xl shadow-xl overflow-hidden p-1.5 space-y-1 animate-in fade-in zoom-in-95 duration-100">
+                          {countries.map((c: any) => {
+                            const isSelected = companyCountryId === c.id
+                            return (
+                              <button
+                                key={c.id}
+                                type="button"
+                                onClick={() => {
+                                  setCompanyCountryId(c.id)
+                                  setIsCountryDropdownOpen(false)
+                                }}
+                                className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-left transition cursor-pointer ${
+                                  isSelected
+                                    ? 'bg-blue-50/80 text-[#022B96] font-bold'
+                                    : 'hover:bg-slate-50 text-slate-700'
+                                }`}
+                              >
+                                <div className="flex items-center gap-3">
+                                  <img
+                                    src={c.flag_url}
+                                    alt={c.name}
+                                    className="w-7 h-4.5 object-cover rounded shadow-xs border border-black/10 flex-shrink-0"
+                                  />
+                                  <div className="flex items-center gap-1.5">
+                                    <span className="text-sm font-semibold">{c.name}</span>
+                                    {c.subname && (
+                                      <span className="text-xs text-slate-400 font-normal">({c.subname})</span>
+                                    )}
+                                  </div>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                  <span className="text-xs font-bold text-slate-400 bg-slate-100 px-2 py-0.5 rounded">
+                                    {c.code}
+                                  </span>
+                                  {isSelected && <Check className="w-4 h-4 text-[#022B96]" />}
+                                </div>
+                              </button>
+                            )
+                          })}
+                        </div>
+                      )}
                     </div>
                     <div>
                       <label className="block text-xs font-bold uppercase text-slate-400 tracking-wider mb-2">Website URL</label>

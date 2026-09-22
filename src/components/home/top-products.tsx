@@ -22,96 +22,75 @@ const COUNTRY_ISO: Record<string, string> = {
   Russia: 'ru', Turkey: 'tr', Ukraine: 'ua', Myanmar: 'mm', Bangladesh: 'bd',
   Malaysia: 'my', 'Sri Lanka': 'lk', Pakistan: 'pk', 'Saudi Arabia': 'sa',
   Namibia: 'na', Oman: 'om', Maldives: 'mv', Faroe: 'fo', 'Faroe Islands': 'fo',
+  // Middle East & Africa
+  Yemen: 'ye', Jordan: 'jo', Iraq: 'iq', Iran: 'ir', Lebanon: 'lb',
+  Kuwait: 'kw', Qatar: 'qa', 'United Arab Emirates': 'ae', UAE: 'ae', Bahrain: 'bh',
+  Libya: 'ly', Tunisia: 'tn', Algeria: 'dz', Sudan: 'sd', Somalia: 'so',
+  Ethiopia: 'et', Kenya: 'ke', Tanzania: 'tz', Mozambique: 'mz', Madagascar: 'mg',
+  Nigeria: 'ng', Cameroon: 'cm', Angola: 'ao', Côte: 'ci', "Côte d'Ivoire": 'ci',
+  // Asia
+  Cambodia: 'kh', Laos: 'la', 'Hong Kong': 'hk', Singapore: 'sg', Nepal: 'np',
+  // Europe extras
+  Croatia: 'hr', Romania: 'ro', Bulgaria: 'bg', Hungary: 'hu', Austria: 'at',
+  Switzerland: 'ch', Belgium: 'be', Luxembourg: 'lu', Serbia: 'rs', Albania: 'al',
+  // Americas
+  Colombia: 'co', Venezuela: 've', Cuba: 'cu', Guatemala: 'gt', Honduras: 'hn',
+  'Costa Rica': 'cr', Panama: 'pa', Bolivia: 'bo', Uruguay: 'uy', Paraguay: 'py',
 }
 
 function getFlagUrl(country: string): string | null {
   if (!country) return null
-  const clean = country.toLowerCase()
-  if (clean.includes('netherlands') || clean.includes('holland')) return 'https://flagcdn.com/w40/nl.png'
-  if (clean.includes('germany')) return 'https://flagcdn.com/w40/de.png'
-  if (clean.includes('chile')) return 'https://flagcdn.com/w40/cl.png'
-  if (clean.includes('vietnam')) return 'https://flagcdn.com/w40/vn.png'
-  if (clean.includes('norway')) return 'https://flagcdn.com/w40/no.png'
-  if (clean.includes('spain')) return 'https://flagcdn.com/w40/es.png'
-  if (clean.includes('belgium')) return 'https://flagcdn.com/w40/be.png'
+  const clean = country.trim().toLowerCase()
 
-  const direct = COUNTRY_ISO[country]
+  // Direct match first
+  const direct = COUNTRY_ISO[country.trim()]
   if (direct) return `https://flagcdn.com/w40/${direct}.png`
+
+  // Partial match
   for (const [name, iso] of Object.entries(COUNTRY_ISO)) {
-    if (clean.includes(name.toLowerCase())) {
+    if (clean.includes(name.toLowerCase()) || name.toLowerCase().includes(clean)) {
       return `https://flagcdn.com/w40/${iso}.png`
     }
   }
+
+  // Special aliases
+  if (clean.includes('holland')) return 'https://flagcdn.com/w40/nl.png'
+  if (clean.includes('uae') || clean.includes('emirates')) return 'https://flagcdn.com/w40/ae.png'
+  if (clean.includes('usa') || clean.includes('united states')) return 'https://flagcdn.com/w40/us.png'
+  if (clean.includes('uk') || clean.includes('united kingdom') || clean.includes('britain')) return 'https://flagcdn.com/w40/gb.png'
+
   return null
 }
-
-const DEFAULT_PRODUCTS: TopMarketProduct[] = [
-  {
-    name: 'Yellowfin Tuna',
-    origin: 'Netherlands',
-    avgPrice: '€9.20',
-    avgPriceNum: 9.20,
-    suppliersCount: 15,
-    slug: 'yellowfin-tuna',
-    imageUrl: '/fish-tuna.png',
-    category: 'Pelagic',
-  },
-  {
-    name: 'Atlantic Salmon',
-    origin: 'Norway',
-    avgPrice: '€7.85',
-    avgPriceNum: 7.85,
-    suppliersCount: 18,
-    slug: 'atlantic-salmon',
-    imageUrl: '/fish-salmon.png',
-    category: 'Salmonids',
-  },
-  {
-    name: 'Atlantic Cod',
-    origin: 'Norway',
-    avgPrice: '€4.60',
-    avgPriceNum: 4.60,
-    suppliersCount: 16,
-    slug: 'atlantic-cod',
-    imageUrl: '/fish-cod.png',
-    category: 'Whitefish',
-  },
-  {
-    name: 'Bluefin Tuna',
-    origin: 'Spain',
-    avgPrice: '€42.00',
-    avgPriceNum: 42.00,
-    suppliersCount: 12,
-    slug: 'bluefin-tuna',
-    imageUrl: '/fish-tuna.png',
-    category: 'Pelagic',
-  },
-  {
-    name: 'Mackerel',
-    origin: 'Norway',
-    avgPrice: '€2.35',
-    avgPriceNum: 2.35,
-    suppliersCount: 20,
-    slug: 'mackerel',
-    imageUrl: '/fish-mackerel.png',
-    category: 'Pelagic',
-  },
-  {
-    name: 'Shrimp',
-    origin: 'Netherlands',
-    avgPrice: '€6.40',
-    avgPriceNum: 6.40,
-    suppliersCount: 14,
-    slug: 'shrimp',
-    imageUrl: '/shrimp.png',
-    category: 'Shellfish',
-  },
-]
 
 export function TopProducts({ topProducts }: TopProductsProps) {
   const productsList = (topProducts && topProducts.length > 0)
     ? topProducts.slice(0, 6)
-    : DEFAULT_PRODUCTS
+    : []
+
+  if (productsList.length === 0) {
+    return (
+      <div className="py-8 px-8 bg-background text-foreground transition-all border border-border rounded-2xl shadow-sm">
+        <div className="flex items-center justify-between mb-6">
+          <div>
+            <h3 className="text-base font-extrabold text-foreground tracking-tight">Top Seafood Products</h3>
+            <p className="text-[11px] text-muted-foreground mt-0.5">Most active species across European spot markets with verified live supplier offers.</p>
+          </div>
+          <Link href="/products" className="text-xs font-bold text-foreground hover:text-foreground/80 transition-colors inline-flex items-center gap-1 bg-muted px-3 py-1.5 rounded-lg border border-border">
+            View all
+            <ArrowUpRight className="h-3.5 w-3.5" />
+          </Link>
+        </div>
+
+        <div className="py-12 px-4 text-center border border-dashed border-border rounded-xl">
+          <Fish className="h-10 w-10 mx-auto text-muted-foreground/40 mb-3" />
+          <h4 className="text-sm font-bold text-foreground">No seafood products listed yet</h4>
+          <p className="text-xs text-muted-foreground mt-1 max-w-md mx-auto">
+            Suppliers haven&apos;t posted any products yet. When verified exporters list active products and offers, market prices and species will appear here.
+          </p>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="py-8 px-8 bg-background text-foreground transition-all border border-border rounded-2xl shadow-sm">
@@ -173,7 +152,7 @@ export function TopProducts({ topProducts }: TopProductsProps) {
                         className="h-3.5 w-5 object-cover rounded-xs shadow-xs"
                       />
                     ) : (
-                      <span className="text-xs">🌍</span>
+                      <span className="text-sm leading-none">🏳️</span>
                     )}
                     <span>{p.origin}</span>
                   </div>

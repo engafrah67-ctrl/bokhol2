@@ -68,93 +68,6 @@ export interface SupplierOfferNotification {
   supplierCountry?: string
 }
 
-const INITIAL_BUYER_REQUESTS: BuyerRequestItem[] = [
-  {
-    id: 'req-buyer-1',
-    productNeeded: 'Atlantic Salmon',
-    quantity: '500 KG',
-    freshFrozen: 'Fresh / Frozen',
-    location: 'Amsterdam Port, Netherlands',
-    packagingProcessing: 'Fillet (Trim D, Vacuum Packed)',
-    deliveryDate: 'Friday Morning',
-    targetPrice: '€7.20 / kg',
-    additionalNotes: 'Need premium grade Atlantic salmon delivered to our cold store facility in Amsterdam.',
-    status: 'open',
-    createdAt: new Date(Date.now() - 1000 * 60 * 60 * 5).toISOString(),
-  },
-  {
-    id: 'req-buyer-2',
-    productNeeded: 'Vannamei Shrimp',
-    quantity: '1,000 KG',
-    freshFrozen: 'Frozen (IQF)',
-    location: 'Rotterdam Port, Netherlands',
-    packagingProcessing: 'Peeled & Deveined (Tail-on, 16/20)',
-    deliveryDate: 'Next Tuesday',
-    targetPrice: '€6.40 / kg',
-    additionalNotes: 'Grade A IQF shrimp for restaurant wholesale distribution. Must include full health & ASC certificates.',
-    status: 'open',
-    createdAt: new Date(Date.now() - 1000 * 60 * 60 * 28).toISOString(),
-  },
-  {
-    id: 'req-buyer-3',
-    productNeeded: 'Yellowfin Tuna Loins',
-    quantity: '250 KG',
-    freshFrozen: 'Fresh (Sashimi Grade)',
-    location: 'Frankfurt, Germany',
-    packagingProcessing: 'Skinless & Boneless Loins (IVP)',
-    deliveryDate: 'Thursday',
-    targetPrice: '€14.00 / kg',
-    additionalNotes: 'Ultra-fresh sashimi grade yellowfin tuna loins for hotel chains.',
-    status: 'open',
-    createdAt: new Date(Date.now() - 1000 * 60 * 60 * 72).toISOString(),
-  },
-]
-
-const INITIAL_SUPPLIER_OFFERS: SupplierOfferNotification[] = [
-  {
-    id: 'offer-1',
-    requestId: 'req-buyer-1',
-    requestTitle: '500 KG Atlantic Salmon — Amsterdam Port',
-    supplierName: 'Norsk Seafood Ltd',
-    supplierEmail: 'sales@norskseafood.no',
-    supplierPhone: '+31684033593',
-    pricePerKg: '€6.95 / kg',
-    deliveryTerms: 'Guaranteed 48h cold-chain delivery to Amsterdam warehouse',
-    message: 'Hello! We can fulfill your 500 KG Atlantic Salmon request with harvest from yesterday. ASC & GlobalGAP certified with full temperature logging.',
-    createdAt: '15 mins ago',
-    isRead: false,
-    supplierCountry: 'Norway',
-  },
-  {
-    id: 'offer-2',
-    requestId: 'req-buyer-2',
-    requestTitle: '1,000 KG Vannamei Shrimp — Rotterdam Port',
-    supplierName: 'Amacore Seafood B.V.',
-    supplierEmail: 'info@amacore.nl',
-    supplierPhone: '+31684033593',
-    pricePerKg: '€6.25 / kg',
-    deliveryTerms: 'In stock at Rotterdam Port ready for immediate dispatch',
-    message: 'We have 16/20 Grade A Vannamei Shrimp ready in Rotterdam cold storage. Can deliver by Monday morning with full certificate package.',
-    createdAt: '2 hours ago',
-    isRead: false,
-    supplierCountry: 'Netherlands',
-  },
-  {
-    id: 'offer-3',
-    requestId: 'req-buyer-3',
-    requestTitle: '250 KG Yellowfin Tuna Loins — Frankfurt',
-    supplierName: 'Iberia Seafood S.A.',
-    supplierEmail: 'contact@iberiaseafood.es',
-    supplierPhone: '+31684033593',
-    pricePerKg: '€13.80 / kg',
-    deliveryTerms: 'Direct flight dispatch from Vigo to Frankfurt Airport',
-    message: 'Super fresh line-caught Yellowfin Tuna loins. Packed in iced thermo-boxes with next-day air arrival in Frankfurt.',
-    createdAt: 'Yesterday',
-    isRead: true,
-    supplierCountry: 'Spain',
-  },
-]
-
 export default function BuyerDashboardPage() {
   const router = useRouter()
   const { user, profile, role, isLoading: isUserLoading } = useUser()
@@ -181,58 +94,57 @@ export default function BuyerDashboardPage() {
   const [searchQuery, setSearchQuery] = useState('')
   const [notificationFilter, setNotificationFilter] = useState<'all' | 'unread'>('all')
 
-  // Load Initial Data from localStorage or defaults
+  // Load Real Data from Supabase and client storage
   useEffect(() => {
-    if (typeof window !== 'undefined') {
-      try {
-        const storedReqs = localStorage.getItem('buyer_sourcing_requests_list')
-        if (storedReqs) {
-          const parsed = JSON.parse(storedReqs)
-          if (Array.isArray(parsed) && parsed.length > 0) {
-            setRequests(parsed)
-          } else {
-            setRequests(INITIAL_BUYER_REQUESTS)
-            localStorage.setItem('buyer_sourcing_requests_list', JSON.stringify(INITIAL_BUYER_REQUESTS))
-          }
-        } else {
-          setRequests(INITIAL_BUYER_REQUESTS)
-          localStorage.setItem('buyer_sourcing_requests_list', JSON.stringify(INITIAL_BUYER_REQUESTS))
-        }
+    async function loadBuyerData() {
+      if (user?.id) {
+        try {
+          const { data: dbRequests } = await supabase
+            .from('buyer_requests')
+            .select('*')
+            .eq('user_id', user.id)
+            .order('created_at', { ascending: false })
 
-        const storedOffers = localStorage.getItem('buyer_supplier_offers_list')
-        if (storedOffers) {
-          const parsed = JSON.parse(storedOffers)
-          if (Array.isArray(parsed) && parsed.length > 0) {
-            setOffers(parsed)
+                  if (dbRequests && dbRequests.length > 0) {
+            const mapped: BuyerRequestItem[] = dbRequests.map((r: any) => {
+              let parsed: any = {}
+              try { parsed = JSON.parse(r.description || '{}') } catch (_) {}
+              return {
+                id: r.id,
+                productNeeded: parsed.productNeeded || r.title || 'Seafood Product',
+                quantity: r.quantity ? `${r.quantity} ${r.quantity_unit || 'KG'}` : (parsed.quantity || 'Bulk'),
+                freshFrozen: parsed.freshFrozen || 'Fresh / Frozen',
+                location: r.destination || parsed.location || 'Europe',
+                packagingProcessing: parsed.packagingProcessing || 'Standard Packaging',
+                deliveryDate: parsed.deliveryDate || 'Flexible',
+                targetPrice: r.target_price ? `€${r.target_price} / kg` : (parsed.targetPrice || ''),
+                additionalNotes: typeof parsed.additionalNotes === 'string' ? parsed.additionalNotes : (r.description || ''),
+                status: r.status || 'open',
+                createdAt: r.created_at,
+              }
+            })
+            setRequests(mapped)
           } else {
-            setOffers(INITIAL_SUPPLIER_OFFERS)
-            localStorage.setItem('buyer_supplier_offers_list', JSON.stringify(INITIAL_SUPPLIER_OFFERS))
+            setRequests([])
           }
-        } else {
-          setOffers(INITIAL_SUPPLIER_OFFERS)
-          localStorage.setItem('buyer_supplier_offers_list', JSON.stringify(INITIAL_SUPPLIER_OFFERS))
+        } catch (err) {
+          console.error('Error fetching buyer requests:', err)
+          setRequests([])
         }
-      } catch (_) {
-        setRequests(INITIAL_BUYER_REQUESTS)
-        setOffers(INITIAL_SUPPLIER_OFFERS)
       }
     }
-  }, [])
 
-  // Save requests to storage helper
+    loadBuyerData()
+  }, [user?.id, supabase])
+
+  // Save requests to state
   const saveRequests = (updated: BuyerRequestItem[]) => {
     setRequests(updated)
-    if (typeof window !== 'undefined') {
-      localStorage.setItem('buyer_sourcing_requests_list', JSON.stringify(updated))
-    }
   }
 
-  // Save offers to storage helper
+  // Save offers to state
   const saveOffers = (updated: SupplierOfferNotification[]) => {
     setOffers(updated)
-    if (typeof window !== 'undefined') {
-      localStorage.setItem('buyer_supplier_offers_list', JSON.stringify(updated))
-    }
   }
 
   // Handle Creating a New Product Request

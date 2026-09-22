@@ -10,13 +10,6 @@ const initialState = { error: undefined, success: undefined }
 
 const SUPPLIER_COUNTRIES = [
   {
-    id: 'belgium',
-    name: 'Belgium',
-    code: 'BE',
-    flag: '🇧🇪',
-    flagUrl: 'https://flagcdn.com/w40/be.png',
-  },
-  {
     id: 'netherlands',
     name: 'Netherlands',
     subname: 'Holland',
@@ -27,17 +20,26 @@ const SUPPLIER_COUNTRIES = [
   {
     id: 'germany',
     name: 'Germany',
+    subname: 'Deutschland',
     code: 'DE',
     flag: '🇩🇪',
     flagUrl: 'https://flagcdn.com/w40/de.png',
+  },
+  {
+    id: 'belgium',
+    name: 'Belgium',
+    subname: 'België',
+    code: 'BE',
+    flag: '🇧🇪',
+    flagUrl: 'https://flagcdn.com/w40/be.png',
   },
 ]
 
 export default function SignupPage() {
   const [state, formAction, isPending] = useActionState(signUp, initialState)
   const [role, setRole] = useState<'buyer' | 'supplier'>('buyer')
-  const [selectedCountry, setSelectedCountry] = useState('Belgium')
-  const [selectedCountryCode, setSelectedCountryCode] = useState('BE')
+  const [selectedCountry, setSelectedCountry] = useState('Netherlands')
+  const [selectedCountryCode, setSelectedCountryCode] = useState('NL')
 
   const errorMessage = typeof state?.error === 'string' && state.error.trim().length > 0 ? state.error : null
 

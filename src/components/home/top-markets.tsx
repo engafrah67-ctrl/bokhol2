@@ -6,15 +6,6 @@ interface TopMarketsProps {
   countries: Country[]
 }
 
-// Default fallback data matching reference design if database is empty
-const DEFAULT_MARKETS = [
-  { flag: '🇳🇴', name: 'Norway', change: '+2.1%', trend: 'up', slug: 'norway' },
-  { flag: '🇮🇸', name: 'Iceland', change: '+1.9%', trend: 'up', slug: 'iceland' },
-  { flag: '🇪🇸', name: 'Spain', change: '+1.2%', trend: 'up', slug: 'spain' },
-  { flag: '🇩🇰', name: 'Denmark', change: '+0.9%', trend: 'up', slug: 'denmark' },
-  { flag: '🇲🇦', name: 'Morocco', change: '+0.7%', trend: 'up', slug: 'morocco' },
-]
-
 export function TopMarkets({ countries }: TopMarketsProps) {
   const marketsList = countries.length > 0
     ? countries.slice(0, 5).map((c, i) => ({
@@ -24,7 +15,11 @@ export function TopMarkets({ countries }: TopMarketsProps) {
         trend: 'up',
         slug: c.slug,
       }))
-    : DEFAULT_MARKETS
+    : []
+
+  if (marketsList.length === 0) {
+    return null
+  }
 
   return (
     <div className="py-6 bg-background text-foreground flex flex-col justify-between transition-all">

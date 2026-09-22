@@ -52,13 +52,10 @@ import {
 } from '@/lib/data/companies-data'
 import ReactCountryFlag from 'react-country-flag'
 import {
-  getStoredSupplierPosts,
-  updateProductPrice,
   getFishImageForProduct,
   SupplierPost,
 } from '@/lib/data/products-data'
 import {
-  getStoredNewsArticles,
   fetchNewsArticles,
   addNewsArticle,
   deleteNewsArticle,
@@ -66,7 +63,7 @@ import {
 } from '@/lib/data/news-data'
 import {
   PartnerBuyer,
-  getStoredPartnerBuyers,
+  fetchPartnerBuyers,
   addPartnerBuyer,
   updatePartnerBuyer,
   deletePartnerBuyer,
@@ -90,12 +87,7 @@ export default function AdminDashboardPage() {
   const [newSupplierSpecialty, setNewSupplierSpecialty] = useState('')
   const [addSupplierMsg, setAddSupplierMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
   const [addSupplierLoading, setAddSupplierLoading] = useState(false)
-  const [addedSuppliers, setAddedSuppliers] = useState<any[]>(() => {
-    if (typeof window !== 'undefined') {
-      try { return JSON.parse(localStorage.getItem('admin_added_suppliers') || '[]') } catch { return [] }
-    }
-    return []
-  })
+  const [addedSuppliers, setAddedSuppliers] = useState<any[]>([])
 
   const handleSupplierLogoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
@@ -112,10 +104,7 @@ export default function AdminDashboardPage() {
     totalBuyerRequests: 0,
   })
 
-  const [companies, setCompanies] = useState<CompanyProfile[]>(() => {
-    if (typeof window !== 'undefined') return getStoredCompanies()
-    return []
-  })
+  const [companies, setCompanies] = useState<CompanyProfile[]>([])
 
   // ── Profile Claims (source of truth for Verification tab) ──
   const [profileClaims, setProfileClaims] = useState<any[]>([])
@@ -146,18 +135,9 @@ export default function AdminDashboardPage() {
     }
     setClaimsLoading(false)
   }
-  const [supplierPosts, setSupplierPosts] = useState<SupplierPost[]>(() => {
-    if (typeof window !== 'undefined') return getStoredSupplierPosts()
-    return []
-  })
-  const [newsArticles, setNewsArticles] = useState<NewsArticle[]>(() => {
-    if (typeof window !== 'undefined') return getStoredNewsArticles()
-    return []
-  })
-  const [partnerBuyers, setPartnerBuyers] = useState<PartnerBuyer[]>(() => {
-    if (typeof window !== 'undefined') return getStoredPartnerBuyers()
-    return []
-  })
+  const [supplierPosts, setSupplierPosts] = useState<SupplierPost[]>([])
+  const [newsArticles, setNewsArticles] = useState<NewsArticle[]>([])
+  const [partnerBuyers, setPartnerBuyers] = useState<PartnerBuyer[]>([])
 
   // Partner Buyer Modal & Form states
   const [showPartnerModal, setShowPartnerModal] = useState(false)
@@ -212,32 +192,23 @@ export default function AdminDashboardPage() {
   const [rejectionReasonInput, setRejectionReasonInput] = useState('')
 
   const reloadCompanies = async () => {
-    setCompanies(getStoredCompanies())
     try {
       const synced = await syncWithServerClaims()
       setCompanies([...synced])
-    } catch (_) {}
+    } catch (_) {
+      setCompanies(getStoredCompanies())
+    }
     fetchProfileClaims()
   }
 
   useEffect(() => {
     let isMounted = true
 
-    // Immediately load storage on mount
-    reloadCompanies()
-    setSupplierPosts(getStoredSupplierPosts())
-    setNewsArticles(getStoredNewsArticles())
-    setPartnerBuyers(getStoredPartnerBuyers())
-
     // Safety timeout: Guarantee loading finishes in max 1 second
     const timer = setTimeout(() => {
       if (isMounted) {
         setAuthorized(true)
         setLoading(false)
-        reloadCompanies()
-        setSupplierPosts(getStoredSupplierPosts())
-        setNewsArticles(getStoredNewsArticles())
-        setPartnerBuyers(getStoredPartnerBuyers())
       }
     }, 1000)
 
@@ -282,12 +253,39 @@ export default function AdminDashboardPage() {
         if (isMounted) {
           setAuthorized(true)
           reloadCompanies()
-          setSupplierPosts(getStoredSupplierPosts())
-          setPartnerBuyers(getStoredPartnerBuyers())
-          // Always fetch fresh news from Supabase so articles survive re-login
-          fetchNewsArticles().then((articles) => {
-            if (isMounted) setNewsArticles(articles)
-          })
+          // Fetch all data from Supabase only
+          const [posts, articles, partners] = await Promise.all([
+            supabase.from('supplier_posts').select('id, title, content, created_at, updated_at, is_published').eq('is_published', true).order('created_at', { ascending: false }).limit(50),
+            fetchNewsArticles(),
+            fetchPartnerBuyers(),
+          ])
+          if (isMounted) {
+            if (posts.data) {
+              setSupplierPosts(posts.data.map((row: any) => {
+                let details: any = {}
+                try { details = JSON.parse(row.content || '{}') } catch (_) {}
+                return {
+                  id: row.id,
+                  product_name: details.productName || row.title?.split(' —')[0] || 'Seafood Product',
+                  price_per_kg: parseFloat(details.pricePerKg || 0),
+                  currency: details.currency || 'EUR',
+                  country_of_origin: details.countryOfOrigin || '',
+                  fresh_frozen: details.freshFrozen || 'Frozen',
+                  size_weight: details.sizeWeight || '',
+                  packaging: details.packagingFillet || '',
+                  availability: details.availability || 'In Stock',
+                  location: details.location || '',
+                  supplier_info_extra: details.supplierInfoExtra || '',
+                  custom_image: details.customImage || null,
+                  created_at: row.created_at,
+                  updated_at: row.updated_at,
+                  status: 'active',
+                }
+              }))
+            }
+            setNewsArticles(articles)
+            setPartnerBuyers(partners)
+          }
         }
 
         // Fetch stats in non-blocking background
@@ -299,10 +297,10 @@ export default function AdminDashboardPage() {
 
           if (isMounted) {
             const usersList: any[] = usersRes.data || []
-            const totalU = usersRes.count || usersList.length || 1
+            const totalU = usersRes.count ?? usersList.length ?? 0
             const totalB = usersList.filter((u: any) => u.role === 'buyer').length
             const totalS = usersList.filter((u: any) => u.role === 'supplier').length
-            const totalReq = requestsRes.count || 0
+            const totalReq = requestsRes.count ?? 0
 
             setStats({
               totalUsers: totalU,
@@ -520,7 +518,7 @@ export default function AdminDashboardPage() {
     reader.readAsDataURL(file)
   }
 
-  const handleSavePartner = (e: React.FormEvent) => {
+  const handleSavePartner = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!partnerName.trim()) {
       setPartnerFormError('Buyer Name is required.')
@@ -532,34 +530,49 @@ export default function AdminDashboardPage() {
     }
 
     if (editingPartner) {
-      updatePartnerBuyer(editingPartner.id, {
-        name: partnerName.trim(),
-        logo: partnerLogo.trim(),
-        country: partnerCountry.trim() || undefined,
-        website: partnerWebsite.trim() || undefined,
-      })
-      setPartnerSuccessMsg(`Partner Buyer "${partnerName}" updated successfully!`)
+      try {
+        const updated = await updatePartnerBuyer(editingPartner.id, {
+          name: partnerName.trim(),
+          logo: partnerLogo.trim(),
+          country: partnerCountry.trim() || undefined,
+          website: partnerWebsite.trim() || undefined,
+        })
+        setPartnerBuyers(prev => prev.map(p => p.id === editingPartner.id ? updated : p))
+        setPartnerSuccessMsg(`Partner Buyer "${partnerName}" updated successfully!`)
+      } catch (err: any) {
+        setPartnerFormError(err?.message || 'Failed to update partner buyer.')
+        return
+      }
     } else {
-      addPartnerBuyer({
-        name: partnerName.trim(),
-        logo: partnerLogo.trim(),
-        country: partnerCountry.trim() || undefined,
-        website: partnerWebsite.trim() || undefined,
-      })
-      setPartnerSuccessMsg(`New Partner Buyer "${partnerName}" added to the Home Screen ticker!`)
+      try {
+        const newBuyer = await addPartnerBuyer({
+          name: partnerName.trim(),
+          logo: partnerLogo.trim(),
+          country: partnerCountry.trim() || undefined,
+          website: partnerWebsite.trim() || undefined,
+        })
+        setPartnerBuyers(prev => [newBuyer, ...prev])
+        setPartnerSuccessMsg(`New Partner Buyer "${partnerName}" added to the Home Screen ticker!`)
+      } catch (err: any) {
+        setPartnerFormError(err?.message || 'Failed to add partner buyer.')
+        return
+      }
     }
 
-    setPartnerBuyers(getStoredPartnerBuyers())
     setShowPartnerModal(false)
     setTimeout(() => setPartnerSuccessMsg(null), 5000)
   }
 
-  const handleDeletePartner = (id: string, name: string) => {
+  const handleDeletePartner = async (id: string, name: string) => {
     if (confirm(`Are you sure you want to remove "${name}" from the Partner Buyers list?`)) {
-      deletePartnerBuyer(id)
-      setPartnerBuyers(getStoredPartnerBuyers())
-      setPartnerSuccessMsg(`Partner Buyer "${name}" was removed.`)
-      setTimeout(() => setPartnerSuccessMsg(null), 4000)
+      try {
+        await deletePartnerBuyer(id)
+        setPartnerBuyers(prev => prev.filter(p => p.id !== id))
+        setPartnerSuccessMsg(`Partner Buyer "${name}" was removed.`)
+        setTimeout(() => setPartnerSuccessMsg(null), 4000)
+      } catch (err: any) {
+        setPartnerSuccessMsg(`Error: ${err?.message || 'Failed to delete.'}`)
+      }
     }
   }
 
@@ -975,9 +988,7 @@ export default function AdminDashboardPage() {
                     try {
                       const { error } = await supabase.auth.signInWithOtp({ email: newSupplierEmail, options: { data: { role: 'supplier', company: newSupplierCompany, country: newSupplierCountry, phone: newSupplierPhone } } })
                       const newEntry = { id: 'sup-' + Date.now(), logo: newSupplierLogo, email: newSupplierEmail, company: newSupplierCompany, country: newSupplierCountry, phone: newSupplierPhone, specialty: newSupplierSpecialty, addedAt: new Date().toLocaleDateString() }
-                      const updated = [newEntry, ...addedSuppliers]
-                      setAddedSuppliers(updated)
-                      try { localStorage.setItem('admin_added_suppliers', JSON.stringify(updated)) } catch (_) {}
+                      setAddedSuppliers(prev => [newEntry, ...prev])
                       setAddSupplierMsg({ type: 'success', text: error ? `✅ "${newSupplierCompany}" saved. Login invite will be sent to ${newSupplierEmail} when email is active.` : `✅ Invite sent to ${newSupplierEmail}! They can now sign in.` })
                       setNewSupplierLogo(''); setNewSupplierEmail(''); setNewSupplierCompany(''); setNewSupplierCountry(''); setNewSupplierPhone(''); setNewSupplierSpecialty('')
                     } catch (_) {
@@ -1836,13 +1847,35 @@ export default function AdminDashboardPage() {
             </div>
 
             <form
-              onSubmit={(e) => {
+              onSubmit={async (e) => {
                 e.preventDefault()
                 const post = updatingPostModal
                 const numPrice = parseFloat(updatePriceInput)
                 if (!post || isNaN(numPrice) || numPrice < 0) return
-                const updatedPosts = updateProductPrice(post.id, numPrice, updateCurrencyInput, updateAvailInput)
-                setSupplierPosts(updatedPosts)
+                
+                // Update in Supabase
+                try {
+                  const { data: existingPost } = await supabase
+                    .from('supplier_posts')
+                    .select('content')
+                    .eq('id', post.id)
+                    .maybeSingle()
+                  if (existingPost) {
+                    let details: any = {}
+                    try { details = JSON.parse(existingPost.content || '{}') } catch (_) {}
+                    details.pricePerKg = numPrice
+                    details.currency = updateCurrencyInput
+                    details.availability = updateAvailInput
+                    await supabase
+                      .from('supplier_posts')
+                      .update({ content: JSON.stringify(details), updated_at: new Date().toISOString() })
+                      .eq('id', post.id)
+                  }
+                } catch (err) {
+                  console.error('Failed to update price in Supabase:', err)
+                }
+
+                setSupplierPosts(prev => prev.map(p => p.id === post.id ? { ...p, price_per_kg: numPrice, currency: updateCurrencyInput, availability: updateAvailInput } : p))
                 setPriceUpdateMsg(`"${post.product_name}" updated → ${updateCurrencyInput} ${numPrice.toFixed(2)}/kg`)
                 setUpdatingPostModal(null)
               }}
@@ -1938,7 +1971,7 @@ export default function AdminDashboardPage() {
             )}
 
             <form
-              onSubmit={(e) => {
+              onSubmit={async (e) => {
                 e.preventDefault()
                 if (!newsTitle.trim() || !newsExcerpt.trim()) {
                   setNewsFormError('Please provide both a Title and a Summary.')
@@ -1957,32 +1990,34 @@ export default function AdminDashboardPage() {
                   'Sustainability': 'bg-teal-50 text-teal-700',
                 }
 
-                // addNewsArticle is async — must await so Supabase write
-                // and localStorage cache update complete before we reload state
-                addNewsArticle({
-                  slug,
-                  title: newsTitle.trim(),
-                  category: newsCategory,
-                  categoryColor: categoryColors[newsCategory] || 'bg-blue-50 text-[#022B96]',
-                  excerpt: newsExcerpt.trim(),
-                  author: newsAuthor.trim() || 'Bokhol Research',
-                  date: new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' }),
-                  readTime: newsReadTime.trim() || '3 min read',
-                  image: newsImageUrl.trim() || 'https://images.unsplash.com/photo-1544551763-46a013bb70d5?w=800&q=80',
-                }).then(() => {
-                  // Re-fetch from Supabase so the list is authoritative
-                  return fetchNewsArticles()
-                }).then((articles) => {
-                  setNewsArticles(articles)
-                })
-
-                setShowAddNewsModal(false)
-                setNewsTitle('')
-                setNewsExcerpt('')
-                setNewsImageUrl('https://images.unsplash.com/photo-1544551763-46a013bb70d5?w=800&q=80')
                 setNewsFormError(null)
+                try {
+                  await addNewsArticle({
+                    slug,
+                    title: newsTitle.trim(),
+                    category: newsCategory,
+                    categoryColor: categoryColors[newsCategory] || 'bg-blue-50 text-[#022B96]',
+                    excerpt: newsExcerpt.trim(),
+                    author: newsAuthor.trim() || 'Bokhol Research',
+                    date: new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' }),
+                    readTime: newsReadTime.trim() || '3 min read',
+                    image: newsImageUrl.trim() || 'https://images.unsplash.com/photo-1544551763-46a013bb70d5?w=800&q=80',
+                  })
+                  // Re-fetch from Supabase so the list is authoritative
+                  const articles = await fetchNewsArticles()
+                  setNewsArticles(articles)
+                  setShowAddNewsModal(false)
+                  setNewsTitle('')
+                  setNewsExcerpt('')
+                  setNewsImageUrl('https://images.unsplash.com/photo-1544551763-46a013bb70d5?w=800&q=80')
+                  setNewsSuccessMsg(`Article "${newsTitle.trim().slice(0, 50)}" published successfully.`)
+                  setTimeout(() => setNewsSuccessMsg(null), 5000)
+                } catch (err: any) {
+                  setNewsFormError(err?.message || 'Failed to publish article. Please try again.')
+                }
               }}
               className="px-6 py-5 space-y-4"
+
             >
               {/* Title */}
               <div className="space-y-1.5">

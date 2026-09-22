@@ -25,6 +25,7 @@ export interface ProductCard {
   imageUrl: string
   suppliersCount: number
   avgPrice: string
+  priceRange: string   // e.g. "€2.30 – €4.30 / kg"
   topOrigin: string
   lastUpdated: string
 }
@@ -68,6 +69,8 @@ export function ProductsClient({ initialProducts }: ProductsClientProps) {
       const postGroups = new Map<string, {
         displayName: string
         prices: number[]
+        minPrices: number[]
+        maxPrices: number[]
         origins: string[]
         latestDate: string
         currency: string
@@ -84,8 +87,14 @@ export function ProductsClient({ initialProducts }: ProductsClientProps) {
         const name = rawName.trim()
         const key = name.toLowerCase()
         const normSlug = key.replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)+/g, '')
-        const rawPrice = parseFloat(details.pricePerKg || 0)
-        const price = isPriceSane(rawPrice, normSlug) ? rawPrice : 0
+
+        // Support both new min/max format and legacy single price
+        const rawMin = parseFloat(details.minPricePerKg || details.pricePerKg || 0)
+        const rawMax = parseFloat(details.maxPricePerKg || 0)
+        const minPrice = isPriceSane(rawMin, normSlug) ? rawMin : 0
+        const maxPrice = rawMax > 0 && isPriceSane(rawMax, normSlug) ? rawMax : 0
+        const price = minPrice  // for backward compat grouping
+
         const origin = details.countryOfOrigin || ''
         const date = post.updated_at || post.created_at || ''
         const currency = details.currency || 'EUR'
@@ -94,6 +103,8 @@ export function ProductsClient({ initialProducts }: ProductsClientProps) {
         if (postGroups.has(key)) {
           const existing = postGroups.get(key)!
           if (price > 0) existing.prices.push(price)
+          if (minPrice > 0) existing.minPrices.push(minPrice)
+          if (maxPrice > 0) existing.maxPrices.push(maxPrice)
           if (origin) existing.origins.push(origin)
           if (date > existing.latestDate) existing.latestDate = date
           if (customImg) existing.customImages.push(customImg)
@@ -101,6 +112,8 @@ export function ProductsClient({ initialProducts }: ProductsClientProps) {
           postGroups.set(key, {
             displayName: name,
             prices: price > 0 ? [price] : [],
+            minPrices: minPrice > 0 ? [minPrice] : [],
+            maxPrices: maxPrice > 0 ? [maxPrice] : [],
             origins: origin ? [origin] : [],
             latestDate: date,
             currency,
@@ -113,10 +126,19 @@ export function ProductsClient({ initialProducts }: ProductsClientProps) {
         const cat = catalogMap.get(key)
         const name = cat?.name || group.displayName || key.split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ')
         const slug = cat?.slug || key.replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)+/g, '')
-        const avgPrice = group.prices.length > 0
+        const avgPriceNum = group.prices.length > 0
           ? (group.prices.reduce((a, b) => a + b, 0) / group.prices.length)
           : null
+        const overallMin = group.minPrices.length > 0 ? Math.min(...group.minPrices) : avgPriceNum
+        const overallMax = group.maxPrices.length > 0 ? Math.max(...group.maxPrices) : null
         const symbol = group.currency === 'USD' ? '$' : group.currency === 'GBP' ? '£' : '€'
+
+        const avgPrice = avgPriceNum ? `${symbol}${avgPriceNum.toFixed(2)} / kg` : 'Contact for price'
+        const priceRange = overallMin
+          ? overallMax && overallMax > overallMin
+            ? `${symbol}${overallMin.toFixed(2)} – ${symbol}${overallMax.toFixed(2)} / kg`
+            : `${symbol}${overallMin.toFixed(2)} / kg`
+          : 'Contact for price'
 
         const originCounts = group.origins.reduce((acc: Record<string, number>, o) => {
           acc[o] = (acc[o] || 0) + 1; return acc
@@ -135,7 +157,8 @@ export function ProductsClient({ initialProducts }: ProductsClientProps) {
           category: cat?.category || getCategory(name),
           imageUrl: displayImg,
           suppliersCount: group.prices.length || 1,
-          avgPrice: avgPrice ? `${symbol}${avgPrice.toFixed(2)} / kg` : 'Contact for price',
+          avgPrice,
+          priceRange,
           topOrigin,
           lastUpdated,
         }
@@ -274,9 +297,9 @@ export function ProductsClient({ initialProducts }: ProductsClientProps) {
                       </span>
                     </div>
                     <div className="flex justify-between py-2.5 border-b border-slate-100">
-                      <span className="text-slate-500">Avg. price</span>
-                      <span className="font-bold text-slate-800">
-                        <BlurGate>{product.avgPrice}</BlurGate>
+                      <span className="text-slate-500">Price range</span>
+                      <span className="font-bold text-[#022B96]">
+                        <BlurGate>{product.priceRange || product.avgPrice}</BlurGate>
                       </span>
                     </div>
                     <div className="flex justify-between py-2.5 border-b border-slate-100">

@@ -74,8 +74,8 @@ export async function signUp(
         data: {
           full_name,
           role,
-          country: country || (role === 'supplier' ? 'Belgium' : null),
-          country_code: country_code || (role === 'supplier' ? 'BE' : null),
+          country: country || (role === 'supplier' ? 'Netherlands' : null),
+          country_code: country_code || (role === 'supplier' ? 'NL' : null),
         },
         emailRedirectTo: `${process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000'}/auth/callback`,
       },

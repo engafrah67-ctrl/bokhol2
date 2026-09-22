@@ -4,8 +4,7 @@ import React, { useState, useEffect } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { useUser } from '@/hooks/use-user'
-import { getFishImageForProduct, getStoredSupplierPosts } from '@/lib/data/products-data'
-import { getStoredCompanies, INITIAL_COMPANIES } from '@/lib/data/companies-data'
+import { getFishImageForProduct } from '@/lib/data/products-data'
 import {
   Building2,
   Globe,
@@ -133,30 +132,6 @@ export default function SupplierProfilePage() {
         }
 
         if (!matchedCompany) {
-          // Fallback to local stored companies or initial companies
-          const stored = getStoredCompanies()
-          const normSlug = slug.toLowerCase()
-          const found = stored.find(
-            (c) => c.slug?.toLowerCase() === normSlug || c.id === slug || c.name?.toLowerCase() === normSlug
-          ) || INITIAL_COMPANIES.find(
-            (c) => c.slug?.toLowerCase() === normSlug || c.id === slug || c.name?.toLowerCase() === normSlug
-          )
-
-          if (found) {
-            matchedCompany = {
-              ...found,
-              is_verified: found.isVerified ?? true,
-              trust_score: found.completenessScore ?? 95,
-              activity_score: found.completenessScore ?? 90,
-              country: {
-                name: found.country,
-                flag_emoji: found.countryCode === 'NL' ? '🇳🇱' : found.countryCode === 'DE' ? '🇩🇪' : found.countryCode === 'BE' ? '🇧🇪' : '🌍'
-              }
-            }
-          }
-        }
-
-        if (!matchedCompany) {
           setLoading(false)
           return
         }
@@ -175,21 +150,6 @@ export default function SupplierProfilePage() {
 
           if (dbPosts && dbPosts.length > 0) {
             rawPosts = [...dbPosts]
-          }
-        }
-
-        // Also check localStorage posts (for local offline uploads or fallback)
-        const storedPosts = getStoredSupplierPosts()
-        const existingIds = new Set(rawPosts.map((p) => p.id))
-        for (const sp of storedPosts) {
-          const isMatch =
-            (sp.company_id && matchedCompany.id && sp.company_id === matchedCompany.id) ||
-            (sp.company_name && matchedCompany.name && sp.company_name.toLowerCase() === matchedCompany.name.toLowerCase()) ||
-            (sp.user_id && user?.id && sp.user_id === user.id)
-
-          if (isMatch && !existingIds.has(sp.id)) {
-            rawPosts.push(sp)
-            existingIds.add(sp.id)
           }
         }
 

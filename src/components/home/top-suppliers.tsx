@@ -8,72 +8,7 @@ import { useUser } from '@/hooks/use-user'
 import { Building2, Award, ArrowRight, Lock, Loader2, Sparkles, X, MessageSquare, Phone, Mail, CheckCircle2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 
-const DEFAULT_SUPPLIERS = [
-  {
-    id: 's1',
-    slug: null as string | null,
-    name: 'Norway Seafoods AS',
-    country: 'Norway',
-    flag: '🇳🇴',
-    yearFounded: 1994,
-    employees: '200-500',
-    description: 'Premier harvester and exporter of Atlantic Cod, Haddock, and Saithe from the pristine Arctic waters.',
-    isVerified: true,
-    activityScore: 98,
-    trustScore: 96,
-    email: 'sales@norwayseafoods.no',
-    phone: '+47 70 10 12 34',
-    logoUrl: null as string | null
-  },
-  {
-    id: 's2',
-    slug: null as string | null,
-    name: 'Chilean Salmon Packers',
-    country: 'Chile',
-    flag: '🇨🇱',
-    yearFounded: 2008,
-    employees: '50-200',
-    description: 'Eco-certified aquaculture operations delivering fresh and frozen Atlantic salmon globally.',
-    isVerified: true,
-    activityScore: 92,
-    trustScore: 94,
-    email: 'info@chilesalmon.cl',
-    phone: '+56 65 224 8899',
-    logoUrl: null as string | null
-  },
-  {
-    id: 's3',
-    slug: null as string | null,
-    name: 'Tokyo Marine Products',
-    country: 'Japan',
-    flag: '🇯🇵',
-    yearFounded: 1982,
-    employees: '500+',
-    description: 'Global distributor specializing in Bluefin Tuna, Sea Bream, and premium sashimi-grade products.',
-    isVerified: true,
-    activityScore: 95,
-    trustScore: 97,
-    email: 'contact@tokyomarine.co.jp',
-    phone: '+81 3 5540 1234',
-    logoUrl: null as string | null
-  },
-  {
-    id: 's4',
-    slug: null as string | null,
-    name: 'Icelandic Premium Cod',
-    country: 'Iceland',
-    flag: '🇮🇸',
-    yearFounded: 2001,
-    employees: '10-50',
-    description: 'Line-caught Atlantic Cod and Halibut, processed using 100% renewable geothermal energy.',
-    isVerified: true,
-    activityScore: 88,
-    trustScore: 91,
-    email: 'orders@icelandiccod.is',
-    phone: '+354 515 2000',
-    logoUrl: null as string | null
-  }
-]
+
 
 export function TopSuppliers() {
   const router = useRouter()
@@ -111,28 +46,27 @@ export function TopSuppliers() {
     }
   }, [user, isLoading])
 
-  // Merge database suppliers with defaults if needed
-  const displaySuppliers = dbSuppliers.length > 0 
-    ? dbSuppliers.map((s, idx) => {
-        const fallback = DEFAULT_SUPPLIERS[idx % DEFAULT_SUPPLIERS.length]
-        return {
-          id: s.id,
-          slug: s.slug,
-          name: s.name,
-          country: s.country?.name || fallback.country,
-          flag: s.country?.flag_emoji || fallback.flag,
-          yearFounded: s.year_founded || fallback.yearFounded,
-          employees: s.employee_count || fallback.employees,
-          description: s.description || fallback.description,
-          isVerified: s.is_verified,
-          activityScore: s.activity_score || fallback.activityScore,
-          trustScore: s.trust_score || fallback.trustScore,
-          email: s.email || fallback.email,
-          phone: s.phone || fallback.phone,
-          logoUrl: s.logo_url || null
-        }
-      })
-    : DEFAULT_SUPPLIERS
+  // Merge database suppliers
+  const displaySuppliers = dbSuppliers.map((s) => ({
+    id: s.id,
+    slug: s.slug,
+    name: s.name,
+    country: s.country?.name || 'Europe',
+    flag: s.country?.flag_emoji || '🌐',
+    yearFounded: s.year_founded || 2020,
+    employees: s.employee_count || '10-50',
+    description: s.description || '',
+    isVerified: s.is_verified,
+    activityScore: s.activity_score || 90,
+    trustScore: s.trust_score || 90,
+    email: s.email || '',
+    phone: s.phone || '',
+    logoUrl: s.logo_url || null
+  }))
+
+  if (displaySuppliers.length === 0) {
+    return null
+  }
 
   const isAuthenticated = !!user
 

@@ -30,63 +30,10 @@ interface SupplierReply {
   createdAt: string
 }
 
-const DEFAULT_REQUESTS: BuyerSourcingRequest[] = [
-  {
-    id: 'req-sample-1',
-    productNeeded: 'Salmon',
-    quantity: '100 KG',
-    freshFrozen: 'Fresh / Frozen',
-    location: 'Amsterdam, Netherlands',
-    packagingProcessing: 'packing/pure',
-    deliveryDate: 'Friday',
-    targetPrice: '$6.20/kg',
-    additionalNotes: 'Need fresh or frozen salmon delivered by Friday morning at Amsterdam port warehouse.',
-    createdAt: new Date().toISOString(),
-  },
-  {
-    id: 'req-sample-2',
-    productNeeded: 'Atlantic Cod Fillets',
-    quantity: '500 KG',
-    freshFrozen: 'Frozen (IQF)',
-    location: 'Vigo, Spain',
-    packagingProcessing: 'Fillet (Skinless)',
-    deliveryDate: 'Next Tuesday',
-    targetPrice: '$4.80/kg',
-    additionalNotes: 'Grade A IQF cod fillets required for restaurant distributor.',
-    createdAt: new Date().toISOString(),
-  },
-  {
-    id: 'req-sample-3',
-    productNeeded: 'Yellowfin Tuna Loins',
-    quantity: '250 KG',
-    freshFrozen: 'Fresh',
-    location: 'Tokyo, Japan',
-    packagingProcessing: 'Vacuum Packed Loins',
-    deliveryDate: 'Thursday',
-    targetPrice: '$12.50/kg',
-    additionalNotes: 'Sashimi grade fresh yellowfin tuna loins.',
-    createdAt: new Date().toISOString(),
-  }
-]
-
-const DEFAULT_REPLIES: Record<string, SupplierReply[]> = {
-  'req-sample-1': [
-    {
-      id: 'rep-1',
-      requestId: 'req-sample-1',
-      supplierName: 'Norsk Seafood Ltd',
-      pricePerKg: '6.45 €/kg',
-      deliveryItem: 'Friday Delivery Guaranteed',
-      message: 'We can provide 100 KG premium fresh Norwegian Salmon directly to Amsterdam.',
-      createdAt: '10 mins ago',
-    }
-  ]
-}
-
 export default function BuyerRequestsPage() {
   const { user, profile, role, isLoading } = useUser()
   const [requests, setRequests] = useState<BuyerSourcingRequest[]>([])
-  const [replies, setReplies] = useState<Record<string, SupplierReply[]>>(DEFAULT_REPLIES)
+  const [replies, setReplies] = useState<Record<string, SupplierReply[]>>({})
   const [searchTerm, setSearchTerm] = useState('')
   const [loading, setLoading] = useState(true)
 
@@ -101,52 +48,41 @@ export default function BuyerRequestsPage() {
 
   useEffect(() => {
     async function loadRequests() {
-      let localReqs: BuyerSourcingRequest[] = []
-      let localReps: Record<string, SupplierReply[]> = DEFAULT_REPLIES
-      
-      if (typeof window !== 'undefined') {
-        try {
-          const storedReqs = JSON.parse(localStorage.getItem('buyer_sourcing_requests') || '[]')
-          if (storedReqs && Array.isArray(storedReqs)) {
-            localReqs = storedReqs.map((r: any) => {
-              try {
-                const parsed = JSON.parse(r.description || '{}')
-                return {
-                  id: r.id,
-                  productNeeded: parsed.productNeeded || 'Salmon',
-                  quantity: parsed.quantity || '100 KG',
-                  freshFrozen: parsed.freshFrozen || 'Fresh / Frozen',
-                  location: parsed.location || r.destination || 'Amsterdam',
-                  packagingProcessing: parsed.packagingProcessing || 'packing/pure',
-                  deliveryDate: parsed.deliveryDate || 'Friday',
-                  targetPrice: parsed.targetPrice || null,
-                  additionalNotes: parsed.additionalNotes || null,
-                  createdAt: r.created_at || new Date().toISOString(),
-                }
-              } catch (_) {
-                return {
-                  id: r.id,
-                  productNeeded: r.title || 'Salmon',
-                  quantity: '100 KG',
-                  freshFrozen: 'Fresh / Frozen',
-                  location: r.destination || 'Amsterdam',
-                  packagingProcessing: 'packing/pure',
-                  deliveryDate: 'Friday',
-                  createdAt: r.created_at || new Date().toISOString(),
-                }
-              }
-            })
-          }
+      let reqList: BuyerSourcingRequest[] = []
+      let repsMap: Record<string, SupplierReply[]> = {}
 
-          const storedReps = JSON.parse(localStorage.getItem('supplier_replies') || '{}')
-          if (storedReps) {
-            localReps = { ...DEFAULT_REPLIES, ...storedReps }
-          }
-        } catch (_) {}
+      try {
+        const supabase = createClient()
+        const { data: dbRequests } = await supabase
+          .from('buyer_requests')
+          .select('*')
+          .eq('status', 'open')
+          .order('created_at', { ascending: false })
+
+        if (dbRequests && dbRequests.length > 0) {
+          reqList = dbRequests.map((r: any) => {
+            let parsed: any = {}
+            try { parsed = JSON.parse(r.description || '{}') } catch (_) {}
+            return {
+              id: r.id,
+              productNeeded: parsed.productNeeded || r.title || 'Seafood Product',
+              quantity: r.quantity ? `${r.quantity} ${r.quantity_unit || 'KG'}` : (parsed.quantity || 'Bulk'),
+              freshFrozen: parsed.freshFrozen || 'Fresh / Frozen',
+              location: r.destination || parsed.location || 'Europe',
+              packagingProcessing: parsed.packagingProcessing || 'Standard Packaging',
+              deliveryDate: parsed.deliveryDate || 'Flexible',
+              targetPrice: r.target_price ? `${r.currency === 'EUR' ? '€' : '$'}${r.target_price}/kg` : parsed.targetPrice || null,
+              additionalNotes: typeof parsed.additionalNotes === 'string' ? parsed.additionalNotes : (r.description || null),
+              createdAt: r.created_at || new Date().toISOString(),
+            }
+          })
+        }
+      } catch (err) {
+        console.error('Failed to load buyer requests from Supabase:', err)
       }
 
-      setRequests([...localReqs, ...DEFAULT_REQUESTS])
-      setReplies(localReps)
+      setRequests(reqList)
+      setReplies(repsMap)
       setLoading(false)
     }
 
@@ -182,31 +118,6 @@ export default function BuyerRequestsPage() {
     }
 
     setReplies(updatedReplies)
-
-    if (typeof window !== 'undefined') {
-      try {
-        localStorage.setItem('supplier_replies', JSON.stringify(updatedReplies))
-
-        // Also add directly to Buyer Dashboard Notifications (Private to Buyer)
-        const existingOffers = JSON.parse(localStorage.getItem('buyer_supplier_offers_list') || '[]')
-        const newOfferForBuyer = {
-          id: 'offer-' + Date.now(),
-          requestId: selectedRequest.id,
-          requestTitle: `${selectedRequest.quantity} ${selectedRequest.productNeeded} — ${selectedRequest.location}`,
-          supplierName: supplierDisplayName,
-          supplierEmail: user?.email || 'supplier@bokhol.nl',
-          supplierPhone: '+31684033593',
-          pricePerKg: newReply.pricePerKg,
-          deliveryTerms: replyDelivery,
-          message: replyMessage,
-          createdAt: 'Just now',
-          isRead: false,
-          supplierCountry: 'Netherlands',
-        }
-        localStorage.setItem('buyer_supplier_offers_list', JSON.stringify([newOfferForBuyer, ...existingOffers]))
-      } catch (_) {}
-    }
-
     setReplySubmitted(true)
     setTimeout(() => {
       setSelectedRequest(null)

@@ -22,7 +22,7 @@ import {
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { useLanguage } from '@/contexts/language-context'
-import { getStoredPartnerBuyers, DEFAULT_PARTNER_BUYERS, PartnerBuyer } from '@/lib/data/partner-buyers-data'
+import { fetchPartnerBuyers, PartnerBuyer } from '@/lib/data/partner-buyers-data'
 
 // ─── Intersection Observer Hook ───────────────────────────────────────────────
 function useInView(threshold = 0.2) {
@@ -184,18 +184,16 @@ export default function AboutPage() {
   const { t } = useLanguage()
   const { ref: valuesRef, inView: valuesInView } = useInView(0.1)
   const { ref: missionRef, inView: missionInView } = useInView(0.2)
-  const [partnerBuyers, setPartnerBuyers] = useState<PartnerBuyer[]>(DEFAULT_PARTNER_BUYERS)
+  const [partnerBuyers, setPartnerBuyers] = useState<PartnerBuyer[]>([])
 
   useEffect(() => {
-    setPartnerBuyers(getStoredPartnerBuyers())
+    fetchPartnerBuyers().then(setPartnerBuyers)
     const handleUpdate = () => {
-      setPartnerBuyers(getStoredPartnerBuyers())
+      fetchPartnerBuyers().then(setPartnerBuyers)
     }
     window.addEventListener('partner-buyers-updated', handleUpdate)
-    window.addEventListener('storage', handleUpdate)
     return () => {
       window.removeEventListener('partner-buyers-updated', handleUpdate)
-      window.removeEventListener('storage', handleUpdate)
     }
   }, [])
 

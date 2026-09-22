@@ -1,26 +1,22 @@
 'use client'
 
 import React, { useState, useEffect } from 'react'
-import { getStoredPartnerBuyers, DEFAULT_PARTNER_BUYERS, PartnerBuyer } from '@/lib/data/partner-buyers-data'
+import { fetchPartnerBuyers, PartnerBuyer } from '@/lib/data/partner-buyers-data'
 
 export function PartnersSection() {
-  const [partnerBuyers, setPartnerBuyers] = useState<PartnerBuyer[]>(DEFAULT_PARTNER_BUYERS)
+  const [partnerBuyers, setPartnerBuyers] = useState<PartnerBuyer[]>([])
 
   useEffect(() => {
-    // Initial load
-    setPartnerBuyers(getStoredPartnerBuyers())
+    fetchPartnerBuyers().then(setPartnerBuyers)
 
-    // Listen for live updates from Admin panel
     const handleUpdate = () => {
-      setPartnerBuyers(getStoredPartnerBuyers())
+      fetchPartnerBuyers().then(setPartnerBuyers)
     }
 
     window.addEventListener('partner-buyers-updated', handleUpdate)
-    window.addEventListener('storage', handleUpdate)
 
     return () => {
       window.removeEventListener('partner-buyers-updated', handleUpdate)
-      window.removeEventListener('storage', handleUpdate)
     }
   }, [])
 

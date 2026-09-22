@@ -3,13 +3,31 @@
 import { Building2, Globe2, Fish, RefreshCw } from 'lucide-react'
 import { useLanguage } from '@/contexts/language-context'
 
-export function StatsBar() {
+interface StatsBarProps {
+  supplierCount?: number
+  marketCount?: number
+  productCount?: number
+}
+
+export function StatsBar({ supplierCount, marketCount, productCount }: StatsBarProps) {
   const { t } = useLanguage()
 
   const stats = [
-    { icon: Building2, value: '200+',   labelKey: 'stats_suppliers' },
-    { icon: Globe2,    value: '15+',    labelKey: 'stats_markets' },
-    { icon: Fish,      value: '50+',    labelKey: 'stats_products' },
+    {
+      icon: Building2,
+      value: supplierCount !== undefined ? String(supplierCount) : '0',
+      labelKey: 'stats_suppliers',
+    },
+    {
+      icon: Globe2,
+      value: marketCount !== undefined ? String(marketCount) : '0',
+      labelKey: 'stats_markets',
+    },
+    {
+      icon: Fish,
+      value: productCount !== undefined ? String(productCount) : '0',
+      labelKey: 'stats_products',
+    },
     { icon: RefreshCw, value: t('stats_daily'), labelKey: 'stats_updates' },
   ]
 

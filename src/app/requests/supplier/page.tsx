@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { Plus, ArrowRight, Search, Anchor, Calendar, Lock, ShieldAlert, Building2, Send, LogIn, CheckCircle2, X, Package, MapPin, Loader2 } from 'lucide-react'
 import { useUser } from '@/hooks/use-user'
@@ -21,41 +21,94 @@ interface SupplierOffer {
   date: string
 }
 
-const DEFAULT_OFFERS: SupplierOffer[] = [
-  {
-    id: '1',
-    supplierName: 'Norsk Seafood Ltd',
-    originCountry: 'Norway',
-    originFlag: 'https://flagcdn.com/w40/no.png',
-    originPort: 'Alesund Port',
-    destCountry: 'Spain',
-    destFlag: 'https://flagcdn.com/w40/es.png',
-    destPort: 'Vigo Port',
-    productAvailable: 'Frozen Atlantic Salmon',
-    quantity: '25 Metric Tons',
-    containerType: '40RF',
-    date: 'August 16, 2026'
-  },
-  {
-    id: '2',
-    supplierName: 'Iberia Seafood S.A.',
-    originCountry: 'Spain',
-    originFlag: 'https://flagcdn.com/w40/es.png',
-    originPort: 'Bilbao Port',
-    destCountry: 'Japan',
-    destFlag: 'https://flagcdn.com/w40/jp.png',
-    destPort: 'Osaka Port',
-    productAvailable: 'Frozen Bluefin Tuna',
-    quantity: '18 Metric Tons',
-    containerType: '40RF',
-    date: 'August 20, 2026'
+const COUNTRY_FLAGS: Record<string, string> = {
+  Norway: 'https://flagcdn.com/w40/no.png',
+  Spain: 'https://flagcdn.com/w40/es.png',
+  Netherlands: 'https://flagcdn.com/w40/nl.png',
+  Germany: 'https://flagcdn.com/w40/de.png',
+  Belgium: 'https://flagcdn.com/w40/be.png',
+  Japan: 'https://flagcdn.com/w40/jp.png',
+  Chile: 'https://flagcdn.com/w40/cl.png',
+  Vietnam: 'https://flagcdn.com/w40/vn.png',
+  Iceland: 'https://flagcdn.com/w40/is.png',
+  France: 'https://flagcdn.com/w40/fr.png',
+  Italy: 'https://flagcdn.com/w40/it.png',
+  Portugal: 'https://flagcdn.com/w40/pt.png',
+  Greece: 'https://flagcdn.com/w40/gr.png',
+  Denmark: 'https://flagcdn.com/w40/dk.png',
+  Morocco: 'https://flagcdn.com/w40/ma.png',
+}
+
+function getCountryFlag(country: string): string {
+  if (!country) return 'https://flagcdn.com/w40/eu.png'
+  for (const [key, url] of Object.entries(COUNTRY_FLAGS)) {
+    if (country.toLowerCase().includes(key.toLowerCase())) return url
   }
-]
+  return 'https://flagcdn.com/w40/eu.png'
+}
 
 export default function SupplierRequestsPage() {
   const { user, profile, isLoading } = useUser()
-  const [offers] = useState<SupplierOffer[]>(DEFAULT_OFFERS)
+  const [offers, setOffers] = useState<SupplierOffer[]>([])
+  const [loadingOffers, setLoadingOffers] = useState(true)
   const [searchTerm, setSearchTerm] = useState('')
+
+  useEffect(() => {
+    async function loadOffers() {
+      try {
+        const supabase = createClient()
+        const { data: posts } = await supabase
+          .from('supplier_posts')
+          .select(`
+            id, title, content, created_at,
+            companies(name, country, city)
+          `)
+          .eq('is_published', true)
+          .order('created_at', { ascending: false })
+
+        if (posts && posts.length > 0) {
+          const list: SupplierOffer[] = posts.map((p: any) => {
+            let details: any = {}
+            try { details = JSON.parse(p.content || '{}') } catch (_) {}
+            const comp = Array.isArray(p.companies) ? p.companies[0] : p.companies
+            const supplierName = comp?.name || details.supplierName || 'Verified Exporter'
+            const originCountry = details.countryOfOrigin || comp?.country || 'Europe'
+            const destCountry = details.destCountry || 'EU'
+            const originPort = details.originPort || details.location || comp?.city || `${originCountry} Port`
+            const destPort = details.destPort || 'EU Main Port'
+            const productAvailable = details.productName || p.title?.split(' —')[0] || 'Seafood Stock'
+            const quantity = details.quantity || (details.pricePerKg ? `Stock @ €${details.pricePerKg}/kg` : 'Available Stock')
+            const containerType = details.containerType || details.packagingFillet || details.packaging || 'Reefer Container (40RF)'
+
+            return {
+              id: p.id,
+              supplierName,
+              originCountry,
+              originFlag: getCountryFlag(originCountry),
+              originPort,
+              destCountry,
+              destFlag: getCountryFlag(destCountry),
+              destPort,
+              productAvailable,
+              quantity,
+              containerType,
+              date: new Date(p.created_at).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })
+            }
+          })
+          setOffers(list)
+        } else {
+          setOffers([])
+        }
+      } catch (err) {
+        console.error('Failed to load supplier offers:', err)
+        setOffers([])
+      } finally {
+        setLoadingOffers(false)
+      }
+    }
+
+    loadOffers()
+  }, [])
 
   // Quote Request Modal State
   const [selectedOffer, setSelectedOffer] = useState<SupplierOffer | null>(null)
@@ -254,7 +307,12 @@ export default function SupplierRequestsPage() {
         </div>
 
         {/* Offers list */}
-        {filteredOffers.length > 0 ? (
+        {loadingOffers ? (
+          <div className="text-center py-16 bg-white border border-slate-200 rounded-2xl">
+            <Loader2 className="h-8 w-8 text-[#022B96] animate-spin mx-auto mb-3" />
+            <p className="text-xs text-slate-500 font-semibold">Loading verified supplier stock...</p>
+          </div>
+        ) : filteredOffers.length > 0 ? (
           <div className="grid md:grid-cols-2 gap-6">
             {filteredOffers.map((off) => (
               <div key={off.id} className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm hover:shadow-md transition-shadow duration-300">
@@ -308,7 +366,9 @@ export default function SupplierRequestsPage() {
           <div className="text-center py-16 bg-white border border-slate-200 rounded-2xl">
             <Anchor className="h-12 w-12 text-slate-300 mx-auto mb-4" />
             <h3 className="text-lg font-bold text-slate-800">No stocks found</h3>
-            <p className="text-sm text-slate-400 mt-1">Try adjusting your search terms.</p>
+            <p className="text-sm text-slate-400 mt-1">
+              {searchTerm ? 'Try adjusting your search terms.' : "Suppliers haven't posted any available stock yet. Check back soon."}
+            </p>
           </div>
         )}
       </div>

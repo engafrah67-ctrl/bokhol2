@@ -1,1 +1,15 @@
-[]
+[
+  {
+    "id": "claim-1790088691774-f0thg",
+    "company_id": "comp-4",
+    "company_name": "Blue World Seafood B.V.",
+    "username": "afrah",
+    "full_name": "Abdirahman Mohmed",
+    "job_title": "CEO",
+    "business_email": "afrah@foood.com",
+    "password": "12345678",
+    "status": "approved",
+    "created_at": "2026-09-22T14:51:31.774Z",
+    "updated_at": "2026-09-22T14:52:15.537Z"
+  }
+]

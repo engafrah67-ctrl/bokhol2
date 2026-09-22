@@ -4,7 +4,7 @@ import React, { useState, useEffect, useRef } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
-import { addSupplierPost, getFishImageForProduct } from '@/lib/data/products-data'
+import { getFishImageForProduct } from '@/lib/data/products-data'
 import {
   ArrowLeft,
   Fish,
@@ -423,7 +423,8 @@ const AVAILABILITY_OPTIONS = [
 
 export interface Product9Fields {
   productName: string          // 1
-  pricePerKg: string           // 2
+  minPricePerKg: string        // 2a — minimum price
+  maxPricePerKg: string        // 2b — maximum price
   currency: string
   countryOfOrigin: string      // 3
   freshFrozen: string          // 4: Fresh / Frozen / Both
@@ -450,7 +451,8 @@ export default function PostStockPage() {
   // Form State covering all 9 requested fields
   const [form, setForm] = useState<Product9Fields>({
     productName: '',
-    pricePerKg: '',
+    minPricePerKg: '',
+    maxPricePerKg: '',
     currency: 'EUR',
     countryOfOrigin: '',
     freshFrozen: 'Frozen',
@@ -470,26 +472,39 @@ export default function PostStockPage() {
     let isMounted = true
     const safetyTimer = setTimeout(() => {
       if (isMounted) setLoading(false)
-    }, 300)
+    }, 3000)
 
     async function checkAuth() {
       try {
-        const timeoutPromise = new Promise<{ data: { session: null } }>((res) =>
-          setTimeout(() => res({ data: { session: null } }), 400)
-        )
-        const sessionResult = await Promise.race([
-          supabase.auth.getSession(),
-          timeoutPromise,
-        ])
-        const currentUser = sessionResult?.data?.session?.user
+        const { data: sessionData } = await supabase.auth.getSession()
+        const currentUser = sessionData?.session?.user
         if (currentUser && isMounted) {
           setUser(currentUser)
-          const { data: companyData } = await supabase
+          // Try owner_id first, then user_id as fallback
+          let companyData: any = null
+          const { data: byOwner } = await supabase
             .from('companies')
             .select('id')
             .eq('owner_id', currentUser.id)
             .maybeSingle()
-          if (companyData && isMounted) setCompanyId(companyData.id)
+          companyData = byOwner
+
+          if (!companyData) {
+            const { data: byUser } = await supabase
+              .from('companies')
+              .select('id')
+              .eq('user_id', currentUser.id)
+              .maybeSingle()
+            companyData = byUser
+          }
+
+          if (companyData && isMounted) {
+            setCompanyId(companyData.id)
+          } else {
+            console.warn('[PostStock] No company found for user:', currentUser.id)
+          }
+        } else {
+          console.warn('[PostStock] No active session found')
         }
       } catch (err) {
         console.error('Auth check error:', err)
@@ -543,12 +558,31 @@ export default function PostStockPage() {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
+
+    // Validate min price
+    if (!form.minPricePerKg || parseFloat(form.minPricePerKg) <= 0) {
+      alert('Please enter a valid minimum price per KG.')
+      return
+    }
+
+    if (!companyId) {
+      alert('Your company profile was not found. Please go to your Supplier Dashboard and complete your company profile first, then come back to post a product.')
+      return
+    }
+
     setSubmitting(true)
 
     // Build the content JSON with all 9 product fields
+    const minPrice = parseFloat(form.minPricePerKg) || 0
+    const maxPrice = parseFloat(form.maxPricePerKg) || 0
+    const priceLabel = form.maxPricePerKg
+      ? `${form.currency} ${form.minPricePerKg}–${form.maxPricePerKg}/kg`
+      : `${form.currency} ${form.minPricePerKg}/kg`
+
     const details = {
       productName: form.productName,
-      pricePerKg: parseFloat(form.pricePerKg) || 0,
+      minPricePerKg: minPrice,
+      maxPricePerKg: maxPrice,
       currency: form.currency,
       countryOfOrigin: form.countryOfOrigin,
       freshFrozen: form.freshFrozen,
@@ -561,75 +595,41 @@ export default function PostStockPage() {
       createdAt: new Date().toISOString()
     }
 
-    if (companyId) {
-      // Save to Supabase — content JSON holds all 9 fields
-      try {
-        const { data: newPost, error } = await supabase
-          .from('supplier_posts')
-          .insert({
-            company_id: companyId,
-            category: 'product_availability',
-            title: `${form.productName} — ${form.currency} ${form.pricePerKg}/kg`,
-            content: JSON.stringify(details),
-            is_published: true,
-          })
-          .select('id')
-          .maybeSingle()
+    try {
+      console.log('[PostStock] Saving post for companyId:', companyId)
+      const { data: newPost, error } = await supabase
+        .from('supplier_posts')
+        .insert({
+          company_id: companyId,
+          category: 'product_availability',
+          title: `${form.productName} — ${priceLabel}`,
+          content: JSON.stringify(details),
+          is_published: true,
+        })
+        .select('id')
+        .maybeSingle()
 
-        if (error) {
-          console.error('Failed to save post to DB:', error)
-          // Fallback to localStorage
-          addSupplierPost({
-            id: 'post-' + Date.now(),
-            user_id: user?.id,
-            company_id: companyId,
-            ...details,
-            product_name: form.productName,
-            price_per_kg: parseFloat(form.pricePerKg) || 0,
-            currency: form.currency,
-            country_of_origin: form.countryOfOrigin,
-            fresh_frozen: form.freshFrozen,
-            size_weight: form.sizeWeight,
-            packaging: form.packagingFillet,
-            availability: form.availability,
-            location: form.location,
-            supplier_info_extra: form.supplierInfoExtra,
-            status: 'active',
-            created_at: new Date().toISOString(),
-          })
-        }
-        // Success — DB is the source of truth, no localStorage needed
-      } catch (err) {
-        console.error('Post submit error:', err)
+      if (error) {
+        console.error('[PostStock] DB insert error:', error)
+        setSubmitting(false)
+        alert(`Failed to publish: ${error.message || 'Unknown error'}. Please try again.`)
+        return
       }
-    } else {
-      // No company yet — save to localStorage as temporary fallback
-      addSupplierPost({
-        id: 'post-' + Date.now(),
-        user_id: user?.id || 'supplier-user',
-        product_name: form.productName,
-        price_per_kg: parseFloat(form.pricePerKg) || 0,
-        currency: form.currency,
-        country_of_origin: form.countryOfOrigin,
-        fresh_frozen: form.freshFrozen,
-        size_weight: form.sizeWeight,
-        packaging: form.packagingFillet,
-        availability: form.availability,
-        location: form.location,
-        supplier_info_extra: form.supplierInfoExtra,
-        status: 'active',
-        created_at: new Date().toISOString(),
-      })
-    }
 
-    setSubmitting(false)
-    setSubmitted(true)
+      console.log('[PostStock] Post saved successfully:', newPost)
+      setSubmitting(false)
+      setSubmitted(true)
+    } catch (err: any) {
+      console.error('[PostStock] Unexpected error:', err)
+      setSubmitting(false)
+      alert(`An unexpected error occurred: ${err?.message || String(err)}`)
+    }
   }
 
   const resetForm = () => {
     setSubmitted(false)
     setForm({
-      productName: '', pricePerKg: '', currency: 'EUR', countryOfOrigin: '',
+      productName: '', minPricePerKg: '', maxPricePerKg: '', currency: 'EUR', countryOfOrigin: '',
       freshFrozen: 'Frozen', sizeWeight: 'Medium (1–3 kg)', packagingFillet: 'Fillet (Skin On)',
       availability: 'In Stock — Ready to Ship', location: '', supplierInfoExtra: '', customImage: '',
     })
@@ -775,31 +775,51 @@ export default function PostStockPage() {
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
 
-              {/* Field 2: Price per KG */}
+              {/* Field 2: Price per KG — Min & Max */}
               <div>
                 <label className="block text-xs font-bold uppercase tracking-wider text-slate-800 mb-2">
                   2. Price per KG *
                 </label>
-                <div className="flex gap-2">
+                {/* Currency selector */}
+                <div className="mb-2">
                   <select
                     value={form.currency}
                     onChange={(e) => set('currency', e.target.value)}
-                    className="bg-slate-50 border border-slate-200 text-slate-800 font-bold rounded-2xl px-3.5 py-3.5 text-sm outline-none focus:border-[#022B96] transition cursor-pointer"
+                    className="bg-slate-50 border border-slate-200 text-slate-800 font-bold rounded-2xl px-3.5 py-3 text-sm outline-none focus:border-[#022B96] transition cursor-pointer"
                   >
                     <option>EUR</option>
                     <option>USD</option>
                     <option>GBP</option>
                   </select>
-                  <input
-                    type="number"
-                    required
-                    min="0"
-                    step="0.01"
-                    placeholder="e.g. 7.50"
-                    value={form.pricePerKg}
-                    onChange={(e) => set('pricePerKg', e.target.value)}
-                    className="flex-1 bg-slate-50 border border-slate-200 text-slate-800 font-semibold rounded-2xl px-4 py-3.5 text-sm outline-none focus:border-[#022B96] focus:bg-white transition"
-                  />
+                </div>
+                {/* Min / Max price row */}
+                <div className="flex items-center gap-2">
+                  <div className="flex-1">
+                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Min</p>
+                    <input
+                      type="number"
+                      required
+                      min="0"
+                      step="0.01"
+                      placeholder="e.g. 6.00"
+                      value={form.minPricePerKg}
+                      onChange={(e) => set('minPricePerKg', e.target.value)}
+                      className="w-full bg-slate-50 border border-slate-200 text-slate-800 font-semibold rounded-2xl px-4 py-3.5 text-sm outline-none focus:border-[#022B96] focus:bg-white transition"
+                    />
+                  </div>
+                  <span className="text-slate-400 font-bold text-base pt-5">—</span>
+                  <div className="flex-1">
+                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Max</p>
+                    <input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      placeholder="e.g. 9.00"
+                      value={form.maxPricePerKg}
+                      onChange={(e) => set('maxPricePerKg', e.target.value)}
+                      className="w-full bg-slate-50 border border-slate-200 text-slate-800 font-semibold rounded-2xl px-4 py-3.5 text-sm outline-none focus:border-[#022B96] focus:bg-white transition"
+                    />
+                  </div>
                 </div>
               </div>
 
@@ -936,17 +956,25 @@ export default function PostStockPage() {
 
           </div>
 
+          {/* No Company Warning */}
+          {!companyId && !loading && (
+            <div className="mx-auto max-w-md p-4 bg-amber-50 border border-amber-200 rounded-2xl text-center">
+              <p className="text-sm font-bold text-amber-800">⚠️ Company profile not found</p>
+              <p className="text-xs text-amber-700 mt-1">Please <a href="/dashboard/supplier" className="underline font-semibold">complete your supplier profile</a> before posting products.</p>
+            </div>
+          )}
+
           {/* Submit Button */}
           <div className="pt-4 flex flex-col items-center justify-center">
             <button
               type="submit"
-              disabled={submitting || !form.productName || !form.pricePerKg || !form.location}
-              className="w-full sm:w-auto min-w-[260px] py-4 px-12 bg-gradient-to-r from-[#022B96] to-[#0440D9] hover:from-[#011a5e] hover:to-[#022B96] disabled:opacity-50 text-white font-extrabold text-base rounded-full shadow-xl shadow-[#022B96]/30 transition hover:scale-[1.02] cursor-pointer flex items-center justify-center gap-3"
+              disabled={submitting || !form.productName || !form.minPricePerKg || !form.location || !companyId}
+              className="w-full sm:w-auto min-w-[260px] py-4 px-12 bg-gradient-to-r from-[#022B96] to-[#0440D9] hover:from-[#011a5e] hover:to-[#022B96] disabled:opacity-50 disabled:cursor-not-allowed text-white font-extrabold text-base rounded-full shadow-xl shadow-[#022B96]/30 transition hover:scale-[1.02] cursor-pointer flex items-center justify-center gap-3"
             >
               {submitting ? (
                 <><Loader2 className="h-5 w-5 animate-spin" /> Saving...</>
               ) : (
-                <>Save & Publish Product Listing</>
+                <>Save &amp; Publish Product Listing</>
               )}
             </button>
           </div>

@@ -4,7 +4,6 @@ import React, { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { ArrowLeft, Calendar, Clock, User, Share2, Tag, ChevronRight, Newspaper, Loader2 } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
-import { getStoredNewsArticles } from '@/lib/data/news-data'
 
 interface ArticleDetail {
   id: string
@@ -55,24 +54,6 @@ export default function NewsArticlePage({ params }: { params: Promise<{ slug: st
           return
         }
 
-        // 2. Fallback to localStorage articles (admin created)
-        const local = getStoredNewsArticles()
-        const found = local.find((a) => a.slug === slug || a.id === slug)
-        if (found) {
-          setArticle({
-            id: found.id,
-            title: found.title,
-            slug: found.slug,
-            summary: found.excerpt,
-            content: found.excerpt,
-            cover_image_url: found.image,
-            category: found.category,
-            tags: [],
-            author: found.author || 'Bokhol Research',
-            published_at: found.date,
-            created_at: found.created_at || new Date().toISOString(),
-          })
-        }
       } catch (err) {
         console.error('Failed to load article:', err)
       } finally {

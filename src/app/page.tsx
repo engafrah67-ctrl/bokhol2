@@ -17,8 +17,8 @@ export const revalidate = 0
 export default async function HomePage() {
   const supabase = createPublicServerClient()
 
-  // Fetch real supplier posts (matching /products catalog 1:1) and latest news in parallel
-  const [postsRes, newsRes] = await Promise.all([
+  // Fetch real supplier posts, latest news, and live supplier count in parallel
+  const [postsRes, newsRes, suppliersCountRes] = await Promise.all([
     supabase
       .from('supplier_posts')
       .select('id, title, content, created_at, updated_at')
@@ -30,6 +30,9 @@ export default async function HomePage() {
       .eq('is_published', true)
       .order('published_at', { ascending: false })
       .limit(3),
+    supabase
+      .from('companies')
+      .select('id', { count: 'exact', head: true }),
   ])
 
   const posts = postsRes?.data || []
@@ -39,6 +42,9 @@ export default async function HomePage() {
 
   const { countryData, topProducts } = marketData
   const news = newsRes?.data
+  const supplierCount = suppliersCountRes?.count ?? 0
+  const productCount = topProducts?.length ?? 0
+  const marketCount = countryData?.filter(c => c.species && c.species.length > 0).length ?? 0
 
   return (
     <div>
@@ -64,7 +70,11 @@ export default async function HomePage() {
         <MarketFeed news={(news as NewsArticle[]) || []} />
 
         {/* 5. Bottom Stats Bar */}
-        <StatsBar />
+        <StatsBar
+          supplierCount={supplierCount}
+          productCount={productCount}
+          marketCount={marketCount}
+        />
 
         {/* FAQ Section — just before footer */}
         <FAQSection />

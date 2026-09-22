@@ -1,3 +1,5 @@
+﻿import { createClient } from '@/lib/supabase/client'
+
 export interface PartnerBuyer {
   id: string
   name: string
@@ -7,83 +9,68 @@ export interface PartnerBuyer {
   createdAt?: string
 }
 
-export const DEFAULT_PARTNER_BUYERS: PartnerBuyer[] = [
-  { id: 'pb-1', name: 'Van der Valk', logo: '/partners/buyers/van-der-valk.png', country: 'Netherlands' },
-  { id: 'pb-2', name: 'Tasty Food', logo: '/partners/buyers/tasty-food.png', country: 'Belgium' },
-  { id: 'pb-3', name: 'Horeca Club Antwerpen', logo: '/partners/buyers/horeca-club.png', country: 'Belgium' },
-  { id: 'pb-4', name: 'CPH Hotels', logo: '/partners/buyers/cph-hotels.png', country: 'Germany' },
-  { id: 'pb-5', name: 'Klüt Hotel Hameln', logo: '/partners/buyers/klut-hotel.png', country: 'Germany' },
-  { id: 'pb-6', name: 'NH Hotels', logo: '/partners/buyers/nh-hotels.png', country: 'Spain' },
-  { id: 'pb-7', name: 'Alexander Hotel', logo: '/partners/buyers/alexander-hotel.png', country: 'Netherlands' },
-  { id: 'pb-8', name: 'Hokkai', logo: '/partners/buyers/hokkai.png', country: 'Netherlands' },
-  { id: 'pb-9', name: 'NLG Restaurant', logo: '/partners/buyers/nlg-restaurant.png', country: 'Germany' },
-]
-
-const STORAGE_KEY = 'bokhol_partner_buyers'
-
-export function getStoredPartnerBuyers(): PartnerBuyer[] {
-  if (typeof window === 'undefined') return DEFAULT_PARTNER_BUYERS
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY)
-    if (!raw) {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(DEFAULT_PARTNER_BUYERS))
-      return DEFAULT_PARTNER_BUYERS
-    }
-    const parsed = JSON.parse(raw)
-    if (Array.isArray(parsed) && parsed.length > 0) {
-      return parsed
-    }
-    return DEFAULT_PARTNER_BUYERS
-  } catch (_) {
-    return DEFAULT_PARTNER_BUYERS
+function mapRow(row: any): PartnerBuyer {
+  return {
+    id: row.id,
+    name: row.name,
+    logo: row.logo_url,
+    country: row.country ?? undefined,
+    website: row.website ?? undefined,
+    createdAt: row.created_at,
   }
 }
 
-export function addPartnerBuyer(buyer: Omit<PartnerBuyer, 'id'>): PartnerBuyer {
-  const newBuyer: PartnerBuyer = {
-    ...buyer,
-    id: 'pb-' + Date.now(),
-    createdAt: new Date().toISOString(),
-  }
-
-  if (typeof window !== 'undefined') {
-    try {
-      const current = getStoredPartnerBuyers()
-      const updated = [newBuyer, ...current]
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(updated))
-      window.dispatchEvent(new Event('partner-buyers-updated'))
-    } catch (_) {}
-  }
-
-  return newBuyer
-}
-
-export function updatePartnerBuyer(id: string, updates: Partial<PartnerBuyer>): PartnerBuyer | null {
-  if (typeof window === 'undefined') return null
+export async function fetchPartnerBuyers(): Promise<PartnerBuyer[]> {
   try {
-    const current = getStoredPartnerBuyers()
-    let updatedBuyer: PartnerBuyer | null = null
-    const updated = current.map((item) => {
-      if (item.id === id) {
-        updatedBuyer = { ...item, ...updates }
-        return updatedBuyer
-      }
-      return item
-    })
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(updated))
-    window.dispatchEvent(new Event('partner-buyers-updated'))
-    return updatedBuyer
-  } catch (_) {
-    return null
+    const supabase = createClient()
+    const { data, error } = await supabase
+      .from('partner_buyers')
+      .select('*')
+      .order('created_at', { ascending: true })
+    if (error) throw error
+    return (data ?? []).map(mapRow)
+  } catch (err) {
+    console.warn('fetchPartnerBuyers error:', err)
+    return []
   }
 }
 
-export function deletePartnerBuyer(id: string): void {
-  if (typeof window === 'undefined') return
-  try {
-    const current = getStoredPartnerBuyers()
-    const updated = current.filter((item) => item.id !== id)
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(updated))
-    window.dispatchEvent(new Event('partner-buyers-updated'))
-  } catch (_) {}
+export async function addPartnerBuyer(
+  buyer: Omit<PartnerBuyer, 'id' | 'createdAt'>
+): Promise<PartnerBuyer> {
+  const supabase = createClient()
+  const { data, error } = await supabase
+    .from('partner_buyers')
+    .insert({ name: buyer.name, logo_url: buyer.logo, country: buyer.country ?? null, website: buyer.website ?? null })
+    .select()
+    .single()
+  if (error) throw new Error(error.message)
+  return mapRow(data)
+}
+
+export async function updatePartnerBuyer(
+  id: string,
+  updates: Partial<Omit<PartnerBuyer, 'id' | 'createdAt'>>
+): Promise<PartnerBuyer> {
+  const supabase = createClient()
+  const payload: any = {}
+  if (updates.name !== undefined)    payload.name    = updates.name
+  if (updates.logo !== undefined)    payload.logo_url = updates.logo
+  if (updates.country !== undefined) payload.country = updates.country
+  if (updates.website !== undefined) payload.website = updates.website
+
+  const { data, error } = await supabase
+    .from('partner_buyers')
+    .update(payload)
+    .eq('id', id)
+    .select()
+    .single()
+  if (error) throw new Error(error.message)
+  return mapRow(data)
+}
+
+export async function deletePartnerBuyer(id: string): Promise<void> {
+  const supabase = createClient()
+  const { error } = await supabase.from('partner_buyers').delete().eq('id', id)
+  if (error) throw new Error(error.message)
 }
