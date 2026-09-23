@@ -32,7 +32,7 @@ const COUNTRY_ISO: Record<string, string> = {
   Cambodia: 'kh', Laos: 'la', 'Hong Kong': 'hk', Singapore: 'sg', Nepal: 'np',
   // Europe extras
   Croatia: 'hr', Romania: 'ro', Bulgaria: 'bg', Hungary: 'hu', Austria: 'at',
-  Switzerland: 'ch', Belgium: 'be', Luxembourg: 'lu', Serbia: 'rs', Albania: 'al',
+  Switzerland: 'ch', Luxembourg: 'lu', Serbia: 'rs', Albania: 'al',
   // Americas
   Colombia: 'co', Venezuela: 've', Cuba: 'cu', Guatemala: 'gt', Honduras: 'hn',
   'Costa Rica': 'cr', Panama: 'pa', Bolivia: 'bo', Uruguay: 'uy', Paraguay: 'py',

@@ -68,6 +68,7 @@ import {
   updatePartnerBuyer,
   deletePartnerBuyer,
 } from '@/lib/data/partner-buyers-data'
+import { MarketIndexesManager } from '@/components/admin/market-indexes-manager'
 
 export default function AdminDashboardPage() {
   const router = useRouter()
@@ -1444,25 +1445,10 @@ export default function AdminDashboardPage() {
 
             {/* VIEW 4: MARKET INDEXES */}
             {activeNav === 'indexes' && (
-              <div className="space-y-6">
-                <div>
-                  <h1 className="text-2xl font-black text-slate-900 tracking-tight">Market Benchmarks</h1>
-                  <p className="text-xs text-slate-500 mt-1 font-medium">Weekly price index benchmarks across EU hubs</p>
-                </div>
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                  {[
-                    { country: 'Spain', product: 'Yellowfin Tuna', price: '€5.31/kg' },
-                    { country: 'Norway', product: 'Atlantic Salmon', price: '€8.45/kg' },
-                    { country: 'Greece', product: 'Sea Bass', price: '€5.20/kg' },
-                  ].map((item) => (
-                    <div key={item.country} className="bg-white border border-slate-200 rounded-2xl p-5 shadow-xs">
-                      <p className="text-[10px] font-extrabold uppercase text-[#022B96] mb-1">{item.country}</p>
-                      <h3 className="font-bold text-slate-900 text-sm">{item.product}</h3>
-                      <p className="text-xl font-black text-slate-900 mt-2">{item.price}</p>
-                    </div>
-                  ))}
-                </div>
-              </div>
+              <MarketIndexesManager
+                supplierPosts={supplierPosts}
+                onNavigateToPosts={() => setActiveNav('posts')}
+              />
             )}
 
             {/* VIEW 6: NEWS MANAGEMENT */}

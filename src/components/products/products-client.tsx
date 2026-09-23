@@ -7,7 +7,6 @@ import Image from 'next/image'
 import { BlurGate } from '@/components/blur-gate'
 import { createClient } from '@/lib/supabase/client'
 import { getFishImageForProduct } from '@/lib/data/products-data'
-import { isPriceSane } from '@/lib/data/market-data'
 
 const CATEGORIES = ['All', 'Finfish', 'Shellfish', 'Cephalopods']
 
@@ -88,12 +87,23 @@ export function ProductsClient({ initialProducts }: ProductsClientProps) {
         const key = name.toLowerCase()
         const normSlug = key.replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)+/g, '')
 
-        // Support both new min/max format and legacy single price
-        const rawMin = parseFloat(details.minPricePerKg || details.pricePerKg || 0)
-        const rawMax = parseFloat(details.maxPricePerKg || 0)
-        const minPrice = isPriceSane(rawMin, normSlug) ? rawMin : 0
-        const maxPrice = rawMax > 0 && isPriceSane(rawMax, normSlug) ? rawMax : 0
-        const price = minPrice  // for backward compat grouping
+        // Support both single price and min/max price format
+        const explicitSingle = parseFloat(details.pricePerKg || 0)
+        const explicitMin = parseFloat(details.minPricePerKg || 0)
+        const explicitMax = parseFloat(details.maxPricePerKg || 0)
+
+        let minPrice = 0
+        let maxPrice = 0
+
+        if (explicitSingle > 0) {
+          minPrice = explicitSingle
+          maxPrice = explicitMax > explicitSingle ? explicitMax : 0
+        } else if (explicitMin > 0) {
+          minPrice = explicitMin
+          maxPrice = explicitMax > explicitMin ? explicitMax : 0
+        }
+
+        const price = minPrice
 
         const origin = details.countryOfOrigin || ''
         const date = post.updated_at || post.created_at || ''
@@ -133,11 +143,11 @@ export function ProductsClient({ initialProducts }: ProductsClientProps) {
         const overallMax = group.maxPrices.length > 0 ? Math.max(...group.maxPrices) : null
         const symbol = group.currency === 'USD' ? '$' : group.currency === 'GBP' ? '£' : '€'
 
-        const avgPrice = avgPriceNum ? `${symbol}${avgPriceNum.toFixed(2)} / kg` : 'Contact for price'
-        const priceRange = overallMin
+        const avgPrice = avgPriceNum ? (symbol + avgPriceNum.toFixed(2) + ' / kg') : 'Contact for price'
+        const priceRange = overallMin && overallMin > 0
           ? overallMax && overallMax > overallMin
-            ? `${symbol}${overallMin.toFixed(2)} – ${symbol}${overallMax.toFixed(2)} / kg`
-            : `${symbol}${overallMin.toFixed(2)} / kg`
+            ? (symbol + overallMin.toFixed(2) + ' – ' + symbol + overallMax.toFixed(2) + ' / kg')
+            : (symbol + overallMin.toFixed(2) + ' / kg')
           : 'Contact for price'
 
         const originCounts = group.origins.reduce((acc: Record<string, number>, o) => {

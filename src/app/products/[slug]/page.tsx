@@ -110,7 +110,7 @@ export default function ProductDetailsPage({ params }: { params: Promise<{ slug:
             logoUrl: company?.logo_url || null,
             country,
             location: details.location || (company?.city ? `${company.city}` : ''),
-            pricePerKg: parseFloat(details.pricePerKg || 0),
+            pricePerKg: parseFloat(details.pricePerKg ?? details.minPricePerKg ?? 0),
             currency: details.currency || 'EUR',
             freshFrozen: details.freshFrozen || 'Frozen',
             packaging: details.packagingFillet || 'Standard',

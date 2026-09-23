@@ -1,7 +1,6 @@
-import { createPublicServerClient } from '@/lib/supabase/server'
+﻿import { createPublicServerClient } from '@/lib/supabase/server'
 import { getFishImageForProduct } from '@/lib/data/products-data'
 import { ProductsClient, ProductCard } from '@/components/products/products-client'
-import { isPriceSane } from '@/lib/data/market-data'
 
 export const dynamic = 'force-dynamic'
 export const fetchCache = 'force-no-store'
@@ -15,7 +14,6 @@ function getCategory(name: string): string {
 }
 
 export default async function ProductsPage() {
-
   const supabase = createPublicServerClient()
 
   let cards: ProductCard[] = []
@@ -56,18 +54,28 @@ export default async function ProductsPage() {
         let details: any = {}
         try { details = JSON.parse(post.content || '{}') } catch (_) {}
 
-        const rawName: string = details.productName || post.title?.split(' —')[0] || ''
+        const rawName: string = details.productName || post.title?.split(' —')[0]?.split(' -')[0] || ''
         if (!rawName.trim()) continue
 
         const name = rawName.trim()
         const key = name.toLowerCase()
-        const normSlug = key.replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)+/g, '')
 
-        // Support both new min/max format and legacy single price
-        const rawMin = parseFloat(details.minPricePerKg || details.pricePerKg || 0)
-        const rawMax = parseFloat(details.maxPricePerKg || 0)
-        const minPrice = isPriceSane(rawMin, normSlug) ? rawMin : 0
-        const maxPrice = rawMax > 0 && isPriceSane(rawMax, normSlug) ? rawMax : 0
+        // Support both single price and min/max price format
+        const explicitSingle = parseFloat(details.pricePerKg || 0)
+        const explicitMin = parseFloat(details.minPricePerKg || 0)
+        const explicitMax = parseFloat(details.maxPricePerKg || 0)
+
+        let minPrice = 0
+        let maxPrice = 0
+
+        if (explicitSingle > 0) {
+          minPrice = explicitSingle
+          maxPrice = explicitMax > explicitSingle ? explicitMax : 0
+        } else if (explicitMin > 0) {
+          minPrice = explicitMin
+          maxPrice = explicitMax > explicitMin ? explicitMax : 0
+        }
+
         const price = minPrice
 
         const origin = details.countryOfOrigin || ''
@@ -111,7 +119,7 @@ export default async function ProductsPage() {
       const symbol = group.currency === 'USD' ? '$' : group.currency === 'GBP' ? '£' : '€'
 
       const avgPrice = avgPriceNum ? `${symbol}${avgPriceNum.toFixed(2)} / kg` : 'Contact for price'
-      const priceRange = overallMin
+      const priceRange = overallMin && overallMin > 0
         ? overallMax && overallMax > overallMin
           ? `${symbol}${overallMin.toFixed(2)} – ${symbol}${overallMax.toFixed(2)} / kg`
           : `${symbol}${overallMin.toFixed(2)} / kg`

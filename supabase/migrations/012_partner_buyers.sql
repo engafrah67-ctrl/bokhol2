@@ -1,4 +1,4 @@
--- ============================================================
+ï»¿-- ============================================================
 -- Migration 012: Partner Buyers Table
 -- ============================================================
 -- Stores curated partner/featured buyer logos shown on the home page.
@@ -15,6 +15,7 @@ CREATE TABLE IF NOT EXISTS partner_buyers (
   updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+DROP TRIGGER IF EXISTS trg_partner_buyers_updated_at ON partner_buyers;
 CREATE TRIGGER trg_partner_buyers_updated_at
   BEFORE UPDATE ON partner_buyers
   FOR EACH ROW EXECUTE FUNCTION update_updated_at();
@@ -22,23 +23,31 @@ CREATE TRIGGER trg_partner_buyers_updated_at
 ALTER TABLE partner_buyers ENABLE ROW LEVEL SECURITY;
 
 -- Anyone can read partner buyers (shown on home page)
+DROP POLICY IF EXISTS "partner_buyers_public_read" ON partner_buyers;
 CREATE POLICY "partner_buyers_public_read"
   ON partner_buyers FOR SELECT
   USING (TRUE);
 
--- Only admin can write
+-- Admin can manage partner buyers
+DROP POLICY IF EXISTS "partner_buyers_admin_all" ON partner_buyers;
 CREATE POLICY "partner_buyers_admin_all"
   ON partner_buyers FOR ALL
-  USING (get_user_role() = 'admin'
-    OR lower(auth.jwt() ->> 'email') = 'superadminbkhol@gmail.com');
+  USING (
+    get_user_role() = 'admin'
+    OR lower(auth.jwt() ->> 'email') = 'superadminbkhol@gmail.com'
+  )
+  WITH CHECK (
+    get_user_role() = 'admin'
+    OR lower(auth.jwt() ->> 'email') = 'superadminbkhol@gmail.com'
+  );
 
--- Seed the default partner buyers
+-- Seed default partner buyers if not already present
 INSERT INTO partner_buyers (name, logo_url, country) VALUES
   ('Van der Valk',           '/partners/buyers/van-der-valk.png',   'Netherlands'),
   ('Tasty Food',             '/partners/buyers/tasty-food.png',      'Belgium'),
   ('Horeca Club Antwerpen',  '/partners/buyers/horeca-club.png',     'Belgium'),
   ('CPH Hotels',             '/partners/buyers/cph-hotels.png',      'Germany'),
-  ('Klüt Hotel Hameln',      '/partners/buyers/klut-hotel.png',      'Germany'),
+  ('Kluth Hotel Hameln',     '/partners/buyers/klut-hotel.png',      'Germany'),
   ('NH Hotels',              '/partners/buyers/nh-hotels.png',       'Spain'),
   ('Alexander Hotel',        '/partners/buyers/alexander-hotel.png', 'Netherlands'),
   ('Hokkai',                 '/partners/buyers/hokkai.png',          'Netherlands'),
