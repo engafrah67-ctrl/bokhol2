@@ -68,7 +68,7 @@ import {
   updatePartnerBuyer,
   deletePartnerBuyer,
 } from '@/lib/data/partner-buyers-data'
-import { MarketIndexesManager } from '@/components/admin/market-indexes-manager'
+
 
 export default function AdminDashboardPage() {
   const router = useRouter()
@@ -715,7 +715,7 @@ export default function AdminDashboardPage() {
     { key: 'partners', label: 'Partner Buyers', icon: Handshake, badge: partnerBuyers.length },
     { key: 'posts', label: 'Product Offers', icon: Fish, badge: supplierPosts.length },
     { key: 'news', label: 'News & Articles', icon: Newspaper, badge: newsArticles.length },
-    { key: 'indexes', label: 'Market Index', icon: TrendingUp },
+
   ]
 
   return (
@@ -1553,10 +1553,7 @@ export default function AdminDashboardPage() {
               </div>
             )}
 
-            {/* VIEW 4: MARKET INDEXES */}
-            {activeNav === 'indexes' && (
-              <MarketIndexesManager />
-            )}
+
 
             {/* VIEW 6: NEWS MANAGEMENT */}
             {activeNav === 'news' && (
