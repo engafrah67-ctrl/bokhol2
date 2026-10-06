@@ -68,10 +68,12 @@ export default function OurNetworkDirectoryPage() {
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false)
 
   const reloadData = async () => {
-    setCompanies(getStoredCompanies())
     try {
       const synced = await syncWithServerClaims()
-      setCompanies([...synced])
+      setCompanies((prev) => {
+        if (JSON.stringify(prev) === JSON.stringify(synced)) return prev
+        return [...synced]
+      })
     } catch (_) {}
   }
 
@@ -82,7 +84,7 @@ export default function OurNetworkDirectoryPage() {
     window.addEventListener('bokhol-claims-change', onClaimsChange)
     window.addEventListener('storage', onClaimsChange)
 
-    const poll = setInterval(() => reloadData(), 4000)
+    const poll = setInterval(() => reloadData(), 10000)
 
     return () => {
       window.removeEventListener('bokhol-claims-change', onClaimsChange)
