@@ -8,33 +8,28 @@ import {
   ChevronDown, MessageSquare,
   TrendingUp, Package, Snowflake, Droplets, Loader2, Fish,
 } from 'lucide-react'
+import ReactCountryFlag from 'react-country-flag'
 import { BlurGate } from '@/components/blur-gate'
 import { getFishImageForProduct } from '@/lib/data/products-data'
 import { createClient } from '@/lib/supabase/client'
 import { ProductMarketGraph } from '@/components/market/product-market-graph'
+import { syncWithServerClaims } from '@/lib/data/companies-data'
 
-const COUNTRY_FLAGS: Record<string, string> = {
-  Norway: '🇳🇴', Spain: '🇪🇸', Greece: '🇬🇷', Iceland: '🇮🇸',
-  Vietnam: '🇻🇳', Netherlands: '🇳🇱', 'Holland (Netherlands)': '🇳🇱', Holland: '🇳🇱',
-  Germany: '🇩🇪', Belgium: '🇧🇪', Denmark: '🇩🇰', Morocco: '🇲🇦',
-  Japan: '🇯🇵', Chile: '🇨🇱', Portugal: '🇵🇹', France: '🇫🇷',
-  Scotland: '🏴󠁧󠁢󠁳󠁣󠁴󠁿', Turkey: '🇹🇷', China: '🇨🇳', Peru: '🇵🇪',
-}
+const ALLOWED_COUNTRY_OPTIONS = [
+  { value: 'All', label: 'All Countries 🌍' },
+  { value: 'Germany', label: '🇩🇪 Germany' },
+  { value: 'Norway', label: '🇳🇴 Norway' },
+  { value: 'Netherlands', label: '🇳🇱 Netherlands (Holland)' },
+  { value: 'Belgium', label: '🇧🇪 Belgium' },
+]
 
-function getCountryFlag(countryName: string): string {
-  if (!countryName) return '🌍'
-  if (COUNTRY_FLAGS[countryName]) return COUNTRY_FLAGS[countryName]
-  const lower = countryName.toLowerCase()
-  if (lower.includes('holland') || lower.includes('netherlands')) return '🇳🇱'
-  if (lower.includes('germany')) return '🇩🇪'
-  if (lower.includes('belgium')) return '🇧🇪'
-  if (lower.includes('norway')) return '🇳🇴'
-  if (lower.includes('spain')) return '🇪🇸'
-  if (lower.includes('greece')) return '🇬🇷'
-  if (lower.includes('iceland')) return '🇮🇸'
-  if (lower.includes('scotland')) return '🏴󠁧󠁢󠁳󠁣󠁴󠁿'
-  if (lower.includes('france')) return '🇫🇷'
-  return '🌍'
+function normalizeToFourCountries(countryName: string): { name: string; code: string } {
+  const lower = (countryName || '').toLowerCase().trim()
+  if (lower.includes('ger') || lower === 'de') return { name: 'Germany', code: 'DE' }
+  if (lower.includes('nor') || lower === 'no') return { name: 'Norway', code: 'NO' }
+  if (lower.includes('bel') || lower === 'be') return { name: 'Belgium', code: 'BE' }
+  if (lower.includes('hol') || lower.includes('neth') || lower === 'nl') return { name: 'Netherlands', code: 'NL' }
+  return { name: 'Netherlands', code: 'NL' }
 }
 
 interface SupplierOffer {
@@ -43,6 +38,7 @@ interface SupplierOffer {
   companySlug: string
   logoUrl: string | null
   country: string
+  countryCode: string
   location: string
   pricePerKg: number
   currency: string
@@ -68,25 +64,29 @@ export default function ProductDetailsPage({ params }: { params: Promise<{ slug:
   const [sortBy, setSortBy] = useState<'price' | 'availability'>('price')
   const [offers, setOffers] = useState<SupplierOffer[]>([])
   const [loading, setLoading] = useState(true)
-  const [countries, setCountries] = useState<string[]>([])
 
   useEffect(() => {
     async function fetchOffers() {
       const supabase = createClient()
       try {
+        // Pre-fetch directory companies so we know every supplier's registered nationality
+        let directoryCompanies: any[] = []
+        try {
+          directoryCompanies = await syncWithServerClaims()
+        } catch (_) {}
+
         // Fetch published posts for this product name
         const { data: posts } = await supabase
           .from('supplier_posts')
           .select(`
             id, title, content, created_at, updated_at,
-            companies(id, name, slug, logo_url, city, country_id)
+            companies(id, name, slug, logo_url, city, country_id, countries(id, name, iso_code))
           `)
           .eq('is_published', true)
           .order('created_at', { ascending: false })
 
         // Filter to posts matching this product slug
         const matchingOffers: SupplierOffer[] = []
-        const countrySet = new Set<string>()
 
         for (const post of (posts || []) as any[]) {
           let details: any = {}
@@ -99,16 +99,40 @@ export default function ProductDetailsPage({ params }: { params: Promise<{ slug:
 
           // Supabase can return join as object or array — handle both
           const company = Array.isArray(post.companies) ? post.companies[0] : post.companies
+          const companyCountryObj = Array.isArray(company?.countries) ? company?.countries[0] : company?.countries
 
-          const country = details.countryOfOrigin || ''
-          if (country) countrySet.add(country)
+          // Nationality depends on the supplier who posted this product:
+          // 1. Supplier's registered company country from DB join
+          let regCountry = companyCountryObj?.name || ''
+
+          // 2. Lookup in directory / INITIAL_COMPANIES by company slug, id, or name
+          if (!regCountry && company) {
+            const matched = directoryCompanies.find(
+              (c: any) =>
+                (c.id && company.id && c.id === company.id) ||
+                (c.slug && company.slug && c.slug === company.slug) ||
+                (c.name && company.name && c.name.toLowerCase() === company.name.toLowerCase())
+            )
+            if (matched?.country) {
+              regCountry = matched.country
+            }
+          }
+
+          // 3. Fallback to details.countryOfOrigin if it specifies one of the countries
+          if (!regCountry && details.countryOfOrigin) {
+            regCountry = details.countryOfOrigin
+          }
+
+          // Normalize to one of the 4 supported countries (Germany, Norway, Netherlands, Belgium)
+          const { name: countryName, code: countryCode } = normalizeToFourCountries(regCountry)
 
           matchingOffers.push({
             id: post.id,
             companyName: company?.name || 'Supplier',
             companySlug: company?.slug || '',
             logoUrl: company?.logo_url || null,
-            country,
+            country: countryName,
+            countryCode,
             location: details.location || (company?.city ? `${company.city}` : ''),
             pricePerKg: parseFloat(details.pricePerKg ?? details.minPricePerKg ?? 0),
             currency: details.currency || 'EUR',
@@ -122,7 +146,6 @@ export default function ProductDetailsPage({ params }: { params: Promise<{ slug:
         }
 
         setOffers(matchingOffers)
-        setCountries(Array.from(countrySet).sort())
       } catch (err) {
         console.error('Failed to load product offers:', err)
       } finally {
@@ -135,7 +158,15 @@ export default function ProductDetailsPage({ params }: { params: Promise<{ slug:
 
   const filteredOffers = offers
     .filter(o => filterFresh === 'All' || o.freshFrozen === filterFresh)
-    .filter(o => filterCountry === 'All' || o.country.toLowerCase().includes(filterCountry.toLowerCase()))
+    .filter(o => {
+      if (filterCountry === 'All') return true
+      const oCountry = (o.country || '').toLowerCase()
+      const fCountry = filterCountry.toLowerCase()
+      if (fCountry.includes('neth') || fCountry.includes('hol')) {
+        return oCountry.includes('neth') || oCountry.includes('hol')
+      }
+      return oCountry.includes(fCountry)
+    })
     .sort((a, b) => {
       if (sortBy === 'price') return a.pricePerKg - b.pricePerKg
       return a.availability.localeCompare(b.availability)
@@ -208,22 +239,19 @@ export default function ProductDetailsPage({ params }: { params: Promise<{ slug:
               <span className="ml-2 text-xs font-semibold text-slate-400 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded-full">{filteredOffers.length}</span>
             </h2>
             <div className="flex flex-wrap items-center gap-2">
-              {/* Country Filter */}
-              {countries.length > 0 && (
-                <div className="relative">
-                  <select
-                    value={filterCountry}
-                    onChange={e => setFilterCountry(e.target.value)}
-                    className="appearance-none text-xs font-semibold text-slate-700 dark:text-slate-300 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 pr-7 outline-none cursor-pointer hover:border-slate-300 transition"
-                  >
-                    <option value="All">All Countries 🌍</option>
-                    {countries.map(c => (
-                      <option key={c} value={c}>{getCountryFlag(c)} {c}</option>
-                    ))}
-                  </select>
-                  <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400 pointer-events-none" />
-                </div>
-              )}
+              {/* Country Filter - 4 Countries Only */}
+              <div className="relative">
+                <select
+                  value={filterCountry}
+                  onChange={e => setFilterCountry(e.target.value)}
+                  className="appearance-none text-xs font-semibold text-slate-700 dark:text-slate-300 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 pr-7 outline-none cursor-pointer hover:border-slate-300 transition"
+                >
+                  {ALLOWED_COUNTRY_OPTIONS.map(c => (
+                    <option key={c.value} value={c.value}>{c.label}</option>
+                  ))}
+                </select>
+                <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400 pointer-events-none" />
+              </div>
 
               {/* Fresh/Frozen Filter */}
               <div className="flex bg-slate-100 dark:bg-slate-800 rounded-xl p-1 gap-1">
@@ -295,10 +323,14 @@ export default function ProductDetailsPage({ params }: { params: Promise<{ slug:
                               <span className="text-[9px] font-bold bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded-full shrink-0">BEST PRICE</span>
                             )}
                           </div>
-                          <div className="flex items-center gap-1 text-xs text-slate-400 mt-0.5">
-                            <span>{getCountryFlag(offer.country)}</span>
-                            <span>{offer.country}</span>
-                            {offer.location && <><span>·</span><MapPin className="h-3 w-3" /><span className="truncate">{offer.location}</span></>}
+                          <div className="flex items-center gap-1.5 text-xs text-slate-500 mt-0.5">
+                            <ReactCountryFlag
+                              countryCode={offer.countryCode}
+                              svg
+                              style={{ width: '15px', height: '11px', borderRadius: '2px' }}
+                            />
+                            <span className="font-semibold text-slate-700 dark:text-slate-300">{offer.country}</span>
+                            {offer.location && <><span>·</span><MapPin className="h-3 w-3 text-slate-400" /><span className="truncate">{offer.location}</span></>}
                           </div>
                           {offer.supplierInfoExtra && (
                             <p className="text-[10px] text-slate-400 mt-0.5 truncate max-w-xs">{offer.supplierInfoExtra}</p>
@@ -316,10 +348,14 @@ export default function ProductDetailsPage({ params }: { params: Promise<{ slug:
                         </div>
                         <div className="min-w-0">
                           <span className="font-bold text-slate-900 dark:text-white text-sm truncate">{offer.companyName}</span>
-                          <div className="flex items-center gap-1 text-xs text-slate-400 mt-0.5">
-                            <span>{getCountryFlag(offer.country)}</span>
-                            <span>{offer.country}</span>
-                            {offer.location && <><span>·</span><MapPin className="h-3 w-3" /><span className="truncate">{offer.location}</span></>}
+                          <div className="flex items-center gap-1.5 text-xs text-slate-500 mt-0.5">
+                            <ReactCountryFlag
+                              countryCode={offer.countryCode}
+                              svg
+                              style={{ width: '15px', height: '11px', borderRadius: '2px' }}
+                            />
+                            <span className="font-semibold text-slate-700 dark:text-slate-300">{offer.country}</span>
+                            {offer.location && <><span>·</span><MapPin className="h-3 w-3 text-slate-400" /><span className="truncate">{offer.location}</span></>}
                           </div>
                         </div>
                       </>
