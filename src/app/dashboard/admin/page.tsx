@@ -242,9 +242,47 @@ export default function AdminDashboardPage() {
 
   const reloadCompanies = async () => {
     try {
+      // 1. Get hardcoded companies + their claim statuses
       const synced = await syncWithServerClaims()
-      setCompanies([...synced])
-      try { localStorage.setItem('admin_companies_cache', JSON.stringify(synced)) } catch (_) {}
+
+      // 2. Also fetch dynamically added companies from Supabase
+      const { data: dbCompanies } = await supabase
+        .from('companies')
+        .select('id, name, slug, email, phone, country, logo_url, status, is_verified, species, category, created_at')
+        .order('created_at', { ascending: false })
+
+      // 3. Merge: add any Supabase companies not already in the static list
+      const existingSlugs = new Set(synced.map((c: any) => c.slug))
+      const existingIds = new Set(synced.map((c: any) => c.id))
+
+      const dynamicCompanies: any[] = (dbCompanies || [])
+        .filter((row: any) => !existingSlugs.has(row.slug) && !existingIds.has(row.id))
+        .map((row: any, i: number) => ({
+          id: row.id,
+          rank: 100 + i,
+          name: row.name,
+          slug: row.slug || row.name.toLowerCase().replace(/\s+/g, '-'),
+          category: row.category || 'SEAFOOD SUPPLIER',
+          country: row.country || '',
+          countryCode: '',
+          address: '',
+          website: '',
+          email: row.email || '',
+          phone: row.phone || '',
+          domain: row.email ? row.email.split('@')[1] || '' : '',
+          description: '',
+          logoUrl: row.logo_url || null,
+          status: (row.status === 'claimed' ? 'claimed' : 'unclaimed') as 'unclaimed' | 'claimed',
+          isVerified: row.is_verified || false,
+          isPublicListing: true,
+          completenessScore: 60,
+          species: Array.isArray(row.species) ? row.species : [],
+          tags: [],
+        }))
+
+      const merged = [...synced, ...dynamicCompanies]
+      setCompanies(merged)
+      try { localStorage.setItem('admin_companies_cache', JSON.stringify(merged)) } catch (_) {}
     } catch (_) {
       const stored = getStoredCompanies()
       setCompanies(stored)
@@ -252,6 +290,7 @@ export default function AdminDashboardPage() {
     }
     await fetchProfileClaims()
   }
+
 
   useEffect(() => {
     let isMounted = true
@@ -1085,16 +1124,86 @@ export default function AdminDashboardPage() {
                     setAddSupplierLoading(true)
                     setAddSupplierMsg(null)
                     try {
-                      const { error } = await supabase.auth.signInWithOtp({ email: newSupplierEmail, options: { data: { role: 'supplier', company: newSupplierCompany, country: newSupplierCountry, phone: newSupplierPhone } } })
-                      const newEntry = { id: 'sup-' + Date.now(), logo: newSupplierLogo, email: newSupplierEmail, company: newSupplierCompany, country: newSupplierCountry, phone: newSupplierPhone, specialty: newSupplierSpecialty, addedAt: new Date().toLocaleDateString() }
+                      // 1. Build a slug from the company name
+                      const slug = newSupplierCompany.toLowerCase()
+                        .replace(/[^a-z0-9\s-]/g, '')
+                        .trim()
+                        .replace(/\s+/g, '-')
+
+                      // 2. Parse specialty into a species array
+                      const speciesArr = newSupplierSpecialty
+                        ? newSupplierSpecialty.split(',').map((s: string) => s.trim()).filter(Boolean)
+                        : []
+
+                      // 3. Insert into Supabase companies table
+                      const { data: inserted, error: dbError } = await supabase
+                        .from('companies')
+                        .insert({
+                          name: newSupplierCompany.trim(),
+                          slug,
+                          email: newSupplierEmail.trim(),
+                          phone: newSupplierPhone.trim() || null,
+                          country: newSupplierCountry.trim() || null,
+                          logo_url: newSupplierLogo || null,
+                          species: speciesArr,
+                          status: 'unclaimed',
+                          is_verified: false,
+                          is_public_listing: true,
+                          category: 'SEAFOOD SUPPLIER',
+                          created_at: new Date().toISOString(),
+                          updated_at: new Date().toISOString(),
+                        })
+                        .select('id')
+                        .maybeSingle()
+
+                      if (dbError) {
+                        console.error('[AddSupplier] DB insert error:', dbError)
+                        // Don't stop — still try the invite
+                      }
+
+                      // 4. Send magic link invite email
+                      const { error: authError } = await supabase.auth.signInWithOtp({
+                        email: newSupplierEmail,
+                        options: {
+                          data: {
+                            role: 'supplier',
+                            company: newSupplierCompany,
+                            country: newSupplierCountry,
+                            phone: newSupplierPhone,
+                          }
+                        }
+                      })
+
+                      // 5. Update local addedSuppliers list
+                      const newEntry = {
+                        id: inserted?.id || 'sup-' + Date.now(),
+                        logo: newSupplierLogo,
+                        email: newSupplierEmail,
+                        company: newSupplierCompany,
+                        country: newSupplierCountry,
+                        phone: newSupplierPhone,
+                        specialty: newSupplierSpecialty,
+                        addedAt: new Date().toLocaleDateString()
+                      }
                       setAddedSuppliers(prev => [newEntry, ...prev])
-                      setAddSupplierMsg({ type: 'success', text: error ? `✅ "${newSupplierCompany}" saved. Login invite will be sent to ${newSupplierEmail} when email is active.` : `✅ Invite sent to ${newSupplierEmail}! They can now sign in.` })
-                      setNewSupplierLogo(''); setNewSupplierEmail(''); setNewSupplierCompany(''); setNewSupplierCountry(''); setNewSupplierPhone(''); setNewSupplierSpecialty('')
-                    } catch (_) {
+
+                      // 6. Reload companies so Unclaimed Profiles updates immediately
+                      await reloadCompanies()
+
+                      const savedMsg = dbError
+                        ? `⚠️ Saved locally — DB write failed: ${dbError.message}`
+                        : `✅ "${newSupplierCompany}" added to Unclaimed Profiles!`
+                      const inviteMsg = authError ? '' : ` Invite sent to ${newSupplierEmail}.`
+                      setAddSupplierMsg({ type: dbError ? 'error' : 'success', text: savedMsg + inviteMsg })
+                      setNewSupplierLogo(''); setNewSupplierEmail(''); setNewSupplierCompany('')
+                      setNewSupplierCountry(''); setNewSupplierPhone(''); setNewSupplierSpecialty('')
+                    } catch (err: any) {
+                      console.error('[AddSupplier] Unexpected error:', err)
                       setAddSupplierMsg({ type: 'error', text: 'Something went wrong. Please try again.' })
                     }
                     setAddSupplierLoading(false)
                   }}
+
                 >
                   {/* Logo / Image Upload */}
                   <div>
