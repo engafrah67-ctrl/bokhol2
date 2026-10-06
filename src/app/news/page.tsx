@@ -2,7 +2,8 @@ import { createPublicServerClient } from '@/lib/supabase/server'
 import { NewsArticle } from '@/lib/data/news-data'
 import { NewsClient, SupplierPostFeed } from '@/components/news/news-client'
 
-export const revalidate = 60 // Cache statically and revalidate every 60 seconds
+export const dynamic = 'force-dynamic'
+export const revalidate = 0
 
 const SEED_SLUGS = new Set([
   'european-salmon-prices-rise-2024',

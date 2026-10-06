@@ -28,12 +28,33 @@ interface NewsClientProps {
 export function NewsClient({ initialArticles, initialSupplierPosts }: NewsClientProps) {
   const [activeTab, setActiveTab] = useState<'market_feed' | 'all' | 'market_update' | 'trade'>('all')
   const [supplierPosts] = useState<SupplierPostFeed[]>(initialSupplierPosts)
-  const [articles, setArticles] = useState<NewsArticle[]>(initialArticles)
+  const [articles, setArticles] = useState<NewsArticle[]>(() => {
+    if (initialArticles && initialArticles.length > 0) return initialArticles
+    if (typeof window !== 'undefined') {
+      try {
+        const cached = JSON.parse(localStorage.getItem('admin_news_articles_cache') || '[]')
+        if (Array.isArray(cached) && cached.length > 0) return cached
+      } catch (_) {}
+    }
+    return []
+  })
 
-  // Listen for admin real-time local updates
+  // Listen for admin real-time local updates and load on mount
   useEffect(() => {
+    fetchNewsArticles().then((data) => {
+      if (data && data.length > 0) {
+        setArticles(data)
+        try { localStorage.setItem('admin_news_articles_cache', JSON.stringify(data)) } catch (_) {}
+      }
+    }).catch(() => {})
+
     const handleUpdate = () => {
-      fetchNewsArticles().then((data) => setArticles(data)).catch(() => {})
+      fetchNewsArticles().then((data) => {
+        if (data && data.length > 0) {
+          setArticles(data)
+          try { localStorage.setItem('admin_news_articles_cache', JSON.stringify(data)) } catch (_) {}
+        }
+      }).catch(() => {})
     }
     window.addEventListener('news-articles-updated', handleUpdate)
     return () => window.removeEventListener('news-articles-updated', handleUpdate)

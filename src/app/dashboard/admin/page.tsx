@@ -105,10 +105,26 @@ export default function AdminDashboardPage() {
     totalBuyerRequests: 0,
   })
 
-  const [companies, setCompanies] = useState<CompanyProfile[]>([])
+  const [companies, setCompanies] = useState<CompanyProfile[]>(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const cached = JSON.parse(localStorage.getItem('admin_companies_cache') || '[]')
+        if (Array.isArray(cached) && cached.length > 0) return cached
+      } catch (_) {}
+    }
+    return getStoredCompanies()
+  })
 
   // ── Profile Claims (source of truth for Verification tab) ──
-  const [profileClaims, setProfileClaims] = useState<any[]>([])
+  const [profileClaims, setProfileClaims] = useState<any[]>(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const cached = JSON.parse(localStorage.getItem('admin_profile_claims_cache') || '[]')
+        if (Array.isArray(cached) && cached.length > 0) return cached
+      } catch (_) {}
+    }
+    return []
+  })
   const [claimsLoading, setClaimsLoading] = useState(false)
 
   const fetchProfileClaims = async () => {
@@ -118,12 +134,16 @@ export default function AdminDashboardPage() {
       const json = await res.json()
       if (json.success && Array.isArray(json.claims)) {
         setProfileClaims(json.claims)
+        try { localStorage.setItem('admin_profile_claims_cache', JSON.stringify(json.claims)) } catch (_) {}
       } else {
         const { data } = await supabase
           .from('profile_claims')
           .select('*')
           .order('created_at', { ascending: false })
-        if (data) setProfileClaims(data)
+        if (data) {
+          setProfileClaims(data)
+          try { localStorage.setItem('admin_profile_claims_cache', JSON.stringify(data)) } catch (_) {}
+        }
       }
     } catch (_) {
       try {
@@ -131,14 +151,42 @@ export default function AdminDashboardPage() {
           .from('profile_claims')
           .select('*')
           .order('created_at', { ascending: false })
-        if (data) setProfileClaims(data)
+        if (data) {
+          setProfileClaims(data)
+          try { localStorage.setItem('admin_profile_claims_cache', JSON.stringify(data)) } catch (_) {}
+        }
       } catch (_) {}
     }
     setClaimsLoading(false)
   }
-  const [supplierPosts, setSupplierPosts] = useState<SupplierPost[]>([])
-  const [newsArticles, setNewsArticles] = useState<NewsArticle[]>([])
-  const [partnerBuyers, setPartnerBuyers] = useState<PartnerBuyer[]>([])
+  const [supplierPosts, setSupplierPosts] = useState<SupplierPost[]>(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const cached = JSON.parse(localStorage.getItem('admin_supplier_posts_cache') || '[]')
+        if (Array.isArray(cached) && cached.length > 0) return cached
+      } catch (_) {}
+    }
+    return []
+  })
+  const [newsArticles, setNewsArticles] = useState<NewsArticle[]>(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const cached = JSON.parse(localStorage.getItem('admin_news_articles_cache') || '[]')
+        if (Array.isArray(cached) && cached.length > 0) return cached
+      } catch (_) {}
+    }
+    return []
+  })
+  const [partnerBuyers, setPartnerBuyers] = useState<PartnerBuyer[]>(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const cached = JSON.parse(localStorage.getItem('admin_partner_buyers_cache') || '[]')
+        if (Array.isArray(cached) && cached.length > 0) return cached
+      } catch (_) {}
+    }
+    return []
+  })
+  const [isDataLoaded, setIsDataLoaded] = useState(false)
 
   // Partner Buyer Modal & Form states
   const [showPartnerModal, setShowPartnerModal] = useState(false)
@@ -196,22 +244,26 @@ export default function AdminDashboardPage() {
     try {
       const synced = await syncWithServerClaims()
       setCompanies([...synced])
+      try { localStorage.setItem('admin_companies_cache', JSON.stringify(synced)) } catch (_) {}
     } catch (_) {
-      setCompanies(getStoredCompanies())
+      const stored = getStoredCompanies()
+      setCompanies(stored)
+      try { localStorage.setItem('admin_companies_cache', JSON.stringify(stored)) } catch (_) {}
     }
-    fetchProfileClaims()
+    await fetchProfileClaims()
   }
 
   useEffect(() => {
     let isMounted = true
 
-    // Safety timeout: Guarantee loading finishes in max 1 second
+    // Safety timeout: guarantee loading screen never hangs more than 6s
     const timer = setTimeout(() => {
       if (isMounted) {
         setAuthorized(true)
+        setIsDataLoaded(true)
         setLoading(false)
       }
-    }, 1000)
+    }, 6000)
 
     async function initAdminAuthAndData() {
       try {
@@ -253,39 +305,63 @@ export default function AdminDashboardPage() {
 
         if (isMounted) {
           setAuthorized(true)
-          reloadCompanies()
-          // Fetch all data from Supabase only
-          const [posts, articles, partners] = await Promise.all([
-            supabase.from('supplier_posts').select('id, title, content, created_at, updated_at, is_published').eq('is_published', true).order('created_at', { ascending: false }).limit(50),
-            fetchNewsArticles(),
-            fetchPartnerBuyers(),
-          ])
-          if (isMounted) {
-            if (posts.data) {
-              setSupplierPosts(posts.data.map((row: any) => {
-                let details: any = {}
-                try { details = JSON.parse(row.content || '{}') } catch (_) {}
-                return {
-                  id: row.id,
-                  product_name: details.productName || row.title?.split(' —')[0] || 'Seafood Product',
-                  price_per_kg: parseFloat(details.pricePerKg || 0),
-                  currency: details.currency || 'EUR',
-                  country_of_origin: details.countryOfOrigin || '',
-                  fresh_frozen: details.freshFrozen || 'Frozen',
-                  size_weight: details.sizeWeight || '',
-                  packaging: details.packagingFillet || '',
-                  availability: details.availability || 'In Stock',
-                  location: details.location || '',
-                  supplier_info_extra: details.supplierInfoExtra || '',
-                  custom_image: details.customImage || null,
-                  created_at: row.created_at,
-                  updated_at: row.updated_at,
-                  status: 'active',
+
+          // Fetch all data in parallel and await completion
+          await Promise.allSettled([
+            reloadCompanies(),
+            (async () => {
+              try {
+                const [postsRes, articlesRes, partnersRes] = await Promise.allSettled([
+                  supabase.from('supplier_posts').select('id, title, content, created_at, updated_at, is_published').eq('is_published', true).order('created_at', { ascending: false }).limit(50),
+                  fetchNewsArticles(),
+                  fetchPartnerBuyers(),
+                ])
+
+                if (!isMounted) return
+
+                if (postsRes.status === 'fulfilled' && postsRes.value?.data) {
+                  const mappedPosts = postsRes.value.data.map((row: any) => {
+                    let details: any = {}
+                    try { details = JSON.parse(row.content || '{}') } catch (_) {}
+                    return {
+                      id: row.id,
+                      product_name: details.productName || row.title?.split(' —')[0] || 'Seafood Product',
+                      price_per_kg: parseFloat(details.pricePerKg || 0),
+                      currency: details.currency || 'EUR',
+                      country_of_origin: details.countryOfOrigin || '',
+                      fresh_frozen: details.freshFrozen || 'Frozen',
+                      size_weight: details.sizeWeight || '',
+                      packaging: details.packagingFillet || '',
+                      availability: details.availability || 'In Stock',
+                      location: details.location || '',
+                      supplier_info_extra: details.supplierInfoExtra || '',
+                      custom_image: details.customImage || null,
+                      created_at: row.created_at,
+                      updated_at: row.updated_at,
+                      status: 'active',
+                    }
+                  })
+                  setSupplierPosts(mappedPosts)
+                  try { localStorage.setItem('admin_supplier_posts_cache', JSON.stringify(mappedPosts)) } catch (_) {}
                 }
-              }))
-            }
-            setNewsArticles(articles)
-            setPartnerBuyers(partners)
+
+                if (articlesRes.status === 'fulfilled' && articlesRes.value) {
+                  setNewsArticles(articlesRes.value)
+                  try { localStorage.setItem('admin_news_articles_cache', JSON.stringify(articlesRes.value)) } catch (_) {}
+                }
+
+                if (partnersRes.status === 'fulfilled' && partnersRes.value) {
+                  setPartnerBuyers(partnersRes.value)
+                  try { localStorage.setItem('admin_partner_buyers_cache', JSON.stringify(partnersRes.value)) } catch (_) {}
+                }
+              } catch (_) {}
+            })(),
+          ])
+
+          if (isMounted) {
+            setIsDataLoaded(true)
+            setLoading(false)
+            clearTimeout(timer)
           }
         }
 
@@ -313,9 +389,15 @@ export default function AdminDashboardPage() {
         } catch (_) {}
       } catch (err) {
         console.error('Admin initialization error:', err)
-        if (isMounted) setAuthorized(true)
+        if (isMounted) {
+          setAuthorized(true)
+          setIsDataLoaded(true)
+        }
       } finally {
-        if (isMounted) setLoading(false)
+        if (isMounted) {
+          setIsDataLoaded(true)
+          setLoading(false)
+        }
         clearTimeout(timer)
       }
     }
@@ -711,7 +793,13 @@ export default function AdminDashboardPage() {
                   </span>
                 </div>
 
-                {claimedCompanies.length === 0 ? (
+                {!isDataLoaded && claimedCompanies.length === 0 ? (
+                  <div className="bg-white border border-slate-200 rounded-2xl p-16 flex flex-col items-center justify-center gap-3 text-center">
+                    <Loader2 className="w-8 h-8 animate-spin text-[#022B96]" />
+                    <p className="text-sm font-bold text-slate-700">Loading Claimed Profiles...</p>
+                    <p className="text-xs text-slate-400">Fetching verified supplier records</p>
+                  </div>
+                ) : claimedCompanies.length === 0 ? (
                   <div className="bg-white border border-slate-200 rounded-2xl p-16 text-center">
                     <BadgeCheck className="w-12 h-12 text-slate-200 mx-auto mb-4" />
                     <h3 className="text-sm font-bold text-slate-800">No Claimed Profiles Yet</h3>
@@ -849,7 +937,13 @@ export default function AdminDashboardPage() {
                   </span>
                 </div>
 
-                {companies.filter(c => c.status !== 'claimed').length === 0 ? (
+                {!isDataLoaded && companies.filter(c => c.status !== 'claimed').length === 0 ? (
+                  <div className="bg-white border border-slate-200 rounded-2xl p-16 flex flex-col items-center justify-center gap-3 text-center">
+                    <Loader2 className="w-8 h-8 animate-spin text-[#022B96]" />
+                    <p className="text-sm font-bold text-slate-700">Loading Unclaimed Directory...</p>
+                    <p className="text-xs text-slate-400">Synchronizing supplier profiles</p>
+                  </div>
+                ) : companies.filter(c => c.status !== 'claimed').length === 0 ? (
                   <div className="bg-white border border-slate-200 rounded-2xl p-16 text-center">
                     <CheckCircle2 className="w-12 h-12 text-emerald-300 mx-auto mb-4" />
                     <h3 className="text-sm font-bold text-slate-800">All Profiles Are Claimed</h3>
@@ -1375,7 +1469,13 @@ export default function AdminDashboardPage() {
                   )}
                 </div>
 
-                {supplierPosts.length === 0 ? (
+                {!isDataLoaded && supplierPosts.length === 0 ? (
+                  <div className="bg-white rounded-2xl border border-slate-200 p-16 flex flex-col items-center justify-center gap-3 text-center">
+                    <Loader2 className="w-8 h-8 animate-spin text-[#022B96]" />
+                    <p className="text-sm font-bold text-slate-700">Loading Product Offers...</p>
+                    <p className="text-xs text-slate-400">Fetching live supplier catalog</p>
+                  </div>
+                ) : supplierPosts.length === 0 ? (
                   <div className="bg-white rounded-2xl border border-slate-200 p-12 text-center">
                     <Fish className="w-10 h-10 mx-auto mb-2 text-slate-300" />
                     <p className="text-xs font-bold text-slate-400">No supplier product posts yet</p>
@@ -1478,7 +1578,13 @@ export default function AdminDashboardPage() {
                   </div>
                 )}
 
-                {newsArticles.length > 0 ? (
+                {!isDataLoaded && newsArticles.length === 0 ? (
+                  <div className="bg-white border border-slate-200 rounded-2xl p-16 flex flex-col items-center justify-center gap-3 text-center">
+                    <Loader2 className="w-8 h-8 animate-spin text-[#022B96]" />
+                    <p className="text-sm font-bold text-slate-700">Loading Seafood News &amp; Articles...</p>
+                    <p className="text-xs text-slate-400">Synchronizing live market database</p>
+                  </div>
+                ) : newsArticles.length > 0 ? (
                   <div className="grid grid-cols-1 gap-4">
                     {newsArticles.map((article) => (
                       <div key={article.id} className="bg-white border border-slate-200 rounded-2xl p-5 shadow-xs hover:border-[#022B96]/30 transition flex flex-col sm:flex-row gap-5 items-start sm:items-center justify-between overflow-hidden">
@@ -1515,6 +1621,7 @@ export default function AdminDashboardPage() {
                                 fetchNewsArticles()
                               ).then((articles) => {
                                 setNewsArticles(articles)
+                                try { localStorage.setItem('admin_news_articles_cache', JSON.stringify(articles)) } catch (_) {}
                                 setNewsSuccessMsg(`Article "${article.title.slice(0, 40)}${article.title.length > 40 ? '…' : ''}" was deleted.`)
                                 setTimeout(() => setNewsSuccessMsg(null), 4000)
                               }).finally(() => setNewsDeleting(null))
@@ -1597,7 +1704,13 @@ export default function AdminDashboardPage() {
                 </div>
 
                 {/* Partner Buyers Grid */}
-                {filteredPartnerBuyers.length > 0 ? (
+                {!isDataLoaded && filteredPartnerBuyers.length === 0 ? (
+                  <div className="bg-white border border-slate-200 rounded-2xl p-16 flex flex-col items-center justify-center gap-3 text-center">
+                    <Loader2 className="w-8 h-8 animate-spin text-[#022B96]" />
+                    <p className="text-sm font-bold text-slate-700">Loading Partner Buyers...</p>
+                    <p className="text-xs text-slate-400">Fetching brand partners for Home Screen</p>
+                  </div>
+                ) : filteredPartnerBuyers.length > 0 ? (
                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                     {filteredPartnerBuyers.map((partner) => (
                       <div
