@@ -323,10 +323,14 @@ export default function AdminDashboardPage() {
                   const mappedPosts = postsRes.value.data.map((row: any) => {
                     let details: any = {}
                     try { details = JSON.parse(row.content || '{}') } catch (_) {}
+                    // Support both legacy pricePerKg and new minPricePerKg/maxPricePerKg format
+                    const minPrice = parseFloat(details.minPricePerKg || details.pricePerKg || 0)
+                    const maxPrice = parseFloat(details.maxPricePerKg || 0)
                     return {
                       id: row.id,
                       product_name: details.productName || row.title?.split(' —')[0] || 'Seafood Product',
-                      price_per_kg: parseFloat(details.pricePerKg || 0),
+                      price_per_kg: minPrice,
+                      max_price_per_kg: maxPrice > minPrice ? maxPrice : 0,
                       currency: details.currency || 'EUR',
                       country_of_origin: details.countryOfOrigin || '',
                       fresh_frozen: details.freshFrozen || 'Frozen',
@@ -1485,6 +1489,12 @@ export default function AdminDashboardPage() {
                     {supplierPosts.map((p) => {
                       const img = getFishImageForProduct(p.product_name, p.custom_image)
                       const symbol = p.currency === 'USD' ? '$' : p.currency === 'GBP' ? '£' : '€'
+                      const maxPrice = (p as any).max_price_per_kg
+                      const priceDisplay = p.price_per_kg > 0
+                        ? maxPrice > 0
+                          ? `${symbol}${p.price_per_kg.toFixed(2)} – ${symbol}${maxPrice.toFixed(2)}/kg`
+                          : `${symbol}${p.price_per_kg.toFixed(2)}/kg`
+                        : 'Price on request'
                       return (
                         <div key={p.id} className="bg-white rounded-2xl border border-slate-200 p-5 hover:shadow-md transition space-y-3">
                           <div className="flex items-start gap-3">
@@ -1500,7 +1510,7 @@ export default function AdminDashboardPage() {
                                   {p.status || 'Active'}
                                 </span>
                               </div>
-                              <p className="text-sm font-black text-[#022B96] mt-0.5">{symbol}{p.price_per_kg?.toFixed(2)}/kg</p>
+                              <p className="text-sm font-black text-[#022B96] mt-0.5">{priceDisplay}</p>
                               <p className="text-xs text-slate-400 mt-0.5">{p.fresh_frozen} · {p.country_of_origin}</p>
                             </div>
                           </div>
@@ -1508,11 +1518,11 @@ export default function AdminDashboardPage() {
                           <div className="grid grid-cols-2 gap-2 text-xs">
                             <div className="bg-slate-50 rounded-xl p-2 border border-slate-100">
                               <p className="text-[10px] font-bold uppercase text-slate-400 tracking-wider">Packaging</p>
-                              <p className="font-bold text-slate-700 mt-0.5 truncate">{p.packaging}</p>
+                              <p className="font-bold text-slate-700 mt-0.5 truncate">{p.packaging || '—'}</p>
                             </div>
                             <div className="bg-slate-50 rounded-xl p-2 border border-slate-100">
                               <p className="text-[10px] font-bold uppercase text-slate-400 tracking-wider">Availability</p>
-                              <p className="font-bold text-slate-700 mt-0.5 truncate">{p.availability}</p>
+                              <p className="font-bold text-slate-700 mt-0.5 truncate">{p.availability || '—'}</p>
                             </div>
                           </div>
 
