@@ -1241,10 +1241,28 @@ export default function AdminDashboardPage() {
                     <div>
                       <label className="block text-xs font-extrabold uppercase tracking-wider text-slate-700 mb-1.5">Country</label>
                       <div className="relative">
-                        <MapPin className="absolute left-3 top-3 w-4 h-4 text-slate-400" />
-                        <input type="text" value={newSupplierCountry} onChange={e => setNewSupplierCountry(e.target.value)} placeholder="e.g. Netherlands" className="w-full pl-9 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:border-[#022B96] transition" />
+                        <MapPin className="absolute left-3 top-3 w-4 h-4 text-slate-400 pointer-events-none" />
+                        <select
+                          value={newSupplierCountry}
+                          onChange={e => setNewSupplierCountry(e.target.value)}
+                          className="w-full pl-9 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:border-[#022B96] transition cursor-pointer appearance-none"
+                        >
+                          <option value="">-- Select Country --</option>
+                          <option value="Netherlands">🇳🇱 Netherlands</option>
+                          <option value="Germany">🇩🇪 Germany</option>
+                          <option value="Norway">🇳🇴 Norway</option>
+                          <option value="Belgium">🇧🇪 Belgium</option>
+                          <option value="Denmark">🇩🇰 Denmark</option>
+                          <option value="France">🇫🇷 France</option>
+                          <option value="Spain">🇪🇸 Spain</option>
+                          <option value="Iceland">🇮🇸 Iceland</option>
+                          <option value="United Kingdom">🇬🇧 United Kingdom</option>
+                          <option value="Portugal">🇵🇹 Portugal</option>
+                          <option value="Other">Other</option>
+                        </select>
                       </div>
                     </div>
+
                     <div>
                       <label className="block text-xs font-extrabold uppercase tracking-wider text-slate-700 mb-1.5">Phone Number</label>
                       <div className="relative">
