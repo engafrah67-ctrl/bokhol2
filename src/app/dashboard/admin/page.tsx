@@ -1248,17 +1248,10 @@ export default function AdminDashboardPage() {
                           className="w-full pl-9 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:border-[#022B96] transition cursor-pointer appearance-none"
                         >
                           <option value="">-- Select Country --</option>
-                          <option value="Netherlands">🇳🇱 Netherlands</option>
                           <option value="Germany">🇩🇪 Germany</option>
                           <option value="Norway">🇳🇴 Norway</option>
+                          <option value="Netherlands">🇳🇱 Netherlands</option>
                           <option value="Belgium">🇧🇪 Belgium</option>
-                          <option value="Denmark">🇩🇰 Denmark</option>
-                          <option value="France">🇫🇷 France</option>
-                          <option value="Spain">🇪🇸 Spain</option>
-                          <option value="Iceland">🇮🇸 Iceland</option>
-                          <option value="United Kingdom">🇬🇧 United Kingdom</option>
-                          <option value="Portugal">🇵🇹 Portugal</option>
-                          <option value="Other">Other</option>
                         </select>
                       </div>
                     </div>
