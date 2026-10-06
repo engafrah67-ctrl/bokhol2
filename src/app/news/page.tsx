@@ -48,24 +48,36 @@ export default async function NewsPage() {
   ])
 
   let articles: NewsArticle[] = []
-  if (newsRes.status === 'fulfilled' && newsRes.value.data) {
-    articles = newsRes.value.data
-      .filter((item: any) => !SEED_SLUGS.has(item.slug))
-      .map((item: any) => ({
+  if (newsRes.status === 'fulfilled' && newsRes.value.data && newsRes.value.data.length > 0) {
+    const allDbArticles = newsRes.value.data
+    const customArticles = allDbArticles.filter((item: any) => !SEED_SLUGS.has(item.slug))
+    const rawList = customArticles.length > 0 ? customArticles : allDbArticles
+
+    articles = rawList.map((item: any) => {
+      let authorName = item.author || 'Bokhol Research'
+      let excerpt = item.summary || item.content || ''
+      try {
+        const parsed = JSON.parse(item.content || '{}')
+        if (parsed?.authorName) authorName = parsed.authorName
+        if (parsed?.excerpt) excerpt = parsed.excerpt
+      } catch (_) {}
+
+      return {
         id: item.id,
         slug: item.slug || item.id,
         category: (item.category as any) || 'Market Update',
         categoryColor: CATEGORY_COLORS[item.category] || 'bg-blue-50 text-[#022B96]',
         title: item.title,
-        excerpt: item.summary || item.content || '',
-        author: item.author || 'Bokhol Research',
+        excerpt,
+        author: authorName,
         date: item.published_at
           ? new Date(item.published_at).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })
           : 'Recent',
         readTime: '3 min read',
         image: item.cover_image_url || '',
         created_at: item.created_at,
-      }))
+      }
+    })
   }
 
   let supplierPosts: SupplierPostFeed[] = []

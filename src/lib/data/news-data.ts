@@ -104,10 +104,13 @@ export async function addNewsArticle(
 
 export async function deleteNewsArticle(id: string): Promise<void> {
   const supabase = createClient()
-  const { error } = await supabase
-    .from('news')
-    .delete()
-    .or(`id.eq.${id},slug.eq.${id}`)
+  const cleanId = id.trim()
+  const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(cleanId)
+
+  const query = supabase.from('news').delete()
+  const { error } = isUUID
+    ? await query.or(`id.eq.${cleanId},slug.eq.${cleanId}`)
+    : await query.eq('slug', cleanId)
 
   if (error) throw new Error(error.message)
 }

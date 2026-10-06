@@ -19,6 +19,146 @@ interface ArticleDetail {
   created_at: string
 }
 
+const FALLBACK_ARTICLES: Record<string, ArticleDetail> = {
+  'european-salmon-prices-rise-2024': {
+    id: 'seed-1',
+    title: 'European Salmon Prices Rise Amid Supply Constraints',
+    slug: 'european-salmon-prices-rise-2024',
+    summary: 'Atlantic salmon prices in the European spot market rose 2.3% this week, driven by lower harvesting volumes from Norway.',
+    content: `Atlantic salmon prices in the European spot market rose 2.3% this week, driven by lower harvesting volumes from Norway due to adverse weather conditions affecting key farming regions in Trondheim and Møre og Romsdal. Traders are closely watching Norwegian export data for the coming weeks.
+
+Production cycles in Chilean salmon farming facilities have also witnessed modest slowdowns due to seasonal shifts, further consolidating pricing leverage across Northern European logistics hubs. Major wholesalers in France, Germany, and the Netherlands report steady wholesale demand despite upward pricing pressures.
+
+Industry analysts project wholesale price resilience throughout the current quarter, with forward delivery contracts trading at slight premiums across Oslo and Frankfurt seafood trading desks. Buyers are advised to secure forward-dispatch allocations with verified suppliers early.`,
+    cover_image_url: 'https://images.unsplash.com/photo-1544551763-46a013bb70d5?w=1200&q=80',
+    category: 'Market Update',
+    tags: ['Salmon', 'Norway', 'Pricing', 'Europe'],
+    author: 'Bokhol Market Research',
+    published_at: '2026-03-20T10:00:00Z',
+    created_at: '2026-03-20T10:00:00Z',
+  },
+  'vietnam-seafood-exports-surge-q3': {
+    id: 'seed-2',
+    title: 'Vietnam Seafood Exports Surge 15% in Q3',
+    slug: 'vietnam-seafood-exports-surge-q3',
+    summary: "Vietnam's seafood export revenue reached $2.8 billion in Q3, up 15% year-on-year, driven by shrimp and pangasius.",
+    content: `Vietnam's seafood export revenue reached $2.8 billion in Q3, a 15% increase year-on-year. Shrimp exports led the growth, accounting for 42% of total revenue, followed by pangasius at 28%. Key markets include the United States, China, Japan, and the EU.
+
+Trade bodies highlight that expanded bilateral trade protocols and enhanced traceability certifications have facilitated accelerated customs clearance at major European entry ports like Rotterdam and Antwerp.
+
+Aquaculture processors across the Mekong Delta are ramping up processed product lines to cater to value-added retail demand in international markets. Exporters continue to invest heavily in ASC and BAP accreditations to meet EU importer compliance guidelines.`,
+    cover_image_url: 'https://images.unsplash.com/photo-1565680018434-b513d5e5fd47?w=1200&q=80',
+    category: 'Trade',
+    tags: ['Shrimp', 'Vietnam', 'Exports', 'Asia'],
+    author: 'Bokhol Market Research',
+    published_at: '2026-03-18T10:00:00Z',
+    created_at: '2026-03-18T10:00:00Z',
+  },
+  'king-crab-quotas-cut-2024': {
+    id: 'seed-3',
+    title: 'Global King Crab Quotas Cut by 30% for Upcoming Season',
+    slug: 'king-crab-quotas-cut-2024',
+    summary: 'Norwegian and Russian authorities have agreed to significantly reduce king crab fishing quotas for the 2024–25 season.',
+    content: `Norwegian and Russian fishery management authorities have agreed to reduce Barents Sea king crab fishing quotas by approximately 30% for the 2024–25 season. This decision follows stock assessment surveys indicating a decline in mature male crab biomass.
+
+The quota reduction is expected to constrain live and frozen crab supplies into Western European culinary and hospitality chains, prompting spot price increases across major distribution networks.
+
+Vessel operators and processing hubs in Finnmark are pivoting toward optimizing premium grading and localized logistics to maintain margin targets during the constrained season. Importers should anticipate tighter delivery schedules and premium grading surcharges.`,
+    cover_image_url: 'https://images.unsplash.com/photo-1559737558-2f5a35f4523b?w=1200&q=80',
+    category: 'Regulation',
+    tags: ['King Crab', 'Barents Sea', 'Quotas', 'Norway'],
+    author: 'Bokhol Market Research',
+    published_at: '2026-03-15T10:00:00Z',
+    created_at: '2026-03-15T10:00:00Z',
+  },
+  'asc-group-certification-small-farms': {
+    id: 'seed-4',
+    title: 'New ASC Group Certification Standard Launched for Small Farms',
+    slug: 'asc-group-certification-small-farms',
+    summary: 'The Aquaculture Stewardship Council has launched a new group certification pathway designed specifically for small-scale farms.',
+    content: `The Aquaculture Stewardship Council (ASC) has launched a new group certification pathway designed specifically for small-scale farms in developing countries. The initiative aims to make ASC certification more accessible and affordable for cooperatives of small producers.
+
+Under the new framework, smallholders can pool compliance verification and audit overheads, lowering barrier costs by up to 60% while adhering to rigorous environmental and social standards.
+
+Major European seafood retailers have welcomed the initiative, anticipating broader supply access to certified sustainably farmed species across retail and foodservice categories.`,
+    cover_image_url: 'https://images.unsplash.com/photo-1535591273668-578e31182c4f?w=1200&q=80',
+    category: 'Sustainability',
+    tags: ['ASC', 'Certification', 'Sustainability', 'Farming'],
+    author: 'Bokhol Market Research',
+    published_at: '2026-03-10T10:00:00Z',
+    created_at: '2026-03-10T10:00:00Z',
+  },
+  'global-salmon-prices-q3-2026': {
+    id: 'seed-5',
+    title: 'Global Salmon Prices Rise 12% in Q3 2026 Amid Supply Constraints',
+    slug: 'global-salmon-prices-q3-2026',
+    summary: 'Atlantic salmon prices have surged to their highest level in three years, driven by reduced harvests in Norway and Scotland.',
+    content: `Atlantic salmon prices have surged to their highest level in three years, driven by reduced harvests in Norway and Scotland following environmental regulations and seasonal biological factors.
+
+Exporters report robust order books from Southern European and Middle Eastern distributors, keeping cold storage inventories lean across regional logistics hubs. Processing margins remain tight, prompting suppliers to prioritize long-term contract partners.`,
+    cover_image_url: 'https://images.unsplash.com/photo-1544551763-46a013bb70d5?w=1200&q=80',
+    category: 'Market Update',
+    tags: ['Salmon', 'Pricing', 'Supply Chain'],
+    author: 'Bokhol Market Research',
+    published_at: '2026-07-25T10:00:00Z',
+    created_at: '2026-07-25T10:00:00Z',
+  },
+  'vietnam-shrimp-exports-record': {
+    id: 'seed-6',
+    title: 'Vietnam Sets New Shrimp Export Record, Surpassing $4.2B in H1 2026',
+    slug: 'vietnam-shrimp-exports-record',
+    summary: "Southeast Asia's largest shrimp producer has posted record first-half revenues, fuelled by growing demand from European and North American buyers.",
+    content: `Southeast Asia's largest shrimp producer has posted record first-half revenues, fuelled by growing demand from European and North American buyers. Vannamei and black tiger shrimp varieties accounted for over 70% of export transactions.
+
+Quality certifications and integrated cold-chain shipping investments have enabled direct deliveries into premium supermarket chains across the EU.`,
+    cover_image_url: 'https://images.unsplash.com/photo-1565680018434-b513d5e5fd47?w=1200&q=80',
+    category: 'Trade',
+    tags: ['Shrimp', 'Vietnam', 'Exports'],
+    author: 'Bokhol Market Research',
+    published_at: '2026-07-23T10:00:00Z',
+    created_at: '2026-07-23T10:00:00Z',
+  },
+  'eu-seafood-labelling-2026': {
+    id: 'seed-7',
+    title: 'EU Introduces Stricter Seafood Labelling Rules Starting January 2027',
+    slug: 'eu-seafood-labelling-2026',
+    summary: 'The European Commission has published new traceability requirements for all seafood sold in the EU, giving suppliers 18 months to comply.',
+    content: `The European Commission has published new traceability requirements for all seafood sold in the EU, giving suppliers 18 months to comply. Under the updated mandate, digital lot codes indicating catch coordinates, gear type, and vessel registration must accompany all consignments through wholesale transit.`,
+    cover_image_url: 'https://images.unsplash.com/photo-1519708227418-c8fd9a32b7a2?w=1200&q=80',
+    category: 'Regulation',
+    tags: ['EU', 'Regulation', 'Traceability'],
+    author: 'Bokhol Market Research',
+    published_at: '2026-07-21T10:00:00Z',
+    created_at: '2026-07-21T10:00:00Z',
+  },
+  'tuna-msc-certification': {
+    id: 'seed-8',
+    title: 'Three Major Tuna Fisheries Receive MSC Certification in Pacific Waters',
+    slug: 'tuna-msc-certification',
+    summary: 'The Marine Stewardship Council has granted certified sustainable status to key Pacific tuna fisheries, unlocking new premium market access.',
+    content: `The Marine Stewardship Council has granted certified sustainable status to key Pacific tuna fisheries, unlocking new premium market access. The accreditation verifies sustainable harvest limits, minimized bycatch, and traceable maritime supply chains.`,
+    cover_image_url: 'https://images.unsplash.com/photo-1535591273668-578e31182c4f?w=1200&q=80',
+    category: 'Sustainability',
+    tags: ['Tuna', 'MSC', 'Pacific'],
+    author: 'Bokhol Market Research',
+    published_at: '2026-07-18T10:00:00Z',
+    created_at: '2026-07-18T10:00:00Z',
+  },
+  'cod-north-sea-quotas': {
+    id: 'seed-9',
+    title: 'North Sea Cod Quotas Reduced by 20% for 2027 Season',
+    slug: 'cod-north-sea-quotas',
+    summary: 'Fisheries management bodies across the UK, Norway, and Iceland have agreed to cut cod harvest quotas significantly to allow stock recovery.',
+    content: `Fisheries management bodies across the UK, Norway, and Iceland have agreed to cut cod harvest quotas significantly to allow stock recovery. Processors and frozen fillet suppliers are preparing for higher raw material costs heading into the autumn auctions.`,
+    cover_image_url: 'https://images.unsplash.com/photo-1571748982800-fa51082c2224?w=1200&q=80',
+    category: 'Market Update',
+    tags: ['Cod', 'North Sea', 'Quotas'],
+    author: 'Bokhol Market Research',
+    published_at: '2026-07-15T10:00:00Z',
+    created_at: '2026-07-15T10:00:00Z',
+  },
+}
+
 export default function NewsArticlePage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = React.use(params)
   const [article, setArticle] = useState<ArticleDetail | null>(null)
@@ -27,29 +167,111 @@ export default function NewsArticlePage({ params }: { params: Promise<{ slug: st
 
   useEffect(() => {
     async function loadArticle() {
+      if (!slug) {
+        setLoading(false)
+        return
+      }
+
+      const cleanSlug = decodeURIComponent(slug).trim()
+      const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(cleanSlug)
+
       const supabase = createClient()
       try {
-        // 1. Try fetching from Supabase news table
-        const { data, error } = await supabase
-          .from('news')
-          .select('*')
-          .or(`slug.eq.${slug},id.eq.${slug}`)
-          .maybeSingle()
+        // 1. Fetch from Supabase news table safely without triggering Postgres UUID cast error
+        let row: any = null
+        if (isUUID) {
+          const { data } = await supabase
+            .from('news')
+            .select('*')
+            .or(`id.eq.${cleanSlug},slug.eq.${cleanSlug}`)
+            .maybeSingle()
+          row = data
+        } else {
+          // Exact slug query
+          const { data } = await supabase
+            .from('news')
+            .select('*')
+            .eq('slug', cleanSlug)
+            .maybeSingle()
+          row = data
 
-        if (!error && data) {
+          // Case-insensitive fallback if not found
+          if (!row) {
+            const { data: ilikeData } = await supabase
+              .from('news')
+              .select('*')
+              .ilike('slug', cleanSlug)
+              .maybeSingle()
+            row = ilikeData
+          }
+        }
+
+        if (row) {
+          let displayContent = row.content || row.summary || ''
+          let authorName = row.author || 'Bokhol Market Research'
+
+          try {
+            const parsed = JSON.parse(row.content || '{}')
+            if (parsed && typeof parsed === 'object') {
+              if (parsed.authorName) authorName = parsed.authorName
+              if (parsed.content) displayContent = parsed.content
+              else if (parsed.excerpt) displayContent = parsed.excerpt
+            }
+          } catch (_) {}
+
           setArticle({
-            id: data.id,
-            title: data.title,
-            slug: data.slug,
-            summary: data.summary,
-            content: data.content || data.summary || '',
-            cover_image_url: data.cover_image_url,
-            category: data.category || 'Market Update',
-            tags: data.tags || [],
-            author: 'Bokhol Market Research',
-            published_at: data.published_at,
-            created_at: data.created_at,
+            id: row.id,
+            title: row.title,
+            slug: row.slug || cleanSlug,
+            summary: row.summary,
+            content: displayContent,
+            cover_image_url: row.cover_image_url,
+            category: row.category || 'Market Update',
+            tags: row.tags || [],
+            author: authorName,
+            published_at: row.published_at,
+            created_at: row.created_at,
           })
+          setLoading(false)
+          return
+        }
+
+        // 2. Check localStorage (admin_news_articles)
+        if (typeof window !== 'undefined') {
+          try {
+            const local = JSON.parse(localStorage.getItem('admin_news_articles') || '[]')
+            const localMatch = local.find(
+              (a: any) =>
+                a.slug?.toLowerCase() === cleanSlug.toLowerCase() ||
+                a.id?.toLowerCase() === cleanSlug.toLowerCase()
+            )
+            if (localMatch) {
+              setArticle({
+                id: localMatch.id || cleanSlug,
+                title: localMatch.title,
+                slug: localMatch.slug || cleanSlug,
+                summary: localMatch.excerpt || '',
+                content: localMatch.excerpt || localMatch.title,
+                cover_image_url: localMatch.image || null,
+                category: localMatch.category || 'Market Update',
+                tags: [],
+                author: localMatch.author || 'Bokhol Market Research',
+                published_at: localMatch.date || null,
+                created_at: localMatch.created_at || new Date().toISOString(),
+              })
+              setLoading(false)
+              return
+            }
+          } catch (_) {}
+        }
+
+        // 3. Fallback to known industry articles library
+        const fallback =
+          FALLBACK_ARTICLES[cleanSlug] ||
+          FALLBACK_ARTICLES[cleanSlug.toLowerCase()]
+
+        if (fallback) {
+          setArticle(fallback)
           setLoading(false)
           return
         }

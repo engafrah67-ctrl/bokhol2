@@ -1445,10 +1445,7 @@ export default function AdminDashboardPage() {
 
             {/* VIEW 4: MARKET INDEXES */}
             {activeNav === 'indexes' && (
-              <MarketIndexesManager
-                supplierPosts={supplierPosts}
-                onNavigateToPosts={() => setActiveNav('posts')}
-              />
+              <MarketIndexesManager />
             )}
 
             {/* VIEW 6: NEWS MANAGEMENT */}
@@ -1505,7 +1502,7 @@ export default function AdminDashboardPage() {
                         </div>
 
                         <div className="flex items-center gap-2 shrink-0 self-end sm:self-center">
-                          <Link href="/news" target="_blank">
+                          <Link href={`/news/${article.slug}`} target="_blank">
                             <button className="px-3.5 py-1.5 border border-slate-200 hover:bg-slate-50 text-slate-700 text-xs font-bold rounded-xl transition cursor-pointer">
                               Preview
                             </button>
