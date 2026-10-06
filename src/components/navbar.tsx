@@ -32,7 +32,6 @@ export function Navbar() {
 
   // Build nav items from translations
   const NAV_ITEMS = [
-    { name: t('nav_market_indexes'), href: '/#indexes' },
     { name: t('nav_countries'),      href: '/countries' },
     { name: t('nav_products'),       href: '/products' },
     { name: t('nav_news'),           href: '/news' },
