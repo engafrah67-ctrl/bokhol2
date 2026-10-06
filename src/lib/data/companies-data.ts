@@ -127,14 +127,35 @@ export async function fetchSupabaseCompanies(): Promise<any[]> {
   }
 }
 
-// Sync company claim statuses from the server API
+// Sync company claim statuses and dynamically added suppliers from the server API
 export async function syncWithServerClaims(): Promise<CompanyProfile[]> {
   try {
-    const res = await fetch('/api/profile-claims')
-    const json = await res.json()
+    const [claimsRes, addedRes] = await Promise.all([
+      fetch('/api/profile-claims').catch(() => null),
+      fetch('/api/admin/add-supplier').catch(() => null),
+    ])
+
+    const claimsJson = claimsRes ? await claimsRes.json().catch(() => null) : null
+    const addedJson = addedRes ? await addedRes.json().catch(() => null) : null
+
     const companies = getStoredCompanies()
-    if (json.success && Array.isArray(json.claims)) {
-      for (const claim of json.claims) {
+
+    // Add any dynamically added suppliers from the server
+    if (addedJson?.success && Array.isArray(addedJson.suppliers)) {
+      const existingSlugs = new Set(companies.map((c) => c.slug))
+      const existingIds = new Set(companies.map((c) => c.id))
+
+      for (const sup of addedJson.suppliers) {
+        if (!existingSlugs.has(sup.slug) && !existingIds.has(sup.id)) {
+          companies.push(sup)
+          existingSlugs.add(sup.slug)
+          existingIds.add(sup.id)
+        }
+      }
+    }
+
+    if (claimsJson?.success && Array.isArray(claimsJson.claims)) {
+      for (const claim of claimsJson.claims) {
         const idx = companies.findIndex(
           (c) => c.id === claim.company_id ||
             (claim.company_name && c.name.toLowerCase() === claim.company_name.toLowerCase())
@@ -185,6 +206,10 @@ export function revokeProfileClaim(companyId: string): boolean {
 }
 
 export async function deleteCompany(companyId: string): Promise<boolean> {
+  try {
+    await fetch(`/api/admin/add-supplier?id=${companyId}`, { method: 'DELETE' }).catch(() => null)
+  } catch {}
+
   // Delete from Supabase if it's a real company (UUID format)
   if (/^[0-9a-f-]{36}$/i.test(companyId)) {
     try {

@@ -242,47 +242,9 @@ export default function AdminDashboardPage() {
 
   const reloadCompanies = async () => {
     try {
-      // 1. Get hardcoded companies + their claim statuses
       const synced = await syncWithServerClaims()
-
-      // 2. Also fetch dynamically added companies from Supabase
-      const { data: dbCompanies } = await supabase
-        .from('companies')
-        .select('id, name, slug, email, phone, country, logo_url, status, is_verified, species, category, created_at')
-        .order('created_at', { ascending: false })
-
-      // 3. Merge: add any Supabase companies not already in the static list
-      const existingSlugs = new Set(synced.map((c: any) => c.slug))
-      const existingIds = new Set(synced.map((c: any) => c.id))
-
-      const dynamicCompanies: any[] = (dbCompanies || [])
-        .filter((row: any) => !existingSlugs.has(row.slug) && !existingIds.has(row.id))
-        .map((row: any, i: number) => ({
-          id: row.id,
-          rank: 100 + i,
-          name: row.name,
-          slug: row.slug || row.name.toLowerCase().replace(/\s+/g, '-'),
-          category: row.category || 'SEAFOOD SUPPLIER',
-          country: row.country || '',
-          countryCode: '',
-          address: '',
-          website: '',
-          email: row.email || '',
-          phone: row.phone || '',
-          domain: row.email ? row.email.split('@')[1] || '' : '',
-          description: '',
-          logoUrl: row.logo_url || null,
-          status: (row.status === 'claimed' ? 'claimed' : 'unclaimed') as 'unclaimed' | 'claimed',
-          isVerified: row.is_verified || false,
-          isPublicListing: true,
-          completenessScore: 60,
-          species: Array.isArray(row.species) ? row.species : [],
-          tags: [],
-        }))
-
-      const merged = [...synced, ...dynamicCompanies]
-      setCompanies(merged)
-      try { localStorage.setItem('admin_companies_cache', JSON.stringify(merged)) } catch (_) {}
+      setCompanies([...synced])
+      try { localStorage.setItem('admin_companies_cache', JSON.stringify(synced)) } catch (_) {}
     } catch (_) {
       const stored = getStoredCompanies()
       setCompanies(stored)
@@ -1122,46 +1084,28 @@ export default function AdminDashboardPage() {
                       return
                     }
                     setAddSupplierLoading(true)
-                    setAddSupplierMsg(null)
                     try {
-                      // 1. Build a slug from the company name
-                      const slug = newSupplierCompany.toLowerCase()
-                        .replace(/[^a-z0-9\s-]/g, '')
-                        .trim()
-                        .replace(/\s+/g, '-')
-
-                      // 2. Parse specialty into a species array
-                      const speciesArr = newSupplierSpecialty
-                        ? newSupplierSpecialty.split(',').map((s: string) => s.trim()).filter(Boolean)
-                        : []
-
-                      // 3. Insert into Supabase companies table
-                      const { data: inserted, error: dbError } = await supabase
-                        .from('companies')
-                        .insert({
+                      // 1. Save company via server-side API (bypasses RLS)
+                      const res = await fetch('/api/admin/add-supplier', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
                           name: newSupplierCompany.trim(),
-                          slug,
                           email: newSupplierEmail.trim(),
                           phone: newSupplierPhone.trim() || null,
-                          country: newSupplierCountry.trim() || null,
-                          logo_url: newSupplierLogo || null,
-                          species: speciesArr,
-                          status: 'unclaimed',
-                          is_verified: false,
-                          is_public_listing: true,
+                          country: newSupplierCountry || null,
+                          logoUrl: newSupplierLogo || null,
+                          species: newSupplierSpecialty,
                           category: 'SEAFOOD SUPPLIER',
-                          created_at: new Date().toISOString(),
-                          updated_at: new Date().toISOString(),
-                        })
-                        .select('id')
-                        .maybeSingle()
+                        }),
+                      })
+                      const json = await res.json()
 
-                      if (dbError) {
-                        console.error('[AddSupplier] DB insert error:', dbError)
-                        // Don't stop — still try the invite
+                      if (!json.success) {
+                        console.error('[AddSupplier] API error:', json.error)
                       }
 
-                      // 4. Send magic link invite email
+                      // 2. Send magic link invite email
                       const { error: authError } = await supabase.auth.signInWithOtp({
                         email: newSupplierEmail,
                         options: {
@@ -1174,9 +1118,9 @@ export default function AdminDashboardPage() {
                         }
                       })
 
-                      // 5. Update local addedSuppliers list
+                      // 3. Update local addedSuppliers list
                       const newEntry = {
-                        id: inserted?.id || 'sup-' + Date.now(),
+                        id: json.company?.id || 'sup-' + Date.now(),
                         logo: newSupplierLogo,
                         email: newSupplierEmail,
                         company: newSupplierCompany,
@@ -1187,14 +1131,14 @@ export default function AdminDashboardPage() {
                       }
                       setAddedSuppliers(prev => [newEntry, ...prev])
 
-                      // 6. Reload companies so Unclaimed Profiles updates immediately
+                      // 4. Reload companies so Unclaimed Profiles updates immediately
                       await reloadCompanies()
 
-                      const savedMsg = dbError
-                        ? `⚠️ Saved locally — DB write failed: ${dbError.message}`
-                        : `✅ "${newSupplierCompany}" added to Unclaimed Profiles!`
+                      const savedMsg = json.success
+                        ? `✅ "${newSupplierCompany}" added to Unclaimed Profiles!`
+                        : `⚠️ DB write failed: ${json.error}`
                       const inviteMsg = authError ? '' : ` Invite sent to ${newSupplierEmail}.`
-                      setAddSupplierMsg({ type: dbError ? 'error' : 'success', text: savedMsg + inviteMsg })
+                      setAddSupplierMsg({ type: json.success ? 'success' : 'error', text: savedMsg + inviteMsg })
                       setNewSupplierLogo(''); setNewSupplierEmail(''); setNewSupplierCompany('')
                       setNewSupplierCountry(''); setNewSupplierPhone(''); setNewSupplierSpecialty('')
                     } catch (err: any) {
