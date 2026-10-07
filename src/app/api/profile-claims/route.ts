@@ -3,6 +3,10 @@ import fs from 'fs'
 import path from 'path'
 import { createPublicServerClient } from '@/lib/supabase/server'
 
+export const dynamic = 'force-dynamic'
+export const fetchCache = 'force-no-store'
+export const revalidate = 0
+
 interface ProfileClaimRecord {
   id: string
   company_id: string
@@ -69,11 +73,17 @@ export async function GET() {
             merged.push(fc)
           }
         }
-        return NextResponse.json({ success: true, claims: merged })
+        return NextResponse.json(
+          { success: true, claims: merged },
+          { headers: { 'Cache-Control': 'no-store, no-cache, must-revalidate' } }
+        )
       }
     } catch (_) {}
 
-    return NextResponse.json({ success: true, claims: fileClaims })
+    return NextResponse.json(
+      { success: true, claims: fileClaims },
+      { headers: { 'Cache-Control': 'no-store, no-cache, must-revalidate' } }
+    )
   } catch (err: any) {
     return NextResponse.json({ success: false, error: err.message }, { status: 500 })
   }
@@ -155,7 +165,7 @@ export async function POST(req: NextRequest) {
 export async function PATCH(req: NextRequest) {
   try {
     const body = await req.json()
-    const { id, company_id, action, rejection_reason } = body
+    const { id, company_id, company_name, action, rejection_reason } = body
 
     if (!action || !['approve', 'reject', 'revoke'].includes(action)) {
       return NextResponse.json(
@@ -165,7 +175,11 @@ export async function PATCH(req: NextRequest) {
     }
 
     let claims = readClaimsFromFile()
-    const idx = claims.findIndex((c) => c.id === id || (company_id && c.company_id === company_id))
+    const idx = claims.findIndex((c) =>
+      (id && c.id === id) ||
+      (company_id && c.company_id === company_id) ||
+      (company_name && c.company_name?.toLowerCase().trim() === String(company_name).toLowerCase().trim())
+    )
 
     if (idx !== -1) {
       if (action === 'revoke') {

@@ -26,6 +26,7 @@ export interface CompanyProfile {
   species: string[]
   tags: string[]
   claimRequest?: {
+    id?: string
     username?: string
     fullName: string
     businessEmail: string
@@ -131,8 +132,8 @@ export async function fetchSupabaseCompanies(): Promise<any[]> {
 export async function syncWithServerClaims(): Promise<CompanyProfile[]> {
   try {
     const [claimsRes, addedRes, dbCompanies] = await Promise.all([
-      fetch('/api/profile-claims').catch(() => null),
-      fetch('/api/admin/add-supplier').catch(() => null),
+      fetch('/api/profile-claims', { cache: 'no-store' }).catch(() => null),
+      fetch('/api/admin/add-supplier', { cache: 'no-store' }).catch(() => null),
       fetchSupabaseCompanies().catch(() => []),
     ])
 
@@ -141,14 +142,19 @@ export async function syncWithServerClaims(): Promise<CompanyProfile[]> {
 
     const companies = getStoredCompanies()
 
-    // Add any dynamically added suppliers from the server
+    // Add any dynamically added suppliers from the server (admin-added) -> UNCLAIMED
     if (addedJson?.success && Array.isArray(addedJson.suppliers)) {
       const existingSlugs = new Set(companies.map((c) => c.slug))
       const existingIds = new Set(companies.map((c) => c.id))
 
       for (const sup of addedJson.suppliers) {
         if (!existingSlugs.has(sup.slug) && !existingIds.has(sup.id)) {
-          companies.push(sup)
+          companies.push({
+            ...sup,
+            status: 'unclaimed',
+            isVerified: false,
+            claimRequest: undefined,
+          })
           existingSlugs.add(sup.slug)
           existingIds.add(sup.id)
         }
@@ -156,7 +162,6 @@ export async function syncWithServerClaims(): Promise<CompanyProfile[]> {
     }
 
     // Include registered supplier companies from Supabase database
-    // ONLY add companies that are NOT already tracked locally (i.e., not admin-added)
     if (Array.isArray(dbCompanies) && dbCompanies.length > 0) {
       for (const dbComp of dbCompanies) {
         const existingIdx = companies.findIndex(
@@ -165,17 +170,15 @@ export async function syncWithServerClaims(): Promise<CompanyProfile[]> {
             c.name.toLowerCase() === dbComp.name.toLowerCase()
         )
 
-        // If already tracked locally (e.g., admin-added), preserve its existing status
-        // Do NOT auto-mark it as claimed — only real claim requests (from profile-claims) should do that
         if (existingIdx !== -1) {
           companies[existingIdx] = {
             ...companies[existingIdx],
             id: dbComp.id || companies[existingIdx].id,
             logoUrl: dbComp.logo_url || companies[existingIdx].logoUrl,
-            // Do NOT change status here — let profile-claims API handle it below
+            // Keep existing status (do NOT overwrite)
           }
         }
-        // If NOT in local list at all, it was created by a supplier signing up themselves — mark as claimed
+        // New company added to DB: admin-created suppliers belong in UNCLAIMED profiles
         else {
           const countryName = dbComp.countries?.name || dbComp.city || 'Germany'
           const countryCode = dbComp.countries?.iso_code || (countryName === 'Norway' ? 'NO' : countryName === 'Netherlands' ? 'NL' : 'DE')
@@ -192,22 +195,15 @@ export async function syncWithServerClaims(): Promise<CompanyProfile[]> {
             email: dbComp.email || '',
             phone: dbComp.phone || '',
             domain: dbComp.website ? dbComp.website.replace(/^https?:\/\//, '') : '',
-            description: 'Verified registered supplier on Bokhol platform.',
+            description: dbComp.description || 'Registered supplier on Bokhol platform.',
             logoUrl: dbComp.logo_url || undefined,
-            status: 'claimed',
-            isVerified: true,
+            status: 'unclaimed',
+            isVerified: false,
             isPublicListing: true,
-            completenessScore: 90,
+            completenessScore: 85,
             species: ['Atlantic Cod', 'Salmon', 'Sea Bass'],
-            tags: ['SUPPLIER', 'VERIFIED'],
-            claimRequest: {
-              username: dbComp.slug || 'supplier',
-              fullName: dbComp.name,
-              businessEmail: dbComp.email || 'supplier@bokhol.com',
-              jobTitle: 'Registered Supplier Account',
-              phone: dbComp.phone || '',
-              requestedAt: dbComp.created_at || new Date().toISOString(),
-            },
+            tags: ['SUPPLIER', 'UNCLAIMED'],
+            claimRequest: undefined,
           })
         }
       }
@@ -228,6 +224,7 @@ export async function syncWithServerClaims(): Promise<CompanyProfile[]> {
             status: mappedStatus,
             ...(claim.status === 'approved' ? { isVerified: true } : {}),
             claimRequest: {
+              id: claim.id,
               username: claim.username,
               fullName: claim.full_name,
               businessEmail: claim.business_email,

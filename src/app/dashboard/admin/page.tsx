@@ -195,7 +195,7 @@ export default function AdminDashboardPage() {
   const fetchProfileClaims = async () => {
     setClaimsLoading(true)
     try {
-      const res = await fetch('/api/profile-claims')
+      const res = await fetch('/api/profile-claims', { cache: 'no-store' })
       const json = await res.json()
       if (json.success && Array.isArray(json.claims)) {
         setProfileClaims(json.claims)
@@ -711,46 +711,121 @@ export default function AdminDashboardPage() {
 
   const handleApproveClaim = async (companyId: string) => {
     approveProfileClaim(companyId)
+    const targetComp = companies.find((c) => c.id === companyId)
+    const compName = targetComp?.name || ''
+    const claimId = (targetComp?.claimRequest as any)?.id
+
+    // 1. Optimistic UI update: immediately move to claimed/approved
+    setCompanies((prev) => {
+      const updated = prev.map((c) => {
+        if (c.id === companyId || (compName && c.name.toLowerCase() === compName.toLowerCase())) {
+          return {
+            ...c,
+            status: 'claimed' as const,
+            isVerified: true,
+          }
+        }
+        return c
+      })
+      try { localStorage.setItem('admin_companies_cache', JSON.stringify(updated)) } catch (_) {}
+      return updated
+    })
+
+    setProfileClaims((prev) => {
+      const updated = prev.map((cl: any) => {
+        if (
+          (claimId && cl.id === claimId) ||
+          cl.company_id === companyId ||
+          (compName && cl.company_name?.toLowerCase() === compName.toLowerCase())
+        ) {
+          return { ...cl, status: 'approved', updated_at: new Date().toISOString() }
+        }
+        return cl
+      })
+      try { localStorage.setItem('admin_profile_claims_cache', JSON.stringify(updated)) } catch (_) {}
+      return updated
+    })
+
+    if (selectedCompanyModal?.id === companyId) setSelectedCompanyModal(null)
+    setActionToast({ type: 'success', message: `Claim for "${compName || 'Supplier'}" approved successfully!` })
+
+    // 2. Persist to server API
     try {
       await fetch('/api/profile-claims', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ company_id: companyId, action: 'approve' }),
+        body: JSON.stringify({
+          id: claimId,
+          company_id: companyId,
+          company_name: compName,
+          action: 'approve',
+        }),
       })
     } catch (_) {}
-    try {
-      await supabase
-        .from('profile_claims')
-        .update({ status: 'approved', updated_at: new Date().toISOString() })
-        .eq('company_id', companyId)
-    } catch (_) {}
+
+    // 3. Sync
     await reloadCompanies()
-    if (selectedCompanyModal?.id === companyId) setSelectedCompanyModal(null)
   }
 
   const handleRejectClaim = async (companyId: string) => {
     const reason = rejectionReasonInput || 'Business verification could not be completed.'
     rejectProfileClaim(companyId, reason)
+    const targetComp = companies.find((c) => c.id === companyId)
+    const compName = targetComp?.name || ''
+    const claimId = (targetComp?.claimRequest as any)?.id
+
+    // 1. Optimistic UI update: immediately mark rejected
+    setCompanies((prev) => {
+      const updated = prev.map((c) => {
+        if (c.id === companyId || (compName && c.name.toLowerCase() === compName.toLowerCase())) {
+          return {
+            ...c,
+            status: 'rejected' as const,
+            claimRequest: c.claimRequest ? { ...c.claimRequest, rejectionReason: reason } : undefined,
+          }
+        }
+        return c
+      })
+      try { localStorage.setItem('admin_companies_cache', JSON.stringify(updated)) } catch (_) {}
+      return updated
+    })
+
+    setProfileClaims((prev) => {
+      const updated = prev.map((cl: any) => {
+        if (
+          (claimId && cl.id === claimId) ||
+          cl.company_id === companyId ||
+          (compName && cl.company_name?.toLowerCase() === compName.toLowerCase())
+        ) {
+          return { ...cl, status: 'rejected', rejection_reason: reason, updated_at: new Date().toISOString() }
+        }
+        return cl
+      })
+      try { localStorage.setItem('admin_profile_claims_cache', JSON.stringify(updated)) } catch (_) {}
+      return updated
+    })
+
+    setRejectionReasonInput('')
+    if (selectedCompanyModal?.id === companyId) setSelectedCompanyModal(null)
+    setActionToast({ type: 'info', message: `Claim for "${compName || 'Supplier'}" rejected.` })
+
+    // 2. Persist to server API
     try {
       await fetch('/api/profile-claims', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ company_id: companyId, action: 'reject', rejection_reason: reason }),
+        body: JSON.stringify({
+          id: claimId,
+          company_id: companyId,
+          company_name: compName,
+          action: 'reject',
+          rejection_reason: reason,
+        }),
       })
     } catch (_) {}
-    try {
-      await supabase
-        .from('profile_claims')
-        .update({
-          status: 'rejected',
-          rejection_reason: reason,
-          updated_at: new Date().toISOString(),
-        })
-        .eq('company_id', companyId)
-    } catch (_) {}
-    setRejectionReasonInput('')
+
+    // 3. Sync
     await reloadCompanies()
-    if (selectedCompanyModal?.id === companyId) setSelectedCompanyModal(null)
   }
 
   // ── Confirmation Modal States ──
