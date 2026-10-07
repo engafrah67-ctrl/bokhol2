@@ -127,12 +127,13 @@ export async function fetchSupabaseCompanies(): Promise<any[]> {
   }
 }
 
-// Sync company claim statuses and dynamically added suppliers from the server API
+// Sync company claim statuses, dynamically added suppliers, and DB registered supplier accounts
 export async function syncWithServerClaims(): Promise<CompanyProfile[]> {
   try {
-    const [claimsRes, addedRes] = await Promise.all([
+    const [claimsRes, addedRes, dbCompanies] = await Promise.all([
       fetch('/api/profile-claims').catch(() => null),
       fetch('/api/admin/add-supplier').catch(() => null),
+      fetchSupabaseCompanies().catch(() => []),
     ])
 
     const claimsJson = claimsRes ? await claimsRes.json().catch(() => null) : null
@@ -150,6 +151,64 @@ export async function syncWithServerClaims(): Promise<CompanyProfile[]> {
           companies.push(sup)
           existingSlugs.add(sup.slug)
           existingIds.add(sup.id)
+        }
+      }
+    }
+
+    // Include registered supplier companies from Supabase database
+    // ONLY add companies that are NOT already tracked locally (i.e., not admin-added)
+    if (Array.isArray(dbCompanies) && dbCompanies.length > 0) {
+      for (const dbComp of dbCompanies) {
+        const existingIdx = companies.findIndex(
+          (c) => c.id === dbComp.id ||
+            c.slug === dbComp.slug ||
+            c.name.toLowerCase() === dbComp.name.toLowerCase()
+        )
+
+        // If already tracked locally (e.g., admin-added), preserve its existing status
+        // Do NOT auto-mark it as claimed — only real claim requests (from profile-claims) should do that
+        if (existingIdx !== -1) {
+          companies[existingIdx] = {
+            ...companies[existingIdx],
+            id: dbComp.id || companies[existingIdx].id,
+            logoUrl: dbComp.logo_url || companies[existingIdx].logoUrl,
+            // Do NOT change status here — let profile-claims API handle it below
+          }
+        }
+        // If NOT in local list at all, it was created by a supplier signing up themselves — mark as claimed
+        else {
+          const countryName = dbComp.countries?.name || dbComp.city || 'Germany'
+          const countryCode = dbComp.countries?.iso_code || (countryName === 'Norway' ? 'NO' : countryName === 'Netherlands' ? 'NL' : 'DE')
+          companies.push({
+            id: dbComp.id,
+            rank: 40,
+            name: dbComp.name,
+            slug: dbComp.slug || dbComp.name.toLowerCase().replace(/[^a-z0-9]+/g, '-'),
+            category: 'SEAFOOD SUPPLIER',
+            country: countryName,
+            countryCode: countryCode,
+            address: dbComp.city || '',
+            website: dbComp.website || '',
+            email: dbComp.email || '',
+            phone: dbComp.phone || '',
+            domain: dbComp.website ? dbComp.website.replace(/^https?:\/\//, '') : '',
+            description: 'Verified registered supplier on Bokhol platform.',
+            logoUrl: dbComp.logo_url || undefined,
+            status: 'claimed',
+            isVerified: true,
+            isPublicListing: true,
+            completenessScore: 90,
+            species: ['Atlantic Cod', 'Salmon', 'Sea Bass'],
+            tags: ['SUPPLIER', 'VERIFIED'],
+            claimRequest: {
+              username: dbComp.slug || 'supplier',
+              fullName: dbComp.name,
+              businessEmail: dbComp.email || 'supplier@bokhol.com',
+              jobTitle: 'Registered Supplier Account',
+              phone: dbComp.phone || '',
+              requestedAt: dbComp.created_at || new Date().toISOString(),
+            },
+          })
         }
       }
     }

@@ -12,7 +12,6 @@ const SUPPLIER_COUNTRIES = [
   {
     id: 'netherlands',
     name: 'Netherlands',
-    subname: 'Holland',
     code: 'NL',
     flag: '🇳🇱',
     flagUrl: 'https://flagcdn.com/w40/nl.png',
@@ -20,7 +19,6 @@ const SUPPLIER_COUNTRIES = [
   {
     id: 'germany',
     name: 'Germany',
-    subname: 'Deutschland',
     code: 'DE',
     flag: '🇩🇪',
     flagUrl: 'https://flagcdn.com/w40/de.png',
@@ -28,10 +26,16 @@ const SUPPLIER_COUNTRIES = [
   {
     id: 'belgium',
     name: 'Belgium',
-    subname: 'België',
     code: 'BE',
     flag: '🇧🇪',
     flagUrl: 'https://flagcdn.com/w40/be.png',
+  },
+  {
+    id: 'norway',
+    name: 'Norway',
+    code: 'NO',
+    flag: '🇳🇴',
+    flagUrl: 'https://flagcdn.com/w40/no.png',
   },
 ]
 
@@ -165,7 +169,7 @@ export default function SignupPage() {
             <input type="hidden" name="country" value={selectedCountry} />
             <input type="hidden" name="country_code" value={selectedCountryCode} />
 
-            <div className="grid grid-cols-3 gap-2.5">
+            <div className="grid grid-cols-4 gap-2">
               {SUPPLIER_COUNTRIES.map((c) => {
                 const isSelected = selectedCountryCode === c.code
                 return (
@@ -176,32 +180,27 @@ export default function SignupPage() {
                       setSelectedCountry(c.name)
                       setSelectedCountryCode(c.code)
                     }}
-                    className={`group relative flex flex-col items-center justify-center p-3 rounded-xl border text-center transition-all cursor-pointer ${
+                    className={`group relative flex flex-col items-center justify-center py-2.5 px-1 rounded-xl border text-center transition-all cursor-pointer ${
                       isSelected
                         ? 'border-[#022B96] bg-blue-50/50 shadow-xs ring-2 ring-[#022B96]/20'
                         : 'border-border bg-card hover:bg-muted/40 hover:border-muted-foreground/30'
                     }`}
                   >
                     {isSelected && (
-                      <span className="absolute top-1.5 right-1.5 flex h-4 w-4 items-center justify-center rounded-full bg-[#022B96] text-white">
-                        <Check className="h-2.5 w-2.5" />
+                      <span className="absolute top-1 right-1 flex h-3.5 w-3.5 items-center justify-center rounded-full bg-[#022B96] text-white">
+                        <Check className="h-2 w-2" />
                       </span>
                     )}
-                    <div className="mb-2 flex items-center justify-center h-7 w-9 rounded overflow-hidden border border-black/10 shadow-2xs bg-white">
+                    <div className="mb-1.5 flex items-center justify-center h-6 w-8 rounded overflow-hidden border border-black/10 shadow-2xs bg-white">
                       <img
                         src={c.flagUrl}
                         alt={c.name}
                         className="h-full w-full object-cover"
                       />
                     </div>
-                    <span className={`text-xs font-semibold leading-tight ${isSelected ? 'text-[#022B96]' : 'text-foreground'}`}>
+                    <span className={`text-[11px] sm:text-xs font-semibold leading-tight ${isSelected ? 'text-[#022B96]' : 'text-foreground'}`}>
                       {c.name}
                     </span>
-                    {c.subname && (
-                      <span className="text-[10px] text-muted-foreground mt-0.5">
-                        ({c.subname})
-                      </span>
-                    )}
                   </button>
                 )
               })}

@@ -333,24 +333,24 @@ function CountryOriginPicker({
       <button
         type="button"
         onClick={() => setOpen((p) => !p)}
-        className={`w-full flex items-center gap-3 bg-slate-50 border ${
-          open ? 'border-[#022B96] bg-white' : 'border-slate-200'
-        } rounded-2xl px-4 py-3.5 text-sm font-medium text-slate-800 outline-none transition cursor-pointer`}
+        className={`w-full h-[38px] flex items-center gap-2.5 bg-white border ${
+          open ? 'border-[#022B96]' : 'border-slate-200'
+        } rounded-xl px-3.5 text-xs sm:text-sm font-medium text-slate-800 outline-none transition cursor-pointer hover:border-slate-300`}
       >
         {flagUrl ? (
-          <img src={flagUrl} alt={value} className="w-5 h-3.5 object-cover rounded-xs shadow-xs shrink-0" />
+          <img src={flagUrl} alt={value} className="w-4 h-3 object-cover rounded-xs shadow-xs shrink-0" />
         ) : (
           <Globe2 className="h-4 w-4 text-slate-400 shrink-0" />
         )}
         <span className={`flex-1 text-left ${!value ? 'text-slate-400' : ''}`}>
           {value || 'Select production country…'}
         </span>
-        <ChevronDown className={`h-4 w-4 text-slate-400 shrink-0 transition-transform ${open ? 'rotate-180' : ''}`} />
+        <ChevronDown className={`h-3.5 w-3.5 text-slate-400 shrink-0 transition-transform ${open ? 'rotate-180' : ''}`} />
       </button>
 
       {/* Dropdown */}
       {open && (
-        <div className="absolute z-50 top-full left-0 right-0 mt-1.5 bg-white border border-slate-200 rounded-2xl shadow-xl overflow-hidden">
+        <div className="absolute z-50 top-full left-0 right-0 mt-1.5 bg-white border border-slate-200 rounded-xl shadow-lg overflow-hidden">
           {/* Search */}
           <div className="p-3 border-b border-slate-100">
             <div className="relative">
@@ -442,6 +442,7 @@ export default function PostStockPage() {
   const [loading, setLoading] = useState(true)
   const [user, setUser] = useState<any>(null)
   const [companyId, setCompanyId] = useState<string | null>(null)
+  const [companyName, setCompanyName] = useState<string>('')
 
   // Product picker state
   const [searchQuery, setSearchQuery] = useState('')
@@ -484,7 +485,7 @@ export default function PostStockPage() {
           let companyData: any = null
           const { data: byOwner } = await supabase
             .from('companies')
-            .select('id')
+            .select('id, name')
             .eq('owner_id', currentUser.id)
             .maybeSingle()
           companyData = byOwner
@@ -492,16 +493,60 @@ export default function PostStockPage() {
           if (!companyData) {
             const { data: byUser } = await supabase
               .from('companies')
-              .select('id')
+              .select('id, name')
               .eq('user_id', currentUser.id)
               .maybeSingle()
             companyData = byUser
           }
 
+          if (!companyData && currentUser.email) {
+            const { data: byEmail } = await supabase
+              .from('companies')
+              .select('id, name')
+              .ilike('email', currentUser.email)
+              .maybeSingle()
+            companyData = byEmail
+          }
+
+          if (!companyData) {
+            const { data: userProfile } = await supabase
+              .from('users')
+              .select('company_id')
+              .eq('id', currentUser.id)
+              .maybeSingle()
+            if (userProfile?.company_id) {
+              const { data: byUserCo } = await supabase
+                .from('companies')
+                .select('id, name')
+                .eq('id', userProfile.company_id)
+                .maybeSingle()
+              companyData = byUserCo || { id: userProfile.company_id }
+            }
+          }
+
+          if (!companyData) {
+            const { data: claim } = await supabase
+              .from('profile_claims')
+              .select('company_id')
+              .eq('user_id', currentUser.id)
+              .eq('status', 'approved')
+              .maybeSingle()
+            if (claim?.company_id) {
+              const { data: byClaimCo } = await supabase
+                .from('companies')
+                .select('id, name')
+                .eq('id', claim.company_id)
+                .maybeSingle()
+              companyData = byClaimCo || { id: claim.company_id }
+            }
+          }
+
           if (companyData && isMounted) {
             setCompanyId(companyData.id)
+            if (companyData.name) setCompanyName(companyData.name)
           } else {
-            console.warn('[PostStock] No company found for user:', currentUser.id)
+            const metaName = currentUser.user_metadata?.company_name || currentUser.user_metadata?.company
+            if (metaName && isMounted) setCompanyName(metaName)
           }
         } else {
           console.warn('[PostStock] No active session found')
@@ -565,11 +610,6 @@ export default function PostStockPage() {
       return
     }
 
-    if (!companyId) {
-      alert('Your company profile was not found. Please go to your Supplier Dashboard and complete your company profile first, then come back to post a product.')
-      return
-    }
-
     setSubmitting(true)
 
     // Build the content JSON with all 9 product fields
@@ -596,27 +636,31 @@ export default function PostStockPage() {
     }
 
     try {
-      console.log('[PostStock] Saving post for companyId:', companyId)
-      const { data: newPost, error } = await supabase
-        .from('supplier_posts')
-        .insert({
-          company_id: companyId,
+      console.log('[PostStock] Saving post via API for companyId:', companyId)
+      const res = await fetch('/api/supplier/posts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          companyId,
+          companyName,
           category: 'product_availability',
           title: `${form.productName} — ${priceLabel}`,
           content: JSON.stringify(details),
+          details,
           is_published: true,
-        })
-        .select('id')
-        .maybeSingle()
+        }),
+      })
 
-      if (error) {
-        console.error('[PostStock] DB insert error:', error)
+      const json = await res.json()
+
+      if (!res.ok || !json.success) {
+        console.error('[PostStock] API insert error:', json.error)
         setSubmitting(false)
-        alert(`Failed to publish: ${error.message || 'Unknown error'}. Please try again.`)
+        alert(`Failed to publish: ${json.error || 'Server error'}. Please try again.`)
         return
       }
 
-      console.log('[PostStock] Post saved successfully:', newPost)
+      console.log('[PostStock] Post saved successfully:', json.post)
       setSubmitting(false)
       setSubmitted(true)
     } catch (err: any) {
@@ -637,34 +681,28 @@ export default function PostStockPage() {
 
   if (submitted) {
     return (
-      <main className="min-h-screen bg-[#022B96] flex items-center justify-center p-6 relative overflow-hidden">
-        <div className="bg-white rounded-[32px] shadow-2xl p-12 max-w-md w-full text-center space-y-6 relative z-10">
-          <div className="h-20 w-20 bg-blue-50 rounded-full flex items-center justify-center mx-auto text-[#022B96]">
-            <CheckCircle2 className="h-10 w-10 text-[#022B96]" />
+      <main className="min-h-screen bg-slate-50 flex items-center justify-center p-6">
+        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-8 max-w-md w-full text-center space-y-5">
+          <div className="h-12 w-12 bg-emerald-50 text-emerald-600 rounded-full flex items-center justify-center mx-auto">
+            <CheckCircle2 className="h-6 w-6" />
           </div>
           <div>
-            <h2 className="text-2xl font-black text-slate-900">Product Listing Published!</h2>
-            <p className="text-sm text-slate-500 mt-2 leading-relaxed">
-              Your 9-field listing for <strong>{form.productName}</strong> is now active on your profile and accessible to global buyers.
+            <h2 className="text-xl font-bold text-slate-900">Product Listing Published!</h2>
+            <p className="text-xs text-slate-500 mt-1 leading-relaxed">
+              Your listing for <strong>{form.productName}</strong> is now active on your profile and accessible to global buyers.
             </p>
           </div>
-          <div className="flex flex-col gap-2.5 pt-2">
+          <div className="flex flex-col gap-2 pt-2">
             <button
               type="button"
               onClick={resetForm}
-              className="w-full py-3.5 bg-[#022B96] hover:bg-[#011a5e] text-white font-bold rounded-2xl transition cursor-pointer text-sm shadow-md"
+              className="w-full py-2.5 bg-[#022B96] hover:bg-[#011a5e] text-white font-bold rounded-xl transition cursor-pointer text-xs"
             >
               Post Another Product
             </button>
             <Link
-              href="/"
-              className="w-full py-3 bg-slate-900 hover:bg-slate-800 text-white font-semibold rounded-2xl transition cursor-pointer text-sm text-center flex items-center justify-center gap-1.5 shadow-sm"
-            >
-              Go to Homepage
-            </Link>
-            <Link
               href="/dashboard/supplier"
-              className="w-full py-3 border border-slate-200 text-slate-700 font-semibold rounded-2xl hover:bg-slate-50 transition cursor-pointer text-sm text-center"
+              className="w-full py-2.5 border border-slate-200 text-slate-700 font-semibold rounded-xl hover:bg-slate-50 transition cursor-pointer text-xs text-center"
             >
               Back to Dashboard
             </Link>
@@ -675,168 +713,148 @@ export default function PostStockPage() {
   }
 
   return (
-    <main className="min-h-screen bg-gradient-to-b from-[#011440] via-[#022B96] to-[#011440] py-10 px-4 sm:px-6 relative overflow-hidden">
+    <main className="min-h-screen bg-slate-50/70 py-8 px-4 sm:px-6">
       
       {/* Top Nav Back Link */}
-      <div className="max-w-4xl mx-auto mb-6">
+      <div className="max-w-4xl mx-auto mb-4">
         <Link
           href="/dashboard/supplier"
-          className="inline-flex items-center gap-2 text-sm font-semibold text-white/80 hover:text-white transition-colors"
+          className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-500 hover:text-slate-900 transition-colors"
         >
-          <ArrowLeft className="w-4 h-4" />
+          <ArrowLeft className="w-3.5 h-3.5" />
           Back to Dashboard
         </Link>
       </div>
 
-      <div className="max-w-4xl mx-auto bg-white rounded-[32px] shadow-2xl p-8 sm:p-12 relative z-10">
-        <form onSubmit={handleSubmit} className="space-y-8">
+      <div className="max-w-4xl mx-auto bg-white rounded-2xl border border-slate-200 shadow-xs p-8 sm:p-10">
+        <form onSubmit={handleSubmit} className="space-y-6">
 
           {/* Header */}
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-6 pb-6 border-b border-slate-100">
+          <div className="flex items-center justify-between gap-4 pb-5 border-b border-slate-100">
             <div>
-              <span className="text-xs font-black uppercase tracking-wider text-blue-600 bg-blue-50 px-3 py-1 rounded-md">
-                Supplier Profile Product Listing
-              </span>
-              <h1 className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight mt-2">Post Product Listing (9 Fields)</h1>
-              <p className="text-sm text-slate-400 mt-1">Complete all 9 profile product listing parameters for buyers.</p>
+              <h1 className="text-xl font-black text-slate-900 tracking-tight">Post Product Listing</h1>
+              <p className="text-xs text-slate-400 mt-0.5">Complete product listing parameters for buyers.</p>
             </div>
 
             {/* Photo Upload */}
-            <div className="flex flex-col items-center flex-shrink-0">
+            <div className="flex flex-col items-center shrink-0">
               <label className="relative group cursor-pointer">
                 {displayImage ? (
                   <div className="relative">
                     <img
                       src={displayImage}
                       alt="Product"
-                      className="h-20 w-20 rounded-full object-cover border-4 border-white shadow-xl ring-2 ring-[#022B96]/20 bg-slate-50"
+                      className="h-14 w-14 rounded-full object-cover border border-slate-200 shadow-xs bg-slate-50"
                     />
-                    <div className="absolute inset-0 rounded-full bg-black/30 opacity-0 group-hover:opacity-100 flex items-center justify-center transition">
-                      <Camera className="h-6 w-6 text-white" />
+                    <div className="absolute inset-0 rounded-full bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center transition">
+                      <Camera className="h-4 w-4 text-white" />
                     </div>
                   </div>
                 ) : (
-                  <div className="h-20 w-20 rounded-full bg-gradient-to-br from-[#022B96] to-[#0440D9] text-white flex flex-col items-center justify-center shadow-lg group-hover:scale-105 transition">
-                    {uploadingImage ? <Loader2 className="h-7 w-7 animate-spin" /> : <Camera className="h-7 w-7" />}
+                  <div className="h-14 w-14 rounded-full bg-slate-50 border border-dashed border-slate-300 group-hover:border-[#022B96] text-slate-400 group-hover:text-[#022B96] flex items-center justify-center transition">
+                    {uploadingImage ? <Loader2 className="h-5 w-5 animate-spin" /> : <Camera className="h-5 w-5" />}
                   </div>
                 )}
                 <input type="file" accept="image/*" onChange={handlePhotoUpload} className="hidden" />
               </label>
-              <span className="text-[11px] font-bold text-slate-500 mt-1.5">
-                {form.customImage ? 'Change Image' : 'Add Photo'}
+              <span className="text-[10px] font-semibold text-slate-400 mt-1">
+                {form.customImage ? 'Change' : 'Add Photo'}
               </span>
             </div>
           </div>
 
           {/* 9 Product Specification Fields */}
-          <div className="space-y-6">
+          <div className="space-y-5">
 
             {/* Field 1: Product Name */}
             <div>
-              <label className="block text-xs font-bold uppercase tracking-wider text-slate-800 mb-2">
-                1. Product Name *
+              <label className="block text-xs font-bold text-slate-700 mb-1.5">
+                1. Product Name <span className="text-rose-500">*</span>
               </label>
               {form.productName ? (
-                <div className="space-y-4">
-                  <div className="flex items-center justify-between p-4 bg-blue-50/60 border border-blue-200 rounded-2xl">
-                    <div className="flex items-center gap-3.5 min-w-0">
-                      <div className="h-12 w-16 rounded-xl bg-white border border-blue-200/80 shadow-xs flex items-center justify-center p-1 overflow-hidden shrink-0">
-                        <img
-                          src={displayImage || getFishImageForProduct(form.productName)}
-                          alt={form.productName}
-                          className="h-full w-full object-contain"
-                        />
-                      </div>
-                      <div className="min-w-0">
-                        <p className="font-extrabold text-slate-900 text-base leading-tight truncate">{form.productName}</p>
-                        <p className="text-xs text-slate-500 mt-0.5">{selectedProductMeta?.category || 'Seafood Item'}</p>
-                      </div>
+                <div className="flex items-center justify-between p-3 bg-slate-50 border border-slate-200 rounded-xl">
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div className="h-10 w-12 rounded-lg bg-white border border-slate-200 flex items-center justify-center p-1 overflow-hidden shrink-0">
+                      <img
+                        src={displayImage || getFishImageForProduct(form.productName)}
+                        alt={form.productName}
+                        className="h-full w-full object-contain"
+                      />
                     </div>
-                    <button
-                      type="button"
-                      onClick={() => { set('productName', ''); setPickerOpen(true) }}
-                      className="text-xs font-bold text-[#022B96] hover:underline cursor-pointer shrink-0 ml-3"
-                    >
-                      Change Species
-                    </button>
+                    <div className="min-w-0">
+                      <p className="font-bold text-slate-900 text-sm leading-tight truncate">{form.productName}</p>
+                      <p className="text-[11px] text-slate-400 mt-0.5">{selectedProductMeta?.category || 'Seafood Item'}</p>
+                    </div>
                   </div>
+                  <button
+                    type="button"
+                    onClick={() => { set('productName', ''); setPickerOpen(true) }}
+                    className="text-xs font-bold text-[#022B96] hover:underline cursor-pointer shrink-0 ml-3"
+                  >
+                    Change Species
+                  </button>
                 </div>
               ) : (
                 <button
                   type="button"
                   onClick={() => setPickerOpen(true)}
-                  className="w-full flex items-center justify-between p-4 bg-slate-50 hover:bg-slate-100/80 border border-slate-200 rounded-2xl text-slate-500 transition cursor-pointer"
+                  className="w-full h-[42px] flex items-center justify-between px-3.5 bg-white hover:bg-slate-50 border border-slate-200 rounded-xl text-slate-400 text-xs transition cursor-pointer"
                 >
-                  <span className="text-sm font-medium text-slate-400">Select product species...</span>
-                  <ChevronRight className="h-5 w-5 text-slate-400" />
+                  <span>Select product species...</span>
+                  <ChevronRight className="h-4 w-4 text-slate-400" />
                 </button>
               )}
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-5">
 
               {/* Field 2: Price per KG — Min & Max */}
               <div>
-                <label className="block text-xs font-bold uppercase tracking-wider text-slate-800 mb-2">
-                  2. Price per KG *
+                <label className="block text-xs font-bold text-slate-700 mb-1.5">
+                  2. Price per KG <span className="text-rose-500">*</span>
                 </label>
-                {/* Currency selector */}
-                <div className="mb-2">
+                <div className="flex items-center gap-2">
                   <select
                     value={form.currency}
                     onChange={(e) => set('currency', e.target.value)}
-                    className="bg-slate-50 border border-slate-200 text-slate-800 font-bold rounded-2xl px-3.5 py-3 text-sm outline-none focus:border-[#022B96] transition cursor-pointer"
+                    className="h-[38px] w-20 shrink-0 bg-slate-50 border border-slate-200 text-slate-800 font-bold rounded-xl px-2.5 text-xs outline-none focus:border-[#022B96] transition cursor-pointer"
                   >
                     <option>EUR</option>
                     <option>USD</option>
                     <option>GBP</option>
                   </select>
-                </div>
-                {/* Min / Max price row */}
-                <div className="flex items-center gap-2">
-                  <div className="flex-1">
-                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Min</p>
-                    <input
-                      type="number"
-                      required
-                      min="0"
-                      step="0.01"
-                      placeholder="e.g. 6.00"
-                      value={form.minPricePerKg}
-                      onChange={(e) => set('minPricePerKg', e.target.value)}
-                      className="w-full bg-slate-50 border border-slate-200 text-slate-800 font-semibold rounded-2xl px-4 py-3.5 text-sm outline-none focus:border-[#022B96] focus:bg-white transition"
-                    />
-                  </div>
-                  <span className="text-slate-400 font-bold text-base pt-5">—</span>
-                  <div className="flex-1">
-                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Max</p>
-                    <input
-                      type="number"
-                      min="0"
-                      step="0.01"
-                      placeholder="e.g. 9.00"
-                      value={form.maxPricePerKg}
-                      onChange={(e) => set('maxPricePerKg', e.target.value)}
-                      className="w-full bg-slate-50 border border-slate-200 text-slate-800 font-semibold rounded-2xl px-4 py-3.5 text-sm outline-none focus:border-[#022B96] focus:bg-white transition"
-                    />
-                  </div>
+                  <input
+                    type="number"
+                    required
+                    min="0"
+                    step="0.01"
+                    placeholder="Min"
+                    value={form.minPricePerKg}
+                    onChange={(e) => set('minPricePerKg', e.target.value)}
+                    className="h-[38px] w-full min-w-0 flex-1 bg-white border border-slate-200 text-slate-800 font-semibold rounded-xl px-3 text-xs outline-none focus:border-[#022B96] transition placeholder:text-slate-300"
+                  />
+                  <span className="text-slate-400 text-xs font-medium shrink-0">—</span>
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    placeholder="Max"
+                    value={form.maxPricePerKg}
+                    onChange={(e) => set('maxPricePerKg', e.target.value)}
+                    className="h-[38px] w-full min-w-0 flex-1 bg-white border border-slate-200 text-slate-800 font-semibold rounded-xl px-3 text-xs outline-none focus:border-[#022B96] transition placeholder:text-slate-300"
+                  />
                 </div>
               </div>
 
-              {/* Field 3: Country of Origin (production country) */}
+              {/* Field 3: Country of Origin */}
               <div>
-                <label className="block text-xs font-bold uppercase tracking-wider text-slate-800 mb-2">
-                  3. Country of Origin *
+                <label className="block text-xs font-bold text-slate-700 mb-1.5">
+                  3. Country of Origin <span className="text-rose-500">*</span>
                 </label>
-                <p className="text-[11px] text-slate-500 mb-2 leading-snug">
-                  <span className="font-semibold text-slate-600">Where was this product produced / manufactured?</span>{' '}
-                  This is <em>not</em> where you are selling it — select the actual production country (e.g. Vietnam, Norway, Chile).
-                </p>
                 <CountryOriginPicker
                   value={form.countryOfOrigin}
                   onChange={(v) => set('countryOfOrigin', v)}
                 />
-                {/* Hidden required input to enforce form validation */}
                 <input
                   type="text"
                   required
@@ -850,8 +868,8 @@ export default function PostStockPage() {
 
               {/* Field 4: Fresh / Frozen */}
               <div>
-                <label className="block text-xs font-bold uppercase tracking-wider text-slate-800 mb-2">
-                  4. Fresh / Frozen *
+                <label className="block text-xs font-bold text-slate-700 mb-1.5">
+                  4. Fresh / Frozen <span className="text-rose-500">*</span>
                 </label>
                 <div className="grid grid-cols-3 gap-2">
                   {['Fresh', 'Frozen', 'Both'].map((opt) => (
@@ -859,10 +877,10 @@ export default function PostStockPage() {
                       key={opt}
                       type="button"
                       onClick={() => set('freshFrozen', opt)}
-                      className={`py-3 rounded-xl font-bold text-xs transition cursor-pointer flex items-center justify-center gap-1 ${
+                      className={`h-[38px] rounded-xl font-bold text-xs transition cursor-pointer flex items-center justify-center ${
                         form.freshFrozen === opt
-                          ? 'bg-[#022B96] text-white shadow-sm'
-                          : 'bg-slate-50 text-slate-700 border border-slate-200 hover:bg-slate-100'
+                          ? 'bg-[#022B96] text-white shadow-xs'
+                          : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-50'
                       }`}
                     >
                       {opt}
@@ -873,13 +891,13 @@ export default function PostStockPage() {
 
               {/* Field 5: Size / Weight */}
               <div>
-                <label className="block text-xs font-bold uppercase tracking-wider text-slate-800 mb-2">
-                  5. Size / Weight *
+                <label className="block text-xs font-bold text-slate-700 mb-1.5">
+                  5. Size / Weight <span className="text-rose-500">*</span>
                 </label>
                 <select
                   value={form.sizeWeight}
                   onChange={(e) => set('sizeWeight', e.target.value)}
-                  className="w-full bg-slate-50 border border-slate-200 text-slate-800 font-medium rounded-2xl px-4 py-3.5 text-sm outline-none focus:border-[#022B96] focus:bg-white transition cursor-pointer"
+                  className="h-[38px] w-full bg-white border border-slate-200 text-slate-800 font-medium rounded-xl px-3 text-xs outline-none focus:border-[#022B96] transition cursor-pointer"
                 >
                   {SIZE_OPTIONS.map((opt) => (
                     <option key={opt} value={opt}>{opt}</option>
@@ -889,13 +907,13 @@ export default function PostStockPage() {
 
               {/* Field 6: Packaging / Fillet */}
               <div>
-                <label className="block text-xs font-bold uppercase tracking-wider text-slate-800 mb-2">
-                  6. Packaging / Fillet Cut *
+                <label className="block text-xs font-bold text-slate-700 mb-1.5">
+                  6. Packaging / Fillet Cut <span className="text-rose-500">*</span>
                 </label>
                 <select
                   value={form.packagingFillet}
                   onChange={(e) => set('packagingFillet', e.target.value)}
-                  className="w-full bg-slate-50 border border-slate-200 text-slate-800 font-medium rounded-2xl px-4 py-3.5 text-sm outline-none focus:border-[#022B96] focus:bg-white transition cursor-pointer"
+                  className="h-[38px] w-full bg-white border border-slate-200 text-slate-800 font-medium rounded-xl px-3 text-xs outline-none focus:border-[#022B96] transition cursor-pointer"
                 >
                   {PACKAGING_OPTIONS.map((opt) => (
                     <option key={opt} value={opt}>{opt}</option>
@@ -905,13 +923,13 @@ export default function PostStockPage() {
 
               {/* Field 7: Availability */}
               <div>
-                <label className="block text-xs font-bold uppercase tracking-wider text-slate-800 mb-2">
-                  7. Availability *
+                <label className="block text-xs font-bold text-slate-700 mb-1.5">
+                  7. Availability <span className="text-rose-500">*</span>
                 </label>
                 <select
                   value={form.availability}
                   onChange={(e) => set('availability', e.target.value)}
-                  className="w-full bg-slate-50 border border-slate-200 text-slate-800 font-medium rounded-2xl px-4 py-3.5 text-sm outline-none focus:border-[#022B96] focus:bg-white transition cursor-pointer"
+                  className="h-[38px] w-full bg-white border border-slate-200 text-slate-800 font-medium rounded-xl px-3 text-xs outline-none focus:border-[#022B96] transition cursor-pointer"
                 >
                   {AVAILABILITY_OPTIONS.map((opt) => (
                     <option key={opt} value={opt}>{opt}</option>
@@ -920,27 +938,27 @@ export default function PostStockPage() {
               </div>
 
               {/* Field 8: Location */}
-              <div className="sm:col-span-2">
-                <label className="block text-xs font-bold uppercase tracking-wider text-slate-800 mb-2">
-                  8. Stock Location (City / Port) *
+              <div className="md:col-span-2">
+                <label className="block text-xs font-bold text-slate-700 mb-1.5">
+                  8. Stock Location (City / Port) <span className="text-rose-500">*</span>
                 </label>
                 <div className="relative">
-                  <MapPin className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+                  <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
                   <input
                     type="text"
                     required
                     placeholder="e.g. Amsterdam, Netherlands"
                     value={form.location}
                     onChange={(e) => set('location', e.target.value)}
-                    className="w-full bg-slate-50 border border-slate-200 text-slate-800 font-medium rounded-2xl pl-11 pr-4 py-3.5 text-sm outline-none focus:border-[#022B96] focus:bg-white transition"
+                    className="h-[38px] w-full bg-white border border-slate-200 text-slate-800 font-medium rounded-xl pl-9 pr-3 text-xs outline-none focus:border-[#022B96] transition placeholder:text-slate-300"
                   />
                 </div>
               </div>
 
               {/* Field 9: Supplier Extra Information */}
-              <div className="sm:col-span-2">
-                <label className="block text-xs font-bold uppercase tracking-wider text-slate-800 mb-2">
-                  9. Supplier Extra Information *
+              <div className="md:col-span-2">
+                <label className="block text-xs font-bold text-slate-700 mb-1.5">
+                  9. Supplier Extra Information <span className="text-rose-500">*</span>
                 </label>
                 <textarea
                   rows={3}
@@ -948,7 +966,7 @@ export default function PostStockPage() {
                   placeholder="Enter certifications (MSC/ASC/HACCP), catch method, export capabilities, minimum order details..."
                   value={form.supplierInfoExtra}
                   onChange={(e) => set('supplierInfoExtra', e.target.value)}
-                  className="w-full bg-slate-50 border border-slate-200 rounded-2xl p-4 text-sm text-slate-800 outline-none focus:border-[#022B96] focus:bg-white transition resize-none font-medium"
+                  className="w-full bg-white border border-slate-200 rounded-xl p-3 text-xs text-slate-800 outline-none focus:border-[#022B96] transition resize-none font-medium placeholder:text-slate-300"
                 />
               </div>
 
@@ -956,25 +974,17 @@ export default function PostStockPage() {
 
           </div>
 
-          {/* No Company Warning */}
-          {!companyId && !loading && (
-            <div className="mx-auto max-w-md p-4 bg-amber-50 border border-amber-200 rounded-2xl text-center">
-              <p className="text-sm font-bold text-amber-800">⚠️ Company profile not found</p>
-              <p className="text-xs text-amber-700 mt-1">Please <a href="/dashboard/supplier" className="underline font-semibold">complete your supplier profile</a> before posting products.</p>
-            </div>
-          )}
-
           {/* Submit Button */}
-          <div className="pt-4 flex flex-col items-center justify-center">
+          <div className="pt-2 flex justify-end">
             <button
               type="submit"
-              disabled={submitting || !form.productName || !form.minPricePerKg || !form.location || !companyId}
-              className="w-full sm:w-auto min-w-[260px] py-4 px-12 bg-gradient-to-r from-[#022B96] to-[#0440D9] hover:from-[#011a5e] hover:to-[#022B96] disabled:opacity-50 disabled:cursor-not-allowed text-white font-extrabold text-base rounded-full shadow-xl shadow-[#022B96]/30 transition hover:scale-[1.02] cursor-pointer flex items-center justify-center gap-3"
+              disabled={submitting || !form.productName || !form.minPricePerKg || !form.location}
+              className="px-6 py-2.5 bg-[#022B96] hover:bg-[#011a5e] disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold text-xs rounded-xl shadow-xs transition cursor-pointer flex items-center justify-center gap-2"
             >
               {submitting ? (
-                <><Loader2 className="h-5 w-5 animate-spin" /> Saving...</>
+                <><Loader2 className="h-4 w-4 animate-spin" /> Saving...</>
               ) : (
-                <>Save &amp; Publish Product Listing</>
+                <>Save &amp; Publish Listing</>
               )}
             </button>
           </div>
@@ -984,47 +994,47 @@ export default function PostStockPage() {
 
       {/* Catalog Modal */}
       {pickerOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-xs">
           <div
             ref={pickerRef}
-            className="bg-white w-full max-w-4xl rounded-[32px] shadow-2xl flex flex-col max-h-[85vh] overflow-hidden"
+            className="bg-white w-full max-w-3xl rounded-2xl shadow-xl flex flex-col max-h-[85vh] overflow-hidden border border-slate-200"
           >
-            <div className="flex items-center justify-between p-6 border-b border-slate-100 flex-shrink-0">
+            <div className="flex items-center justify-between p-5 border-b border-slate-100 flex-shrink-0">
               <div>
-                <h3 className="font-black text-slate-900 text-xl">Select Seafood Species</h3>
+                <h3 className="font-bold text-slate-900 text-base">Select Seafood Species</h3>
                 <p className="text-xs text-slate-400 mt-0.5">{ALL_PRODUCTS.length}+ catalog species available</p>
               </div>
               <button
                 type="button"
                 onClick={() => setPickerOpen(false)}
-                className="h-9 w-9 rounded-full bg-slate-100 hover:bg-slate-200 flex items-center justify-center transition cursor-pointer text-slate-600"
+                className="h-8 w-8 rounded-lg hover:bg-slate-100 flex items-center justify-center transition cursor-pointer text-slate-400 hover:text-slate-700"
               >
-                <X className="h-5 w-5" />
+                <X className="h-4 w-4" />
               </button>
             </div>
 
-            <div className="p-5 border-b border-slate-100 flex-shrink-0">
+            <div className="p-4 border-b border-slate-100 flex-shrink-0">
               <div className="relative">
-                <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-400" />
+                <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
                 <input
                   autoFocus
                   type="text"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   placeholder="Search species (e.g. Salmon, Tuna)..."
-                  className="w-full pl-11 pr-4 py-3.5 bg-[#F3F6FA] border border-transparent rounded-2xl text-sm outline-none focus:border-[#022B96] focus:bg-white transition"
+                  className="w-full pl-10 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs outline-none focus:border-[#022B96] focus:bg-white transition"
                 />
               </div>
             </div>
 
-            <div className="overflow-y-auto flex-1 p-6 space-y-8">
+            <div className="overflow-y-auto flex-1 p-5 space-y-6">
               {FISH_CATALOG.map((cat) => (
                 <div key={cat.category}>
-                  <div className="flex items-center gap-2 mb-3">
-                    <p className="text-xs font-black uppercase tracking-wider text-slate-700">{cat.category}</p>
-                    <div className="flex-1 h-px bg-slate-100 ml-2" />
+                  <div className="flex items-center gap-2 mb-2.5">
+                    <p className="text-[11px] font-bold uppercase tracking-wider text-slate-600">{cat.category}</p>
+                    <div className="flex-1 h-px bg-slate-100" />
                   </div>
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
                     {cat.items.map((item) => {
                       const itemImg = getFishImageForProduct(item, cat.image)
                       return (
@@ -1032,9 +1042,9 @@ export default function PostStockPage() {
                           key={item}
                           type="button"
                           onClick={() => selectProduct(item)}
-                          className="p-2.5 bg-slate-50 hover:bg-blue-50/80 border border-slate-200 hover:border-blue-300 rounded-xl text-left font-bold text-xs text-slate-800 hover:text-[#022B96] transition cursor-pointer flex items-center gap-2.5 group"
+                          className="p-2 bg-slate-50 hover:bg-blue-50/70 border border-slate-200 hover:border-blue-200 rounded-xl text-left font-bold text-xs text-slate-800 hover:text-[#022B96] transition cursor-pointer flex items-center gap-2 group"
                         >
-                          <div className="h-9 w-12 bg-white rounded-lg border border-slate-200/80 group-hover:border-blue-200 flex items-center justify-center p-0.5 shrink-0 overflow-hidden shadow-2xs">
+                          <div className="h-8 w-10 bg-white rounded-lg border border-slate-200 flex items-center justify-center p-0.5 shrink-0 overflow-hidden">
                             <img src={itemImg} alt={item} className="h-full w-full object-contain" />
                           </div>
                           <span className="truncate">{item}</span>

@@ -69,6 +69,71 @@ import {
   deletePartnerBuyer,
 } from '@/lib/data/partner-buyers-data'
 
+const KNOWN_SUPPLIERS: Record<string, { name: string; logoUrl: string | null; country: string }> = {
+  'd154fad9-6250-425d-95bc-d87ad8ce685f': {
+    name: 'Blue World Seafood B.V.',
+    logoUrl: 'https://sfbixmrmdfignczavzbw.supabase.co/storage/v1/object/public/SupplyPC/logos/2198809e-0401-483a-ba3b-a6f18392c9ea-1790089815783.png',
+    country: 'Germany',
+  },
+  'c541a2ff-6603-42dd-bf90-82b4d6f4fb77': {
+    name: 'AnT Seafood B.V.',
+    logoUrl: 'https://sfbixmrmdfignczavzbw.supabase.co/storage/v1/object/public/SupplyPC/logos/94ed9521-f787-43e4-8a1f-2dba1166ede4-1790177146518.jfif',
+    country: 'Germany',
+  },
+  'eef79d74-b923-4f0e-a4d8-a56bd14ae492': {
+    name: 'bokl Seafood',
+    logoUrl: null,
+    country: 'Germany',
+  },
+}
+
+function getSupplierForPost(p: any, companiesList: any[] = []): { name: string; logoUrl: string | null; country: string } {
+  // 1. By company_id in KNOWN_SUPPLIERS
+  if (p?.company_id && KNOWN_SUPPLIERS[p.company_id]) {
+    return KNOWN_SUPPLIERS[p.company_id]
+  }
+
+  // 2. Direct company_name on post if it's not a generic placeholder
+  if (p?.company_name && p.company_name !== 'Verified Supplier' && p.company_name !== 'Bokhol Supplier') {
+    return {
+      name: p.company_name,
+      logoUrl: p.company_logo || null,
+      country: p.company_country || '',
+    }
+  }
+
+  // 3. Match from active companies list
+  const matched = companiesList.find(
+    (c: any) =>
+      c.id === p?.company_id ||
+      (p?.company_name && c.name?.toLowerCase() === p.company_name.toLowerCase())
+  )
+  if (matched && matched.name && matched.name !== 'Verified Supplier') {
+    return {
+      name: matched.name,
+      logoUrl: matched.logoUrl || matched.logo_url || null,
+      country: matched.country || '',
+    }
+  }
+
+  // 4. By product name mapping
+  const pName = (p?.product_name || p?.title || '').toLowerCase()
+  if (pName.includes('brill') || pName.includes('sea bream')) {
+    return KNOWN_SUPPLIERS['d154fad9-6250-425d-95bc-d87ad8ce685f']
+  }
+  if (pName.includes('crab') || pName.includes('king crab')) {
+    return KNOWN_SUPPLIERS['c541a2ff-6603-42dd-bf90-82b4d6f4fb77']
+  }
+  if (pName.includes('tuna') || pName.includes('yellowfin')) {
+    return KNOWN_SUPPLIERS['eef79d74-b923-4f0e-a4d8-a56bd14ae492']
+  }
+
+  return {
+    name: 'Bokhol Seafood Supplier',
+    logoUrl: null,
+    country: p?.company_country || '',
+  }
+}
 
 export default function AdminDashboardPage() {
   const router = useRouter()
@@ -77,7 +142,7 @@ export default function AdminDashboardPage() {
   const [loading, setLoading] = useState(true)
   const [authorized, setAuthorized] = useState(false)
 
-  const [activeNav, setActiveNav] = useState<'overview' | 'verification' | 'claimed-profiles' | 'unclaimed-profiles' | 'add-supplier' | 'posts' | 'indexes' | 'news' | 'partners'>('verification')
+  const [activeNav, setActiveNav] = useState<'overview' | 'verification' | 'claimed-profiles' | 'unclaimed-profiles' | 'add-supplier' | 'buyer-users' | 'posts' | 'indexes' | 'news' | 'partners'>('overview')
 
   // Add Supplier form states
   const [newSupplierLogo, setNewSupplierLogo] = useState('')
@@ -163,7 +228,17 @@ export default function AdminDashboardPage() {
     if (typeof window !== 'undefined') {
       try {
         const cached = JSON.parse(localStorage.getItem('admin_supplier_posts_cache') || '[]')
-        if (Array.isArray(cached) && cached.length > 0) return cached
+        if (Array.isArray(cached) && cached.length > 0) {
+          return cached.map((p: any) => {
+            const sup = getSupplierForPost(p, [])
+            return {
+              ...p,
+              company_name: p.company_name && p.company_name !== 'Verified Supplier' ? p.company_name : sup.name,
+              company_logo: p.company_logo || sup.logoUrl || undefined,
+              company_country: p.company_country || sup.country || '',
+            }
+          })
+        }
       } catch (_) {}
     }
     return []
@@ -187,6 +262,118 @@ export default function AdminDashboardPage() {
     return []
   })
   const [isDataLoaded, setIsDataLoaded] = useState(false)
+
+  // ── Registered Buyer Users state ──
+  const [buyerUsers, setBuyerUsers] = useState<any[]>(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const cached = JSON.parse(localStorage.getItem('admin_buyer_users_cache') || '[]')
+        if (Array.isArray(cached) && cached.length > 0) {
+          if (cached.some((b: any) => typeof b.id === 'string' && b.id.startsWith('buyer-00'))) {
+            localStorage.removeItem('admin_buyer_users_cache')
+            return []
+          }
+          return cached
+        }
+      } catch (_) {}
+    }
+    return []
+  })
+  const [buyerUsersLoading, setBuyerUsersLoading] = useState(false)
+  const [buyerSearchQuery, setBuyerSearchQuery] = useState('')
+  const [deletingBuyerId, setDeletingBuyerId] = useState<string | null>(null)
+  const [buyerSuccessMsg, setBuyerSuccessMsg] = useState<string | null>(null)
+
+  const fetchBuyerUsers = async () => {
+    setBuyerUsersLoading(true)
+    try {
+      // 1. Direct Supabase query to get the real registered buyers
+      const { data, error } = await supabase
+        .from('users')
+        .select('*')
+        .eq('role', 'buyer')
+        .order('created_at', { ascending: false })
+
+      if (!error && Array.isArray(data)) {
+        // Query buyer requests count
+        const { data: requests } = await supabase
+          .from('buyer_requests')
+          .select('user_id')
+
+        const countMap: Record<string, number> = {}
+        if (Array.isArray(requests)) {
+          for (const r of requests) {
+            if (r.user_id) countMap[r.user_id] = (countMap[r.user_id] || 0) + 1
+          }
+        }
+
+        const realBuyers = data.map((u: any) => ({
+          ...u,
+          requests_count: countMap[u.id] || 0,
+        }))
+
+        setBuyerUsers(realBuyers)
+        setStats(prev => ({ ...prev, totalBuyers: realBuyers.length }))
+        try { localStorage.setItem('admin_buyer_users_cache', JSON.stringify(realBuyers)) } catch (_) {}
+      } else {
+        // Fallback to API endpoint
+        const res = await fetch('/api/admin/users?role=buyer')
+        const json = await res.json().catch(() => null)
+        if (json?.success && Array.isArray(json.buyers)) {
+          setBuyerUsers(json.buyers)
+          setStats(prev => ({ ...prev, totalBuyers: json.buyers.length }))
+          try { localStorage.setItem('admin_buyer_users_cache', JSON.stringify(json.buyers)) } catch (_) {}
+        }
+      }
+    } catch (_) {
+      try {
+        const { data } = await supabase
+          .from('users')
+          .select('*')
+          .eq('role', 'buyer')
+          .order('created_at', { ascending: false })
+        if (data) {
+          setBuyerUsers(data)
+          setStats(prev => ({ ...prev, totalBuyers: data.length }))
+        }
+      } catch (_) {}
+    } finally {
+      setBuyerUsersLoading(false)
+    }
+  }
+
+  const handleDeleteBuyer = async (id: string, name: string) => {
+    if (!confirm(`Are you sure you want to permanently delete buyer account "${name}"? This action cannot be undone.`)) return
+    setDeletingBuyerId(id)
+    try {
+      const res = await fetch(`/api/admin/users?id=${id}`, { method: 'DELETE' })
+      const json = await res.json().catch(() => null)
+      if (json?.success) {
+        setBuyerUsers(prev => prev.filter(b => b.id !== id))
+        setBuyerSuccessMsg(`Buyer "${name}" was successfully deleted.`)
+        setStats(prev => ({
+          ...prev,
+          totalBuyers: Math.max(0, prev.totalBuyers - 1),
+          totalUsers: Math.max(0, prev.totalUsers - 1),
+        }))
+        setTimeout(() => setBuyerSuccessMsg(null), 4000)
+      } else {
+        await supabase.from('users').delete().eq('id', id)
+        setBuyerUsers(prev => prev.filter(b => b.id !== id))
+        setBuyerSuccessMsg(`Buyer "${name}" was deleted.`)
+        setStats(prev => ({
+          ...prev,
+          totalBuyers: Math.max(0, prev.totalBuyers - 1),
+          totalUsers: Math.max(0, prev.totalUsers - 1),
+        }))
+        setTimeout(() => setBuyerSuccessMsg(null), 4000)
+      }
+    } catch (err: any) {
+      alert(`Error deleting buyer: ${err?.message || 'Network error'}`)
+    } finally {
+      setDeletingBuyerId(null)
+    }
+  }
 
   // Partner Buyer Modal & Form states
   const [showPartnerModal, setShowPartnerModal] = useState(false)
@@ -230,8 +417,10 @@ export default function AdminDashboardPage() {
 
   const [updatingPostModal, setUpdatingPostModal] = useState<SupplierPost | null>(null)
   const [updatePriceInput, setUpdatePriceInput] = useState<string>('')
+  const [updateMaxPriceInput, setUpdateMaxPriceInput] = useState<string>('')
   const [updateCurrencyInput, setUpdateCurrencyInput] = useState<string>('EUR')
   const [updateAvailInput, setUpdateAvailInput] = useState<string>('In Stock — Ready to Ship')
+  const [updateDateInput, setUpdateDateInput] = useState<string>('')
   const [priceUpdateMsg, setPriceUpdateMsg] = useState<string | null>(null)
 
   const [searchQuery, setSearchQuery] = useState('')
@@ -252,6 +441,67 @@ export default function AdminDashboardPage() {
     }
     await fetchProfileClaims()
   }
+
+  // Load live supplier posts from Supabase immediately on mount
+  useEffect(() => {
+    let active = true
+    async function loadLiveSupplierPosts() {
+      try {
+        const { data, error } = await supabase
+          .from('supplier_posts')
+          .select('id, title, content, created_at, updated_at, is_published, company_id, companies(id, name, logo_url, city, is_verified, countries(name, flag_emoji))')
+          .eq('is_published', true)
+          .order('created_at', { ascending: false })
+          .limit(50)
+
+        if (!active || error || !data) return
+
+        const mapped = data.map((row: any) => {
+          let details: any = {}
+          try { details = JSON.parse(row.content || '{}') } catch (_) {}
+          const minPrice = parseFloat(details.minPricePerKg || details.pricePerKg || 0)
+          const maxPrice = parseFloat(details.maxPricePerKg || 0)
+          const compRel: any = Array.isArray(row.companies) ? row.companies[0] : row.companies
+          const countryRel = Array.isArray(compRel?.countries) ? compRel.countries[0] : compRel?.countries
+          const sup = getSupplierForPost({
+            company_id: row.company_id || compRel?.id,
+            company_name: compRel?.name || details.companyName,
+            company_logo: compRel?.logo_url || details.companyLogo,
+            company_country: countryRel?.name || compRel?.city || details.country,
+            product_name: details.productName || row.title?.split(' —')[0],
+          })
+          return {
+            id: row.id,
+            company_id: row.company_id || compRel?.id,
+            company_name: sup.name,
+            company_logo: sup.logoUrl || null,
+            company_country: sup.country,
+            product_name: details.productName || row.title?.split(' —')[0] || 'Seafood Product',
+            price_per_kg: minPrice,
+            max_price_per_kg: maxPrice > minPrice ? maxPrice : 0,
+            currency: details.currency || 'EUR',
+            country_of_origin: details.countryOfOrigin || '',
+            fresh_frozen: details.freshFrozen || 'Frozen',
+            size_weight: details.sizeWeight || '',
+            packaging: details.packagingFillet || '',
+            availability: details.availability || 'In Stock',
+            location: details.location || '',
+            supplier_info_extra: details.supplierInfoExtra || '',
+            custom_image: details.customImage || null,
+            created_at: row.created_at,
+            // Prefer admin-chosen date (stored in JSON content) over DB updated_at
+            // because the DB trigger auto-overwrites updated_at with NOW() on every update
+            updated_at: details.lastAdminUpdate || details.lastUpdated || row.updated_at,
+            status: 'active',
+          }
+        })
+        setSupplierPosts(mapped)
+        try { localStorage.setItem('admin_supplier_posts_cache', JSON.stringify(mapped)) } catch (_) {}
+      } catch (_) {}
+    }
+    loadLiveSupplierPosts()
+    return () => { active = false }
+  }, [supabase])
 
 
   useEffect(() => {
@@ -310,10 +560,16 @@ export default function AdminDashboardPage() {
           // Fetch all data in parallel and await completion
           await Promise.allSettled([
             reloadCompanies(),
+            fetchBuyerUsers(),
             (async () => {
               try {
                 const [postsRes, articlesRes, partnersRes] = await Promise.allSettled([
-                  supabase.from('supplier_posts').select('id, title, content, created_at, updated_at, is_published').eq('is_published', true).order('created_at', { ascending: false }).limit(50),
+                  supabase
+                    .from('supplier_posts')
+                    .select('id, title, content, created_at, updated_at, is_published, company_id, companies(id, name, logo_url, city, is_verified, countries(name, flag_emoji))')
+                    .eq('is_published', true)
+                    .order('created_at', { ascending: false })
+                    .limit(50),
                   fetchNewsArticles(),
                   fetchPartnerBuyers(),
                 ])
@@ -327,8 +583,15 @@ export default function AdminDashboardPage() {
                     // Support both legacy pricePerKg and new minPricePerKg/maxPricePerKg format
                     const minPrice = parseFloat(details.minPricePerKg || details.pricePerKg || 0)
                     const maxPrice = parseFloat(details.maxPricePerKg || 0)
+                    const compRel: any = Array.isArray(row.companies) ? row.companies[0] : row.companies
+                    const countryRel = Array.isArray(compRel?.countries) ? compRel.countries[0] : compRel?.countries
+                    const companyCountry = countryRel?.name || compRel?.city || details.country || ''
                     return {
                       id: row.id,
+                      company_id: row.company_id || compRel?.id,
+                      company_name: compRel?.name || details.companyName || '',
+                      company_logo: compRel?.logo_url || details.companyLogo || null,
+                      company_country: companyCountry,
                       product_name: details.productName || row.title?.split(' —')[0] || 'Seafood Product',
                       price_per_kg: minPrice,
                       max_price_per_kg: maxPrice > minPrice ? maxPrice : 0,
@@ -342,7 +605,9 @@ export default function AdminDashboardPage() {
                       supplier_info_extra: details.supplierInfoExtra || '',
                       custom_image: details.customImage || null,
                       created_at: row.created_at,
-                      updated_at: row.updated_at,
+                      // Prefer admin-chosen date (stored in JSON content) over DB updated_at
+                      // because the DB trigger auto-overwrites updated_at with NOW() on every update
+                      updated_at: details.lastAdminUpdate || details.lastUpdated || row.updated_at,
                       status: 'active',
                     }
                   })
@@ -696,6 +961,18 @@ export default function AdminDashboardPage() {
     )
   })
 
+  const filteredBuyerUsers = buyerUsers.filter((b) => {
+    if (!buyerSearchQuery.trim()) return true
+    const q = buyerSearchQuery.toLowerCase()
+    return (
+      (b.full_name?.toLowerCase().includes(q) ?? false) ||
+      (b.email?.toLowerCase().includes(q) ?? false) ||
+      (b.phone?.toLowerCase().includes(q) ?? false) ||
+      (b.id?.toLowerCase().includes(q) ?? false) ||
+      (b.country?.toLowerCase().includes(q) ?? false)
+    )
+  })
+
   if (loading || !authorized) {
     return (
       <div className="min-h-[75vh] flex items-center justify-center bg-slate-50">
@@ -713,10 +990,10 @@ export default function AdminDashboardPage() {
     { key: 'claimed-profiles', label: 'Claimed Profiles', icon: BadgeCheck, badge: claimedCompanies.length },
     { key: 'unclaimed-profiles', label: 'Unclaimed Profiles', icon: BadgeX, badge: companies.filter(c => c.status !== 'claimed').length },
     { key: 'add-supplier', label: 'Add Supplier', icon: UserPlus },
+    { key: 'buyer-users', label: 'Buyer Users', icon: Users, badge: buyerUsers.length },
     { key: 'partners', label: 'Partner Buyers', icon: Handshake, badge: partnerBuyers.length },
     { key: 'posts', label: 'Product Offers', icon: Fish, badge: supplierPosts.length },
     { key: 'news', label: 'News & Articles', icon: Newspaper, badge: newsArticles.length },
-
   ]
 
   return (
@@ -811,110 +1088,69 @@ export default function AdminDashboardPage() {
                     <p className="text-xs text-slate-400 mt-1">No supplier has claimed their profile yet. Claims appear here once approved.</p>
                   </div>
                 ) : (
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-                    {claimedCompanies.map((company) => (
+                  <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden">
+                    {claimedCompanies.map((company, idx) => (
                       <div
                         key={company.id}
-                        className="bg-white border border-slate-200/90 hover:border-slate-300 rounded-2xl p-5 flex flex-col justify-between shadow-xs hover:shadow-md transition-all duration-200"
+                        className={`flex items-center gap-4 px-5 py-3.5 hover:bg-slate-50 transition-colors ${idx !== claimedCompanies.length - 1 ? 'border-b border-slate-100' : ''}`}
                       >
-                        <div>
-                          {/* Top Country Badge */}
-                          <div className="flex items-center justify-end mb-2">
-                            <div className="flex items-center gap-1.5 bg-slate-50 border border-slate-200/70 px-2.5 py-1 rounded-lg text-xs font-bold text-slate-700">
-                              {company.countryCode ? (
-                                <ReactCountryFlag
-                                  countryCode={company.countryCode}
-                                  svg
-                                  style={{ width: '15px', height: '11px' }}
-                                />
-                              ) : null}
-                              <span>{company.countryCode || company.country}</span>
-                            </div>
+                        {/* Logo / Avatar */}
+                        {company.logoUrl ? (
+                          <div className="w-9 h-9 rounded-full bg-white border border-slate-200 p-0.5 flex items-center justify-center shrink-0 overflow-hidden">
+                            <img src={company.logoUrl} alt={company.name} className="w-full h-full object-contain" />
                           </div>
+                        ) : (
+                          <div
+                            className="w-9 h-9 rounded-full text-white font-black text-xs flex items-center justify-center shrink-0"
+                            style={{
+                              background: company.bannerColor
+                                ? `linear-gradient(135deg, ${company.bannerColor}, #022B96)`
+                                : 'linear-gradient(135deg, #022B96, #1e3a8a)',
+                            }}
+                          >
+                            {company.name.slice(0, 2).toUpperCase()}
+                          </div>
+                        )}
 
-                          {/* Logo & Info */}
-                          <div className="flex items-center gap-3.5 my-2">
-                            {company.logoUrl ? (
-                              <div className="w-14 h-14 rounded-2xl bg-white border border-slate-200/90 shadow-xs p-1.5 flex items-center justify-center shrink-0 overflow-hidden">
-                                <img
-                                  src={company.logoUrl}
-                                  alt={company.name}
-                                  className="w-full h-full object-contain"
-                                />
-                              </div>
-                            ) : (
-                              <div
-                                className="w-14 h-14 rounded-2xl text-white font-black text-lg flex items-center justify-center shrink-0 shadow-xs border border-white/20"
-                                style={{
-                                  background: company.bannerColor
-                                    ? `linear-gradient(135deg, ${company.bannerColor}, #022B96)`
-                                    : 'linear-gradient(135deg, #022B96, #1e3a8a)',
-                                }}
-                              >
-                                {company.name.slice(0, 2).toUpperCase()}
-                              </div>
+                        {/* Name, Category & Claimant */}
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 min-w-0">
+                            <p className="text-sm font-semibold text-slate-900 truncate">{company.name}</p>
+                            {company.countryCode && (
+                              <ReactCountryFlag
+                                countryCode={company.countryCode}
+                                svg
+                                style={{ width: '14px', height: '11px', flexShrink: 0 }}
+                              />
                             )}
-
-                            <div className="overflow-hidden">
-                              <h3 className="text-base font-black text-slate-900 truncate">
-                                {company.name}
-                              </h3>
-                              <span className="text-[11px] font-extrabold uppercase tracking-wider text-[#022B96] block mt-0.5">
-                                {company.category}
-                              </span>
-                            </div>
                           </div>
-
-                          {/* Claimant Details */}
-                          {company.claimRequest && (
-                            <div className="mt-3 p-2.5 bg-emerald-50/80 border border-emerald-200/80 rounded-xl text-xs space-y-0.5">
-                              <p className="font-bold text-emerald-900 flex items-center gap-1.5">
-                                <BadgeCheck className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
-                                <span className="truncate">{company.claimRequest.fullName || company.claimRequest.username}</span>
-                              </p>
-                              <p className="text-[10px] text-emerald-700 truncate pl-5">
-                                {company.claimRequest.businessEmail} {company.claimRequest.jobTitle ? `· ${company.claimRequest.jobTitle}` : ''}
-                              </p>
-                            </div>
-                          )}
-
-                          {/* Species & Products */}
-                          <div className="mt-4 pt-3 border-t border-slate-100">
-                            <span className="text-[10px] font-extrabold uppercase text-slate-400 tracking-wider block mb-2">
-                              SPECIES & PRODUCTS
-                            </span>
-                            <div className="flex flex-wrap gap-1.5">
-                              {company.species?.slice(0, 5).map((sp) => (
-                                <span
-                                  key={sp}
-                                  className="bg-[#022B96]/5 text-[#022B96] border border-[#022B96]/15 text-[11px] font-semibold px-2.5 py-1 rounded-lg"
-                                >
-                                  {sp}
-                                </span>
-                              ))}
-                            </div>
-                          </div>
+                          <p className="text-xs text-slate-400 truncate">
+                            {company.category}
+                            {company.claimRequest && (
+                              <span className="text-emerald-600 font-medium"> · {company.claimRequest.fullName || company.claimRequest.username}</span>
+                            )}
+                          </p>
                         </div>
 
-                        {/* Card Actions */}
-                        <div className="pt-4 border-t border-slate-100 mt-4 flex items-center gap-2">
+                        {/* Actions */}
+                        <div className="flex items-center gap-1.5 shrink-0">
                           <Link
                             href={`/suppliers/${company.slug}`}
                             target="_blank"
-                            className="flex-1 text-center bg-slate-50 hover:bg-slate-100 text-slate-700 font-bold text-xs rounded-xl py-2.5 border border-slate-200/80 transition"
+                            className="text-xs font-bold px-3 py-1.5 rounded-lg bg-slate-50 hover:bg-slate-100 text-slate-700 border border-slate-200 transition"
                           >
-                            View Profile
+                            View
                           </Link>
                           <button
                             onClick={() => requestRevokeCompany(company.id, company.name)}
-                            className="px-3 py-2 rounded-xl border border-amber-200 text-amber-700 bg-amber-50 hover:bg-amber-100 transition cursor-pointer shrink-0 text-xs font-bold"
-                            title="Revoke Claim Status"
+                            className="text-xs font-bold px-3 py-1.5 rounded-lg border border-amber-200 text-amber-700 bg-amber-50 hover:bg-amber-100 transition cursor-pointer"
+                            title="Revoke Claim"
                           >
                             Revoke
                           </button>
                           <button
                             onClick={() => requestDeleteCompany(company.id, company.name)}
-                            className="p-2.5 rounded-xl border border-rose-200 text-rose-600 hover:bg-rose-50 transition cursor-pointer shrink-0"
+                            className="p-1.5 rounded-lg text-slate-400 hover:text-rose-500 hover:bg-rose-50 transition cursor-pointer"
                             title="Delete Supplier"
                           >
                             <Trash2 className="w-4 h-4" />
@@ -955,92 +1191,65 @@ export default function AdminDashboardPage() {
                     <p className="text-xs text-slate-400 mt-1">Every supplier profile on Bokhol has been claimed by a verified company.</p>
                   </div>
                 ) : (
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-                    {companies.filter(c => c.status !== 'claimed').map((company) => {
+                  <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden">
+                    {companies.filter(c => c.status !== 'claimed').map((company, idx) => {
                       const isPending = company.status === 'claim_requested'
+                      const unclaimedList = companies.filter(c => c.status !== 'claimed')
                       return (
                         <div
                           key={company.id}
-                          className="bg-white border border-slate-200/90 hover:border-slate-300 rounded-2xl p-5 flex flex-col justify-between shadow-xs hover:shadow-md transition-all duration-200"
+                          className={`flex items-center gap-4 px-5 py-3.5 hover:bg-slate-50 transition-colors ${idx !== unclaimedList.length - 1 ? 'border-b border-slate-100' : ''}`}
                         >
-                          <div>
-                            {/* Top Country Badge */}
-                            <div className="flex items-center justify-end mb-2">
-                              <div className="flex items-center gap-1.5 bg-slate-50 border border-slate-200/70 px-2.5 py-1 rounded-lg text-xs font-bold text-slate-700">
-                                {company.countryCode ? (
-                                  <ReactCountryFlag
-                                    countryCode={company.countryCode}
-                                    svg
-                                    style={{ width: '15px', height: '11px' }}
-                                  />
-                                ) : null}
-                                <span>{company.countryCode || company.country}</span>
-                              </div>
+                          {/* Logo / Avatar */}
+                          {company.logoUrl ? (
+                            <div className="w-9 h-9 rounded-full bg-white border border-slate-200 p-0.5 flex items-center justify-center shrink-0 overflow-hidden">
+                              <img src={company.logoUrl} alt={company.name} className="w-full h-full object-contain" />
                             </div>
+                          ) : (
+                            <div
+                              className="w-9 h-9 rounded-full text-white font-black text-xs flex items-center justify-center shrink-0"
+                              style={{
+                                background: company.bannerColor
+                                  ? `linear-gradient(135deg, ${company.bannerColor}, #022B96)`
+                                  : 'linear-gradient(135deg, #022B96, #1e3a8a)',
+                              }}
+                            >
+                              {company.name.slice(0, 2).toUpperCase()}
+                            </div>
+                          )}
 
-                            {/* Logo & Info */}
-                            <div className="flex items-center gap-3.5 my-2">
-                              {company.logoUrl ? (
-                                <div className="w-14 h-14 rounded-2xl bg-white border border-slate-200/90 shadow-xs p-1.5 flex items-center justify-center shrink-0 overflow-hidden">
-                                  <img
-                                    src={company.logoUrl}
-                                    alt={company.name}
-                                    className="w-full h-full object-contain"
-                                  />
-                                </div>
-                              ) : (
-                                <div
-                                  className="w-14 h-14 rounded-2xl text-white font-black text-lg flex items-center justify-center shrink-0 shadow-xs border border-white/20"
-                                  style={{
-                                    background: company.bannerColor
-                                      ? `linear-gradient(135deg, ${company.bannerColor}, #022B96)`
-                                      : 'linear-gradient(135deg, #022B96, #1e3a8a)',
-                                  }}
-                                >
-                                  {company.name.slice(0, 2).toUpperCase()}
-                                </div>
+                          {/* Name & Category */}
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 min-w-0">
+                              <p className="text-sm font-semibold text-slate-900 truncate">{company.name}</p>
+                              {company.countryCode && (
+                                <ReactCountryFlag
+                                  countryCode={company.countryCode}
+                                  svg
+                                  style={{ width: '14px', height: '11px', flexShrink: 0 }}
+                                />
                               )}
-
-                              <div className="overflow-hidden">
-                                <h3 className="text-base font-black text-slate-900 truncate">
-                                  {company.name}
-                                </h3>
-                                <span className="text-[11px] font-extrabold uppercase tracking-wider text-[#022B96] block mt-0.5">
-                                  {company.category}
+                              {isPending && (
+                                <span className="text-[10px] font-bold text-amber-700 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-full shrink-0">
+                                  Pending
                                 </span>
-                              </div>
+                              )}
                             </div>
-
-                            {/* Species & Products */}
-                            <div className="mt-4 pt-3 border-t border-slate-100">
-                              <span className="text-[10px] font-extrabold uppercase text-slate-400 tracking-wider block mb-2">
-                                SPECIES & PRODUCTS
-                              </span>
-                              <div className="flex flex-wrap gap-1.5">
-                                {company.species?.slice(0, 5).map((sp) => (
-                                  <span
-                                    key={sp}
-                                    className="bg-[#022B96]/5 text-[#022B96] border border-[#022B96]/15 text-[11px] font-semibold px-2.5 py-1 rounded-lg"
-                                  >
-                                    {sp}
-                                  </span>
-                                ))}
-                              </div>
-                            </div>
+                            <p className="text-xs text-slate-400 truncate">{company.category}</p>
                           </div>
 
-                          {/* Card Actions */}
-                          <div className="pt-4 border-t border-slate-100 mt-4 flex items-center gap-2">
+                          {/* Actions */}
+                          <div className="flex items-center gap-1.5 shrink-0">
                             <Link
                               href={`/suppliers/${company.slug}`}
                               target="_blank"
-                              className="flex-1 text-center bg-slate-50 hover:bg-slate-100 text-slate-700 font-bold text-xs rounded-xl py-2.5 border border-slate-200/80 transition"
+                              className="text-xs font-bold px-3 py-1.5 rounded-lg bg-slate-50 hover:bg-slate-100 text-slate-700 border border-slate-200 transition"
                             >
-                              View Profile
+                              View
                             </Link>
                             <button
                               onClick={() => requestDeleteCompany(company.id, company.name)}
-                              className="p-2.5 rounded-xl border border-rose-200 text-rose-600 hover:bg-rose-50 transition cursor-pointer shrink-0"
+                              className="p-1.5 rounded-lg text-slate-400 hover:text-rose-500 hover:bg-rose-50 transition cursor-pointer"
                               title="Delete Supplier"
                             >
                               <Trash2 className="w-4 h-4" />
@@ -1323,8 +1532,8 @@ export default function AdminDashboardPage() {
                     </p>
                   </div>
                 ) : (
-                  <div className="space-y-4">
-                    {filteredClaims.map((company) => {
+                  <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden">
+                    {filteredClaims.map((company, idx) => {
                       const req = company.claimRequest
                       const companyDomain = company.domain || company.email?.split('@')[1] || ''
                       const applicantDomain = req?.businessEmail ? req.businessEmail.split('@')[1] : ''
@@ -1336,152 +1545,138 @@ export default function AdminDashboardPage() {
                       return (
                         <div
                           key={company.id}
-                          className="p-5 rounded-2xl border border-slate-200/80 bg-white hover:border-slate-300 hover:shadow-md transition-all duration-200 space-y-4"
+                          className={`flex items-center gap-4 px-5 py-3.5 hover:bg-slate-50 transition-colors ${idx !== filteredClaims.length - 1 ? 'border-b border-slate-100' : ''}`}
                         >
-                          {/* Card Header: Company Info + Status Badge */}
-                          <div className="flex flex-wrap items-center justify-between gap-3 pb-3.5 border-b border-slate-100">
-                            <div className="flex items-center gap-3 min-w-0">
-                              <div className="w-10 h-10 rounded-xl bg-[#022B96] text-white font-black text-sm flex items-center justify-center shrink-0 shadow-xs">
-                                {company.name.slice(0, 2).toUpperCase()}
-                              </div>
-                              <div className="min-w-0">
-                                <div className="flex items-center gap-2 flex-wrap">
-                                  <h3 className="font-bold text-slate-900 text-sm truncate">{company.name}</h3>
-                                  <span className="text-[10px] font-bold bg-slate-100 text-slate-700 px-2 py-0.5 rounded-md shrink-0">
-                                    {company.country}
-                                  </span>
-                                  <span className="text-[10px] text-slate-400 font-mono">
-                                    #{company.id.slice(0, 6)}
-                                  </span>
-                                </div>
-                                <p className="text-[11px] text-slate-500 truncate mt-0.5">
-                                  Official Listing Website: <strong className="text-slate-700">{company.website || companyDomain || 'N/A'}</strong>
-                                </p>
-                              </div>
+                          {/* Circular Logo / Avatar */}
+                          {company.logoUrl ? (
+                            <div className="w-9 h-9 rounded-full bg-white border border-slate-200 p-0.5 flex items-center justify-center shrink-0 overflow-hidden">
+                              <img src={company.logoUrl} alt={company.name} className="w-full h-full object-contain" />
                             </div>
+                          ) : (
+                            <div
+                              className="w-9 h-9 rounded-full text-white font-black text-xs flex items-center justify-center shrink-0"
+                              style={{
+                                background: company.bannerColor
+                                  ? `linear-gradient(135deg, ${company.bannerColor}, #022B96)`
+                                  : 'linear-gradient(135deg, #022B96, #1e3a8a)',
+                              }}
+                            >
+                              {company.name.slice(0, 2).toUpperCase()}
+                            </div>
+                          )}
 
-                            {/* Status Badge */}
-                            <div className="shrink-0">
+                          {/* Company & Applicant Info */}
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 min-w-0">
+                              <p className="text-sm font-semibold text-slate-900 truncate">{company.name}</p>
+                              {company.countryCode && (
+                                <ReactCountryFlag
+                                  countryCode={company.countryCode}
+                                  svg
+                                  style={{ width: '14px', height: '11px', flexShrink: 0 }}
+                                />
+                              )}
+                              {company.country && !company.countryCode && (
+                                <span className="text-[10px] font-bold bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded shrink-0">
+                                  {company.country}
+                                </span>
+                              )}
                               {isPending && (
-                                <span className="inline-flex items-center gap-1.5 text-xs font-bold text-blue-700 bg-blue-50 border border-blue-200/80 px-3 py-1.5 rounded-full">
-                                  <span className="h-2 w-2 rounded-full bg-blue-500 animate-pulse" />
-                                  Pending Review
+                                <span className="inline-flex items-center gap-1 text-[10px] font-bold text-blue-700 bg-blue-50 border border-blue-200/80 px-2 py-0.5 rounded-full shrink-0">
+                                  <span className="h-1.5 w-1.5 rounded-full bg-blue-500 animate-pulse" />
+                                  Pending
                                 </span>
                               )}
                               {isClaimed && (
-                                <span className="inline-flex items-center gap-1.5 text-xs font-bold text-emerald-700 bg-emerald-50 border border-emerald-200/80 px-3 py-1.5 rounded-full">
-                                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
-                                  Approved &amp; Claimed
+                                <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200/80 px-2 py-0.5 rounded-full shrink-0">
+                                  <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+                                  Approved
                                 </span>
                               )}
                               {isRejected && (
-                                <span className="inline-flex items-center gap-1.5 text-xs font-bold text-rose-700 bg-rose-50 border border-rose-200/80 px-3 py-1.5 rounded-full">
-                                  <AlertCircle className="w-3.5 h-3.5 text-rose-600" />
+                                <span className="inline-flex items-center gap-1 text-[10px] font-bold text-rose-700 bg-rose-50 border border-rose-200/80 px-2 py-0.5 rounded-full shrink-0">
+                                  <AlertCircle className="w-3 h-3 text-rose-600" />
                                   Rejected
                                 </span>
                               )}
-                              {!isPending && !isClaimed && !isRejected && (
-                                <span className="inline-flex items-center gap-1.5 text-xs font-bold text-slate-600 bg-slate-100 px-3 py-1.5 rounded-full">
-                                  Unclaimed
-                                </span>
+                            </div>
+                            <div className="flex items-center gap-2 text-xs text-slate-400 truncate mt-0.5">
+                              <span className="text-slate-600 font-medium truncate">
+                                {req?.fullName || 'Anonymous'}
+                                {req?.jobTitle ? ` (${req.jobTitle})` : ''}
+                              </span>
+                              <span>·</span>
+                              <span className="truncate">{req?.businessEmail || company.email || '—'}</span>
+                              {req?.businessEmail && (
+                                <>
+                                  <span>·</span>
+                                  {domainMatches ? (
+                                    <span className="text-[10px] font-semibold text-emerald-600 shrink-0" title={`Domain matches: ${applicantDomain}`}>
+                                      Domain Match
+                                    </span>
+                                  ) : (
+                                    <span className="text-[10px] font-semibold text-amber-600 shrink-0" title={`Different domain: @${applicantDomain || 'unknown'}`}>
+                                      @{applicantDomain || 'diff'}
+                                    </span>
+                                  )}
+                                </>
                               )}
                             </div>
                           </div>
 
-                          {/* Card Body: Applicant Details + Domain Check + Action Buttons */}
-                          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-                            {/* Details Grid */}
-                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 text-xs flex-1">
-                              <div>
-                                <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">Applicant</span>
-                                <p className="font-bold text-slate-900 mt-0.5">
-                                  {req?.fullName || 'Anonymous'}
-                                  {req?.username ? <span className="text-slate-400 font-normal ml-1">(@{req.username})</span> : null}
-                                </p>
-                                <p className="text-[11px] text-slate-500">{req?.jobTitle || 'Representative'}</p>
-                              </div>
-
-                              <div>
-                                <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">Business Email</span>
-                                <p className="font-semibold text-slate-800 mt-0.5 truncate">{req?.businessEmail || 'N/A'}</p>
-                                {req?.phone && <p className="text-[11px] text-slate-400">{req.phone}</p>}
-                              </div>
-
-                              <div>
-                                <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">Domain Check</span>
-                                <div className="mt-0.5">
-                                  {domainMatches ? (
-                                    <span
-                                      className="inline-flex items-center gap-1.5 text-[11px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200/80 px-2.5 py-1 rounded-lg"
-                                      title={`The applicant's email domain matches the official website domain (${applicantDomain}).`}
-                                    >
-                                      <Check className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
-                                      Match (@{applicantDomain})
-                                    </span>
-                                  ) : (
-                                    <span
-                                      className="inline-flex items-center gap-1.5 text-[11px] font-bold text-amber-800 bg-amber-50 border border-amber-200/80 px-2.5 py-1 rounded-lg"
-                                      title={`Email domain (@${applicantDomain || 'unknown'}) differs from website domain (@${companyDomain || 'website'}).`}
-                                    >
-                                      <Info className="w-3.5 h-3.5 text-amber-600 shrink-0" />
-                                      Different Domain (@{applicantDomain || 'unknown'})
-                                    </span>
-                                  )}
-                                </div>
-                              </div>
-                            </div>
-
-                            {/* Actions: Guaranteed generous spacing and never overlapping */}
-                            <div className="flex items-center gap-2 shrink-0 border-t lg:border-t-0 pt-3 lg:pt-0 border-slate-100 justify-end">
-                              {isPending ? (
-                                <>
-                                  <button
-                                    onClick={() => handleApproveClaim(company.id)}
-                                    className="flex items-center gap-1.5 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl shadow-xs transition cursor-pointer"
-                                  >
-                                    <Check className="w-3.5 h-3.5" />
-                                    <span>Approve</span>
-                                  </button>
-                                  <button
-                                    onClick={() => handleRejectClaim(company.id)}
-                                    className="flex items-center gap-1.5 px-3.5 py-2 bg-rose-50 hover:bg-rose-100 text-rose-600 font-bold text-xs rounded-xl border border-rose-200 transition cursor-pointer"
-                                    title="Reject Claim"
-                                  >
-                                    <X className="w-3.5 h-3.5" />
-                                    <span>Reject</span>
-                                  </button>
-                                </>
-                              ) : isClaimed ? (
-                                <button
-                                  onClick={() => requestRevokeCompany(company.id, company.name)}
-                                  className="px-3.5 py-2 bg-amber-50 hover:bg-amber-100 text-amber-700 font-bold text-xs rounded-xl border border-amber-200 transition cursor-pointer"
-                                >
-                                  Revoke
-                                </button>
-                              ) : (
+                          {/* Actions */}
+                          <div className="flex items-center gap-1.5 shrink-0">
+                            {isPending && (
+                              <>
                                 <button
                                   onClick={() => handleApproveClaim(company.id)}
-                                  className="px-4 py-2 bg-[#022B96] hover:bg-[#011a5e] text-white font-bold text-xs rounded-xl shadow-xs transition cursor-pointer"
+                                  className="flex items-center gap-1 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-lg transition cursor-pointer"
+                                  title="Approve Claim"
                                 >
-                                  Approve
+                                  <Check className="w-3.5 h-3.5" />
+                                  <span>Approve</span>
                                 </button>
-                              )}
+                                <button
+                                  onClick={() => handleRejectClaim(company.id)}
+                                  className="flex items-center gap-1 px-3 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-600 font-bold text-xs rounded-lg border border-rose-200 transition cursor-pointer"
+                                  title="Reject Claim"
+                                >
+                                  <X className="w-3.5 h-3.5" />
+                                  <span>Reject</span>
+                                </button>
+                              </>
+                            )}
+                            {isClaimed && (
                               <button
-                                onClick={() => setSelectedCompanyModal(company)}
-                                className="flex items-center gap-1.5 px-3.5 py-2 text-slate-700 hover:text-slate-900 bg-slate-50 hover:bg-slate-100 border border-slate-200/80 rounded-xl text-xs font-bold transition cursor-pointer"
-                                title="View Full Details"
+                                onClick={() => requestRevokeCompany(company.id, company.name)}
+                                className="px-3 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-700 font-bold text-xs rounded-lg border border-amber-200 transition cursor-pointer"
                               >
-                                <Eye className="w-3.5 h-3.5" />
-                                <span>Details</span>
+                                Revoke
                               </button>
+                            )}
+                            {!isPending && !isClaimed && (
                               <button
-                                onClick={() => requestDeleteCompany(company.id, company.name)}
-                                className="p-2 text-rose-500 hover:text-rose-700 hover:bg-rose-50 border border-rose-200 rounded-xl transition cursor-pointer"
-                                title="Delete Supplier"
+                                onClick={() => handleApproveClaim(company.id)}
+                                className="px-3 py-1.5 bg-[#022B96] hover:bg-[#011a5e] text-white font-bold text-xs rounded-lg transition cursor-pointer"
                               >
-                                <Trash2 className="w-3.5 h-3.5" />
+                                Approve
                               </button>
-                            </div>
+                            )}
+                            <button
+                              onClick={() => setSelectedCompanyModal(company)}
+                              className="flex items-center gap-1 px-3 py-1.5 text-slate-700 hover:text-slate-900 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-lg text-xs font-bold transition cursor-pointer"
+                              title="View Full Details"
+                            >
+                              <Eye className="w-3.5 h-3.5" />
+                              <span>Details</span>
+                            </button>
+                            <button
+                              onClick={() => requestDeleteCompany(company.id, company.name)}
+                              className="p-1.5 rounded-lg text-slate-400 hover:text-rose-500 hover:bg-rose-50 transition cursor-pointer"
+                              title="Delete Supplier"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
                           </div>
                         </div>
                       )
@@ -1559,51 +1754,118 @@ export default function AdminDashboardPage() {
                           ? `${symbol}${p.price_per_kg.toFixed(2)} – ${symbol}${maxPrice.toFixed(2)}/kg`
                           : `${symbol}${p.price_per_kg.toFixed(2)}/kg`
                         : 'Price on request'
+
+                      // Resolve verified supplier
+                      const supplier = getSupplierForPost(p, companies)
+
+                      const lastUpdatedDateRaw = p.updated_at || p.created_at || Date.now()
+                      const formattedLastDate = new Date(lastUpdatedDateRaw).toLocaleDateString('en-GB', {
+                        day: 'numeric',
+                        month: 'short',
+                        year: 'numeric',
+                      })
+
                       return (
-                        <div key={p.id} className="bg-white rounded-2xl border border-slate-200 p-5 hover:shadow-md transition space-y-3">
-                          <div className="flex items-start gap-3">
-                            <img
-                              src={img}
-                              alt={p.product_name}
-                              className="h-14 w-14 rounded-xl object-contain border border-slate-100 bg-slate-50 flex-shrink-0"
-                            />
-                            <div className="flex-1 min-w-0">
-                              <div className="flex items-center justify-between gap-2">
-                                <h3 className="font-extrabold text-slate-900 text-sm truncate">{p.product_name}</h3>
-                                <span className="text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-100 px-2.5 py-1 rounded-full flex-shrink-0">
-                                  {p.status || 'Active'}
-                                </span>
+                        <div key={p.id} className="bg-white rounded-2xl border border-slate-200/90 hover:border-blue-300 p-5 hover:shadow-lg transition-all duration-200 flex flex-col justify-between group space-y-4">
+                          <div className="space-y-4">
+                            {/* Supplier Header — Clean, Bold, Authentic */}
+                            <div className="flex items-center justify-between gap-3 pb-3 border-b border-slate-100">
+                              <div className="flex items-center gap-3 min-w-0">
+                                <div className="w-10 h-10 rounded-xl bg-slate-50 border border-slate-200/80 p-1 flex items-center justify-center shrink-0 shadow-2xs overflow-hidden">
+                                  {supplier.logoUrl ? (
+                                    <img
+                                      src={supplier.logoUrl}
+                                      alt={supplier.name}
+                                      className="w-full h-full object-contain"
+                                    />
+                                  ) : (
+                                    <div className="w-full h-full rounded-lg bg-[#022B96] text-white flex items-center justify-center font-black text-sm">
+                                      {supplier.name.charAt(0).toUpperCase()}
+                                    </div>
+                                  )}
+                                </div>
+                                <div className="min-w-0">
+                                  <div className="flex items-center gap-1.5">
+                                    <h4 className="font-extrabold text-slate-900 text-sm truncate group-hover:text-[#022B96] transition-colors">
+                                      {supplier.name}
+                                    </h4>
+                                    <BadgeCheck className="w-4 h-4 text-blue-600 shrink-0" />
+                                  </div>
+                                  <p className="text-[11px] text-slate-500 font-medium flex items-center gap-1.5 mt-0.5">
+                                    <span className="font-semibold text-slate-600">Supplier Profile</span>
+                                    {supplier.country && (
+                                      <>
+                                        <span className="text-slate-300">•</span>
+                                        <span className="text-slate-500">{supplier.country}</span>
+                                      </>
+                                    )}
+                                  </p>
+                                </div>
                               </div>
-                              <p className="text-sm font-black text-[#022B96] mt-0.5">{priceDisplay}</p>
-                              <p className="text-xs text-slate-400 mt-0.5">{p.fresh_frozen} · {p.country_of_origin}</p>
+
+                              <span className="text-[10px] font-bold tracking-wide uppercase px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200/60 shrink-0">
+                                {p.status || 'Active'}
+                              </span>
+                            </div>
+
+                            {/* Product Info */}
+                            <div className="flex items-center gap-3.5">
+                              <div className="w-16 h-16 rounded-xl bg-slate-50 border border-slate-100 p-1 flex items-center justify-center shrink-0">
+                                <img
+                                  src={img}
+                                  alt={p.product_name}
+                                  className="w-full h-full object-contain"
+                                />
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <h3 className="font-black text-slate-900 text-base leading-tight truncate">
+                                  {p.product_name}
+                                </h3>
+                                <p className="text-base font-black text-[#022B96] mt-0.5">
+                                  {priceDisplay}
+                                </p>
+                                <p className="text-xs text-slate-400 font-medium mt-0.5">
+                                  {p.fresh_frozen} · {p.country_of_origin}
+                                </p>
+                              </div>
+                            </div>
+
+                            {/* Packaging & Availability Badges */}
+                            <div className="grid grid-cols-2 gap-2 text-xs">
+                              <div className="bg-slate-50/80 rounded-xl px-3 py-2 border border-slate-100">
+                                <p className="text-[10px] font-bold uppercase text-slate-400 tracking-wider">Packaging</p>
+                                <p className="font-bold text-slate-700 mt-0.5 truncate">{p.packaging || '—'}</p>
+                              </div>
+                              <div className="bg-slate-50/80 rounded-xl px-3 py-2 border border-slate-100">
+                                <p className="text-[10px] font-bold uppercase text-slate-400 tracking-wider">Availability</p>
+                                <p className="font-bold text-slate-700 mt-0.5 truncate">{p.availability || '—'}</p>
+                              </div>
                             </div>
                           </div>
 
-                          <div className="grid grid-cols-2 gap-2 text-xs">
-                            <div className="bg-slate-50 rounded-xl p-2 border border-slate-100">
-                              <p className="text-[10px] font-bold uppercase text-slate-400 tracking-wider">Packaging</p>
-                              <p className="font-bold text-slate-700 mt-0.5 truncate">{p.packaging || '—'}</p>
-                            </div>
-                            <div className="bg-slate-50 rounded-xl p-2 border border-slate-100">
-                              <p className="text-[10px] font-bold uppercase text-slate-400 tracking-wider">Availability</p>
-                              <p className="font-bold text-slate-700 mt-0.5 truncate">{p.availability || '—'}</p>
-                            </div>
-                          </div>
-
-                          <div className="flex items-center justify-between pt-2 border-t border-slate-100">
-                            <span className="flex items-center gap-1 text-[11px] text-slate-400 font-medium">
-                              <Clock className="w-3 h-3" />
-                              {new Date(p.updated_at || p.created_at || Date.now()).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}
+                          {/* Footer */}
+                          <div className="flex items-center justify-between pt-3 border-t border-slate-100">
+                            <span className="flex items-center gap-1.5 text-[11px] text-slate-400 font-medium">
+                              <Clock className="w-3.5 h-3.5 text-slate-400" />
+                              <span>Last updated: <strong className="text-slate-600 font-semibold">{formattedLastDate}</strong></span>
                             </span>
                             <button
                               onClick={() => {
-                                setUpdatingPostModal(p)
+                                setUpdatingPostModal({
+                                  ...p,
+                                  company_name: supplier.name,
+                                  company_logo: supplier.logoUrl || undefined,
+                                  company_country: supplier.country,
+                                })
                                 setUpdatePriceInput(String(p.price_per_kg || ''))
+                                setUpdateMaxPriceInput((p as any).max_price_per_kg ? String((p as any).max_price_per_kg) : '')
                                 setUpdateCurrencyInput(p.currency || 'EUR')
                                 setUpdateAvailInput(p.availability || 'In Stock — Ready to Ship')
+                                const todayStr = new Date().toISOString().split('T')[0]
+                                setUpdateDateInput(todayStr)
                                 setPriceUpdateMsg(null)
                               }}
-                              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-[#022B96] hover:bg-[#011a5e] text-white text-xs font-bold rounded-xl transition cursor-pointer"
+                              className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-[#022B96] hover:bg-[#011a5e] text-white text-xs font-bold rounded-xl transition cursor-pointer shadow-xs active:scale-95"
                             >
                               <DollarSign className="w-3.5 h-3.5" />
                               Update Price
@@ -1782,63 +2044,55 @@ export default function AdminDashboardPage() {
                     <p className="text-xs text-slate-400">Fetching brand partners for Home Screen</p>
                   </div>
                 ) : filteredPartnerBuyers.length > 0 ? (
-                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                    {filteredPartnerBuyers.map((partner) => (
+                  <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden">
+                    {filteredPartnerBuyers.map((partner, idx) => (
                       <div
                         key={partner.id}
-                        className="bg-white border border-slate-200 rounded-2xl p-4 shadow-xs hover:shadow-md hover:border-[#022B96]/30 transition flex flex-col justify-between group"
+                        className={`flex items-center gap-4 px-5 py-3.5 hover:bg-slate-50 transition-colors ${idx !== filteredPartnerBuyers.length - 1 ? 'border-b border-slate-100' : ''}`}
                       >
-                        <div>
-                          {/* Logo container */}
-                          <div className="h-24 w-full bg-slate-50 rounded-xl border border-slate-100 flex items-center justify-center p-3 mb-3 overflow-hidden">
-                            <img
-                              src={partner.logo}
-                              alt={`${partner.name} logo`}
-                              className="max-h-full max-w-full object-contain mix-blend-multiply group-hover:scale-105 transition-transform"
-                            />
-                          </div>
+                        {/* Logo */}
+                        <div className="w-9 h-9 rounded-full bg-slate-50 border border-slate-200 flex items-center justify-center shrink-0 overflow-hidden p-1">
+                          <img
+                            src={partner.logo}
+                            alt={partner.name}
+                            className="max-h-full max-w-full object-contain mix-blend-multiply"
+                          />
+                        </div>
 
-                          {/* Info */}
-                          <div className="space-y-1">
-                            <h3 className="font-extrabold text-slate-900 text-sm tracking-tight truncate">
-                              {partner.name}
-                            </h3>
-                            <div className="flex flex-wrap items-center gap-2 text-[11px] text-slate-500 font-medium">
-                              {partner.country && (
-                                <span className="bg-slate-100 px-2 py-0.5 rounded-md text-slate-700">
-                                  {partner.country}
-                                </span>
-                              )}
-                              {partner.website && (
-                                <a
-                                  href={partner.website.startsWith('http') ? partner.website : `https://${partner.website}`}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  className="text-[#022B96] hover:underline inline-flex items-center gap-1"
-                                >
-                                  <Globe className="w-3 h-3" />
-                                  Website
-                                </a>
-                              )}
-                            </div>
+                        {/* Name & Country */}
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-semibold text-slate-900 truncate">{partner.name}</p>
+                          <div className="flex items-center gap-2 text-xs text-slate-400">
+                            {partner.country && <span>{partner.country}</span>}
+                            {partner.website && (
+                              <a
+                                href={partner.website.startsWith('http') ? partner.website : `https://${partner.website}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-[#022B96] hover:underline inline-flex items-center gap-1"
+                              >
+                                <Globe className="w-3 h-3" />
+                                Website
+                              </a>
+                            )}
                           </div>
                         </div>
 
                         {/* Actions */}
-                        <div className="flex items-center justify-end gap-2 pt-3 mt-3 border-t border-slate-100">
+                        <div className="flex items-center gap-1.5 shrink-0">
                           <button
                             onClick={() => openEditPartnerModal(partner)}
-                            className="inline-flex items-center gap-1 px-3 py-1.5 border border-slate-200 hover:bg-slate-50 text-slate-700 text-xs font-bold rounded-xl transition cursor-pointer"
+                            className="text-xs font-bold px-3 py-1.5 rounded-lg border border-slate-200 hover:bg-slate-50 text-slate-700 transition cursor-pointer inline-flex items-center gap-1"
                           >
-                            <Edit3 className="w-3.5 h-3.5 text-slate-500" />
+                            <Edit3 className="w-3.5 h-3.5" />
                             Edit
                           </button>
                           <button
                             onClick={() => handleDeletePartner(partner.id, partner.name)}
-                            className="inline-flex items-center gap-1 px-3 py-1.5 border border-rose-200 text-rose-600 hover:bg-rose-50 text-xs font-bold rounded-xl transition cursor-pointer"
+                            className="p-1.5 rounded-lg text-slate-400 hover:text-rose-500 hover:bg-rose-50 transition cursor-pointer"
+                            title="Delete"
                           >
-                            <Trash2 className="w-3.5 h-3.5" />
-                            Delete
+                            <Trash2 className="w-4 h-4" />
                           </button>
                         </div>
                       </div>
@@ -1862,6 +2116,116 @@ export default function AdminDashboardPage() {
                 )}
               </div>
             )}
+
+            {/* VIEW: REGISTERED BUYER USERS */}
+            {activeNav === 'buyer-users' && (
+              <div className="space-y-6">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                  <div>
+                    <h1 className="text-2xl font-black text-slate-900 tracking-tight">Buyer Users</h1>
+                    <p className="text-xs text-slate-500 mt-1 font-medium">
+                      All registered buyers and procurement accounts on Bokhol. View details and manage accounts.
+                    </p>
+                  </div>
+                  <span className="text-xs font-bold bg-blue-50 text-[#022B96] px-3.5 py-1.5 rounded-full border border-blue-200/60 shrink-0 self-start sm:self-center">
+                    {buyerUsers.length} Active {buyerUsers.length === 1 ? 'Buyer' : 'Buyers'}
+                  </span>
+                </div>
+
+                {buyerSuccessMsg && (
+                  <div className="bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-bold px-4 py-3 rounded-xl flex items-center gap-2">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                    <span>{buyerSuccessMsg}</span>
+                  </div>
+                )}
+
+                {/* Search Bar */}
+                <div className="relative max-w-md">
+                  <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                  <input
+                    type="text"
+                    value={buyerSearchQuery}
+                    onChange={(e) => setBuyerSearchQuery(e.target.value)}
+                    placeholder="Search buyers by name, email, phone, ID..."
+                    className="w-full pl-10 pr-4 py-2.5 bg-white border border-slate-200 rounded-xl text-xs font-medium text-slate-800 placeholder-slate-400 outline-none focus:border-[#022B96] focus:ring-1 focus:ring-[#022B96] transition"
+                  />
+                  {buyerSearchQuery && (
+                    <button
+                      onClick={() => setBuyerSearchQuery('')}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  )}
+                </div>
+
+                {/* Buyer Users List */}
+                {buyerUsersLoading && buyerUsers.length === 0 ? (
+                  <div className="bg-white border border-slate-200 rounded-2xl p-16 flex flex-col items-center justify-center gap-3 text-center">
+                    <Loader2 className="w-8 h-8 animate-spin text-[#022B96]" />
+                    <p className="text-sm font-bold text-slate-700">Loading Buyer Accounts...</p>
+                    <p className="text-xs text-slate-400">Fetching registered buyers from database</p>
+                  </div>
+                ) : filteredBuyerUsers.length === 0 ? (
+                  <div className="bg-white border border-slate-200 rounded-2xl p-16 text-center space-y-2">
+                    <Users className="w-12 h-12 text-slate-200 mx-auto mb-2" />
+                    <h3 className="text-sm font-bold text-slate-800">
+                      {buyerSearchQuery ? 'No Matching Buyers Found' : 'No Buyer Users Registered Yet'}
+                    </h3>
+                    <p className="text-xs text-slate-400">
+                      {buyerSearchQuery
+                        ? `No buyers match "${buyerSearchQuery}"`
+                        : 'When buyers register accounts on Bokhol, their detailed profiles appear here.'}
+                    </p>
+                  </div>
+                ) : (
+                  <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden">
+                    {filteredBuyerUsers.map((buyer, idx) => {
+                      const initials = (buyer.full_name || 'B')
+                        .split(' ')
+                        .filter(Boolean)
+                        .map((w: string) => w.charAt(0))
+                        .slice(0, 2)
+                        .join('')
+                        .toUpperCase() || 'B'
+
+                      return (
+                        <div
+                          key={buyer.id}
+                          className={`flex items-center gap-4 px-5 py-3.5 hover:bg-slate-50 transition-colors ${idx !== filteredBuyerUsers.length - 1 ? 'border-b border-slate-100' : ''}`}
+                        >
+                          {/* Circular Avatar */}
+                          <div className="w-9 h-9 rounded-full bg-gradient-to-br from-[#022B96] to-blue-600 text-white font-bold text-xs flex items-center justify-center shrink-0">
+                            {initials}
+                          </div>
+
+                          {/* Name & Email */}
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-semibold text-slate-900 truncate">{buyer.full_name || 'Buyer User'}</p>
+                            <p className="text-xs text-slate-400 truncate">{buyer.email || '—'}</p>
+                          </div>
+
+                          {/* Delete */}
+                          <button
+                            onClick={() => handleDeleteBuyer(buyer.id, buyer.full_name || 'Buyer')}
+                            disabled={deletingBuyerId === buyer.id}
+                            className="shrink-0 p-2 rounded-lg text-slate-400 hover:text-rose-500 hover:bg-rose-50 transition disabled:opacity-40 cursor-pointer"
+                            title="Delete Account"
+                          >
+                            {deletingBuyerId === buyer.id ? (
+                              <Loader2 className="w-4 h-4 animate-spin" />
+                            ) : (
+                              <Trash2 className="w-4 h-4" />
+                            )}
+                          </button>
+                        </div>
+                      )
+                    })}
+                  </div>
+                )}
+              </div>
+            )}
+
 
           </div>
 
@@ -1997,89 +2361,203 @@ export default function AdminDashboardPage() {
 
       {/* ══ UPDATE PRICE MODAL ══════════════════════════════════════════ */}
       {updatingPostModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4">
-          <div className="bg-white rounded-3xl border border-slate-200 max-w-sm w-full shadow-2xl overflow-hidden">
-            <div className="bg-[#022B96] text-white p-6 relative">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-xs p-4">
+          <div className="bg-white rounded-2xl border border-slate-200/90 max-w-md w-full shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+            {/* Clean Header */}
+            <div className="px-6 pt-5 pb-4 border-b border-slate-100 flex items-start justify-between bg-white">
+              <div className="space-y-1 min-w-0 pr-3">
+                <span className="text-[10px] font-extrabold uppercase tracking-wider text-[#022B96] bg-blue-50 border border-blue-200/60 px-2.5 py-0.5 rounded-full inline-block">
+                  Admin Price Control
+                </span>
+                <h3 className="text-base font-extrabold text-slate-900 tracking-tight truncate">
+                  {updatingPostModal.product_name}
+                </h3>
+                {(() => {
+                  const modalCompany = companies.find((c) => c.id === updatingPostModal.company_id)
+                  const modalName = updatingPostModal.company_name || modalCompany?.name || 'Verified Supplier'
+                  const modalLogo = updatingPostModal.company_logo || modalCompany?.logoUrl || (modalCompany as any)?.logo_url || null
+                  return (
+                    <div className="flex items-center gap-2 text-xs text-slate-500 font-medium">
+                      {modalLogo ? (
+                        <img
+                          src={modalLogo}
+                          alt={modalName}
+                          className="w-4 h-4 rounded object-contain border border-slate-200 bg-white shrink-0"
+                        />
+                      ) : (
+                        <div className="w-4 h-4 rounded bg-slate-100 text-slate-700 flex items-center justify-center font-bold text-[9px] shrink-0">
+                          {modalName !== 'Verified Supplier' ? modalName.charAt(0).toUpperCase() : <Building2 className="w-2.5 h-2.5" />}
+                        </div>
+                      )}
+                      <span className="truncate">
+                        Supplier: <strong className="text-slate-800 font-bold">{modalName}</strong>
+                      </span>
+                    </div>
+                  )
+                })()}
+              </div>
               <button
                 onClick={() => setUpdatingPostModal(null)}
-                className="absolute top-4 right-4 text-white/70 hover:text-white p-1.5 rounded-full hover:bg-white/15 transition cursor-pointer"
+                className="text-slate-400 hover:text-slate-600 hover:bg-slate-100 p-1.5 rounded-lg transition cursor-pointer shrink-0 -mr-1"
+                title="Close"
               >
-                <X className="w-5 h-5" />
+                <X className="w-4 h-4" />
               </button>
-              <span className="text-[10px] font-extrabold uppercase tracking-widest text-blue-200 bg-white/15 px-2.5 py-0.5 rounded-full mb-2 inline-block">
-                Admin Price Control
-              </span>
-              <h3 className="text-lg font-black text-white mt-1">{updatingPostModal.product_name}</h3>
-              <p className="text-xs text-blue-200 mt-0.5">Override supplier price &amp; availability.</p>
             </div>
 
+            {/* Clean Form */}
             <form
               onSubmit={async (e) => {
                 e.preventDefault()
                 const post = updatingPostModal
-                const numPrice = parseFloat(updatePriceInput)
-                if (!post || isNaN(numPrice) || numPrice < 0) return
+                const numMinPrice = parseFloat(updatePriceInput)
+                const numMaxPrice = parseFloat(updateMaxPriceInput) || 0
+                if (!post || isNaN(numMinPrice) || numMinPrice < 0) return
+
+                const validMaxPrice = numMaxPrice > numMinPrice ? numMaxPrice : 0
                 
-                // Update in Supabase
+                // Formulate admin update timestamp
+                const chosenDate = updateDateInput
+                  ? new Date(updateDateInput + 'T12:00:00Z').toISOString()
+                  : new Date().toISOString()
+
+                // Update via server API (bypasses RLS — admin can update any post)
                 try {
-                  const { data: existingPost } = await supabase
-                    .from('supplier_posts')
-                    .select('content')
-                    .eq('id', post.id)
-                    .maybeSingle()
-                  if (existingPost) {
-                    let details: any = {}
-                    try { details = JSON.parse(existingPost.content || '{}') } catch (_) {}
-                    details.pricePerKg = numPrice
-                    details.currency = updateCurrencyInput
-                    details.availability = updateAvailInput
-                    await supabase
+                  // Read existing content from DB; fall back to local post state if read fails
+                  let details: any = {}
+                  try {
+                    const { data: existingPost } = await supabase
                       .from('supplier_posts')
-                      .update({ content: JSON.stringify(details), updated_at: new Date().toISOString() })
+                      .select('content')
                       .eq('id', post.id)
+                      .maybeSingle()
+                    if (existingPost?.content) {
+                      details = JSON.parse(existingPost.content)
+                    }
+                  } catch (_) {
+                    // If read fails, we still proceed with a fresh details object
+                    // built from the known fields on the post
+                    details = {
+                      productName: post.product_name,
+                      countryOfOrigin: post.country_of_origin,
+                      freshFrozen: post.fresh_frozen,
+                      sizeWeight: post.size_weight,
+                      packagingFillet: post.packaging,
+                      location: post.location,
+                      companyName: post.company_name,
+                    }
+                  }
+
+                  // Merge in the new price / availability fields
+                  details.pricePerKg = numMinPrice
+                  details.minPricePerKg = numMinPrice
+                  details.maxPricePerKg = validMaxPrice > 0 ? validMaxPrice : undefined
+                  details.currency = updateCurrencyInput
+                  details.availability = updateAvailInput
+                  details.lastUpdated = chosenDate
+                  details.lastAdminUpdate = chosenDate
+
+                  const res = await fetch('/api/supplier/posts', {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                      postId: post.id,
+                      content: JSON.stringify(details),
+                      updated_at: chosenDate,
+                    }),
+                  })
+                  if (!res.ok) {
+                    const errData = await res.json().catch(() => ({}))
+                    console.error('Admin price update failed:', errData)
                   }
                 } catch (err) {
-                  console.error('Failed to update price in Supabase:', err)
+                  console.error('Failed to update price:', err)
                 }
 
-                setSupplierPosts(prev => prev.map(p => p.id === post.id ? { ...p, price_per_kg: numPrice, currency: updateCurrencyInput, availability: updateAvailInput } : p))
-                setPriceUpdateMsg(`"${post.product_name}" updated → ${updateCurrencyInput} ${numPrice.toFixed(2)}/kg`)
+                setSupplierPosts(prev => {
+                  const updated = prev.map(p => p.id === post.id ? {
+                    ...p,
+                    price_per_kg: numMinPrice,
+                    max_price_per_kg: validMaxPrice,
+                    currency: updateCurrencyInput,
+                    availability: updateAvailInput,
+                    updated_at: chosenDate,
+                  } : p)
+                  try { localStorage.setItem('admin_supplier_posts_cache', JSON.stringify(updated)) } catch (_) {}
+                  return updated
+                })
+                const priceSummary = validMaxPrice > 0
+                  ? `${updateCurrencyInput} ${numMinPrice.toFixed(2)} – ${validMaxPrice.toFixed(2)}/kg`
+                  : `${updateCurrencyInput} ${numMinPrice.toFixed(2)}/kg`
+                setPriceUpdateMsg(`"${post.product_name}" updated → ${priceSummary}`)
                 setUpdatingPostModal(null)
               }}
-              className="p-6 space-y-5"
+              className="p-6 space-y-4 bg-white"
             >
+              {/* Price per KG with Min and Max */}
               <div>
-                <label className="block text-xs font-bold uppercase text-slate-500 tracking-wider mb-2">New Price per KG *</label>
-                <div className="flex gap-2">
+                <label className="block text-[11px] font-bold uppercase text-slate-500 tracking-wider mb-1.5">
+                  Price per KG *
+                </label>
+                <div className="flex items-center gap-2">
                   <select
                     value={updateCurrencyInput}
                     onChange={(e) => setUpdateCurrencyInput(e.target.value)}
-                    className="bg-slate-50 border border-slate-200 text-slate-800 font-bold rounded-xl px-3 py-2.5 text-sm outline-none focus:border-[#022B96] transition cursor-pointer"
+                    className="h-[38px] bg-slate-50 border border-slate-200 text-slate-800 font-bold rounded-xl px-2.5 text-xs outline-none focus:border-[#022B96] focus:bg-white transition cursor-pointer shrink-0"
                   >
                     <option>EUR</option>
                     <option>USD</option>
                     <option>GBP</option>
                   </select>
-                  <input
-                    type="number"
-                    required
-                    min="0"
-                    step="0.01"
-                    placeholder="e.g. 7.50"
-                    value={updatePriceInput}
-                    onChange={(e) => setUpdatePriceInput(e.target.value)}
-                    className="flex-1 bg-slate-50 border border-slate-200 text-slate-800 font-semibold rounded-xl px-4 py-2.5 text-sm outline-none focus:border-[#022B96] focus:bg-white transition"
-                    autoFocus
-                  />
+
+                  <div className="relative flex-1">
+                    <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[10px] font-bold uppercase tracking-wider text-slate-400 pointer-events-none">
+                      Min
+                    </span>
+                    <input
+                      type="number"
+                      required
+                      min="0"
+                      step="0.01"
+                      placeholder="0.00"
+                      value={updatePriceInput}
+                      onChange={(e) => setUpdatePriceInput(e.target.value)}
+                      className="w-full h-[38px] bg-slate-50 border border-slate-200 text-slate-900 font-bold rounded-xl pl-10 pr-3 text-xs outline-none focus:border-[#022B96] focus:bg-white transition"
+                      autoFocus
+                    />
+                  </div>
+
+                  <span className="text-slate-300 font-bold text-sm shrink-0">—</span>
+
+                  <div className="relative flex-1">
+                    <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[10px] font-bold uppercase tracking-wider text-slate-400 pointer-events-none">
+                      Max
+                    </span>
+                    <input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      placeholder="Optional"
+                      value={updateMaxPriceInput}
+                      onChange={(e) => setUpdateMaxPriceInput(e.target.value)}
+                      className="w-full h-[38px] bg-slate-50 border border-slate-200 text-slate-900 font-bold rounded-xl pl-11 pr-3 text-xs outline-none focus:border-[#022B96] focus:bg-white transition"
+                    />
+                  </div>
                 </div>
+                <p className="text-[10px] text-slate-400 mt-1.5 font-medium">
+                  Enter Min price (required) and optional Max price for a verified range.
+                </p>
               </div>
 
+              {/* Availability */}
               <div>
-                <label className="block text-xs font-bold uppercase text-slate-500 tracking-wider mb-2">Availability</label>
+                <label className="block text-[11px] font-bold uppercase text-slate-500 tracking-wider mb-1.5">
+                  Availability
+                </label>
                 <select
                   value={updateAvailInput}
                   onChange={(e) => setUpdateAvailInput(e.target.value)}
-                  className="w-full bg-slate-50 border border-slate-200 text-slate-800 rounded-xl px-4 py-2.5 text-sm outline-none focus:border-[#022B96] transition cursor-pointer"
+                  className="w-full h-[38px] bg-slate-50 border border-slate-200 text-slate-800 font-semibold rounded-xl px-3 text-xs outline-none focus:border-[#022B96] focus:bg-white transition cursor-pointer"
                 >
                   <option>In Stock — Ready to Ship</option>
                   <option>Available within 7 days</option>
@@ -2090,20 +2568,41 @@ export default function AdminDashboardPage() {
                 </select>
               </div>
 
-              <div className="flex gap-3 pt-1">
+              {/* Last Update Date */}
+              <div>
+                <label className="block text-[11px] font-bold uppercase text-slate-500 tracking-wider mb-1.5">
+                  Last Update Date *
+                </label>
+                <div className="relative">
+                  <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
+                  <input
+                    type="date"
+                    required
+                    value={updateDateInput}
+                    onChange={(e) => setUpdateDateInput(e.target.value)}
+                    className="w-full h-[38px] bg-slate-50 border border-slate-200 text-slate-800 font-semibold rounded-xl pl-9 pr-3 text-xs outline-none focus:border-[#022B96] focus:bg-white transition cursor-pointer"
+                  />
+                </div>
+                <p className="text-[10px] text-slate-400 mt-1 font-medium">
+                  Sets the verified price update date for buyers and market intelligence.
+                </p>
+              </div>
+
+              {/* Actions */}
+              <div className="flex gap-2.5 pt-2">
                 <button
                   type="button"
                   onClick={() => setUpdatingPostModal(null)}
-                  className="flex-1 py-2.5 border border-slate-200 text-slate-600 font-semibold rounded-xl text-sm hover:bg-slate-50 transition cursor-pointer"
+                  className="flex-1 h-[38px] border border-slate-200 text-slate-600 font-bold rounded-xl text-xs hover:bg-slate-50 transition cursor-pointer"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="flex-1 py-2.5 bg-[#022B96] hover:bg-[#011a5e] text-white font-bold rounded-xl text-sm transition cursor-pointer flex items-center justify-center gap-2"
+                  className="flex-1 h-[38px] bg-[#022B96] hover:bg-[#011a5e] text-white font-bold rounded-xl text-xs transition cursor-pointer flex items-center justify-center gap-1.5 shadow-xs active:scale-95"
                 >
-                  <DollarSign className="h-4 w-4" />
-                  Save Price
+                  <DollarSign className="h-3.5 w-3.5" />
+                  Save Update
                 </button>
               </div>
             </form>

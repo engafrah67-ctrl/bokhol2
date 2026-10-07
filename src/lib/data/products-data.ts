@@ -1,10 +1,13 @@
-﻿export interface SupplierPost {
+export interface SupplierPost {
   id: string
   user_id?: string
   company_id?: string
   company_name?: string
+  company_logo?: string
+  company_country?: string
   product_name: string
   price_per_kg: number
+  max_price_per_kg?: number
   currency: string
   country_of_origin: string
   fresh_frozen: string

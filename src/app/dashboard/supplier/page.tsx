@@ -54,28 +54,31 @@ function getFishImage(productName: string, customImage?: string): string {
   return getFishImageForProduct(productName, customImage)
 }
 
-// Strictly the 3 supported supplier countries with verified flag URLs
+// Strictly the 4 supported supplier countries with verified flag URLs
 const SUPPLIER_ALLOWED_COUNTRIES = [
   {
     name: 'Netherlands',
     code: 'NL',
-    subname: 'Holland',
     flag_emoji: '🇳🇱',
     flag_url: 'https://flagcdn.com/w40/nl.png',
   },
   {
     name: 'Germany',
     code: 'DE',
-    subname: 'Deutschland',
     flag_emoji: '🇩🇪',
     flag_url: 'https://flagcdn.com/w40/de.png',
   },
   {
     name: 'Belgium',
     code: 'BE',
-    subname: 'België',
     flag_emoji: '🇧🇪',
     flag_url: 'https://flagcdn.com/w40/be.png',
+  },
+  {
+    name: 'Norway',
+    code: 'NO',
+    flag_emoji: '🇳🇴',
+    flag_url: 'https://flagcdn.com/w40/no.png',
   },
 ]
 
@@ -217,7 +220,7 @@ export default function SupplierDashboardPage() {
             setUserPhone(userProfile.phone || '')
           }
 
-          // 2. Set Countries & Requests (STRICTLY the 3 allowed supplier countries)
+          // 2. Set Countries & Requests (STRICTLY the 4 allowed supplier countries)
           const dbCountries = countriesRes.data ? [...countriesRes.data] : []
           
           let belgiumDb = dbCountries.find((c: any) => c.name?.toLowerCase() === 'belgium')
@@ -238,6 +241,24 @@ export default function SupplierDashboardPage() {
             } catch (_) {}
           }
 
+          let norwayDb = dbCountries.find((c: any) => c.name?.toLowerCase() === 'norway')
+          if (!norwayDb) {
+            try {
+              const { data: insertedNor } = await supabase
+                .from('countries')
+                .upsert(
+                  { name: 'Norway', slug: 'norway', flag_emoji: '🇳🇴', iso_code: 'NO', region: 'Europe', is_featured: true },
+                  { onConflict: 'name' }
+                )
+                .select('id, name, flag_emoji')
+                .maybeSingle()
+              if (insertedNor) {
+                norwayDb = insertedNor
+                dbCountries.push(insertedNor)
+              }
+            } catch (_) {}
+          }
+
           const loadedCountries = SUPPLIER_ALLOWED_COUNTRIES.map((sac) => {
             const dbMatch = dbCountries.find(
               (dbc: any) =>
@@ -248,7 +269,6 @@ export default function SupplierDashboardPage() {
               id: dbMatch?.id || sac.code.toLowerCase(),
               name: sac.name,
               code: sac.code,
-              subname: sac.subname,
               flag_emoji: sac.flag_emoji,
               flag_url: sac.flag_url,
             }
@@ -949,9 +969,6 @@ export default function SupplierDashboardPage() {
                               className="w-6 h-4 object-cover rounded shadow-2xs border border-black/10 flex-shrink-0"
                             />
                             <span className="font-semibold text-slate-800">{selectedCountryObj.name}</span>
-                            {selectedCountryObj.subname && (
-                              <span className="text-xs text-slate-400 font-normal">({selectedCountryObj.subname})</span>
-                            )}
                             <span className="text-[11px] font-bold text-slate-500 bg-slate-200/80 px-1.5 py-0.5 rounded ml-1">
                               {selectedCountryObj.code}
                             </span>
@@ -988,9 +1005,6 @@ export default function SupplierDashboardPage() {
                                   />
                                   <div className="flex items-center gap-1.5">
                                     <span className="text-sm font-semibold">{c.name}</span>
-                                    {c.subname && (
-                                      <span className="text-xs text-slate-400 font-normal">({c.subname})</span>
-                                    )}
                                   </div>
                                 </div>
                                 <div className="flex items-center gap-2">

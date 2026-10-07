@@ -1,4 +1,4 @@
-﻿import { createPublicServerClient } from '@/lib/supabase/server'
+import { createPublicServerClient } from '@/lib/supabase/server'
 import { getFishImageForProduct } from '@/lib/data/products-data'
 import { ProductsClient, ProductCard } from '@/components/products/products-client'
 
@@ -31,10 +31,10 @@ export default async function ProductsPage() {
       }
     }
 
-    // 2. Fetch all active supplier posts to match REAL live offers only
+    // 2. Fetch all active supplier posts with company profile for supplier logos
     const { data: posts } = await supabase
       .from('supplier_posts')
-      .select('id, title, content, created_at, updated_at')
+      .select('id, title, content, created_at, updated_at, company_id, companies(id, name, logo_url)')
       .eq('is_published', true)
 
     // Group posts by normalized product name
@@ -47,6 +47,7 @@ export default async function ProductsPage() {
       latestDate: string
       currency: string
       customImages: string[]
+      supplierMap: Map<string, { name: string; logoUrl: string | null }>
     }>()
 
     if (posts && posts.length > 0) {
@@ -79,9 +80,16 @@ export default async function ProductsPage() {
         const price = minPrice
 
         const origin = details.countryOfOrigin || ''
-        const date = post.updated_at || post.created_at || ''
+        // Prefer admin-chosen date (in content JSON) over DB updated_at (overwritten by DB trigger)
+        const date = details.lastAdminUpdate || details.lastUpdated || post.updated_at || post.created_at || ''
         const currency = details.currency || 'EUR'
         const customImg = details.customImage || ''
+
+        // Resolve supplier profile from joined companies relation
+        const compRel: any = Array.isArray((post as any).companies) ? (post as any).companies[0] : (post as any).companies
+        const supplierId: string = (post as any).company_id || compRel?.id || ''
+        const supplierName: string = compRel?.name || details.companyName || ''
+        const supplierLogo: string | null = compRel?.logo_url || details.companyLogo || null
 
         if (postGroups.has(key)) {
           const existing = postGroups.get(key)!
@@ -91,7 +99,12 @@ export default async function ProductsPage() {
           if (origin) existing.origins.push(origin)
           if (date > existing.latestDate) existing.latestDate = date
           if (customImg) existing.customImages.push(customImg)
+          if (supplierId && supplierName && !existing.supplierMap.has(supplierId)) {
+            existing.supplierMap.set(supplierId, { name: supplierName, logoUrl: supplierLogo })
+          }
         } else {
+          const supplierMap = new Map<string, { name: string; logoUrl: string | null }>()
+          if (supplierId && supplierName) supplierMap.set(supplierId, { name: supplierName, logoUrl: supplierLogo })
           postGroups.set(key, {
             displayName: name,
             prices: price > 0 ? [price] : [],
@@ -101,6 +114,7 @@ export default async function ProductsPage() {
             latestDate: date,
             currency,
             customImages: customImg ? [customImg] : [],
+            supplierMap,
           })
         }
       }
@@ -136,6 +150,8 @@ export default async function ProductsPage() {
 
       const displayImg = getFishImageForProduct(name, group.customImages[0])
 
+      const suppliers = Array.from(group.supplierMap.values()).slice(0, 4)
+
       return {
         slug,
         name,
@@ -146,6 +162,7 @@ export default async function ProductsPage() {
         priceRange,
         topOrigin,
         lastUpdated,
+        suppliers,
       }
     })
 
