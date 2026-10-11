@@ -120,11 +120,12 @@ export async function POST(req: NextRequest) {
     let { companyId, companyName, category, title, content, details, is_published } = body
 
     if (!title && details?.productName) {
-      const minPrice = parseFloat(details.minPricePerKg) || 0
-      const maxPrice = parseFloat(details.maxPricePerKg) || 0
-      const priceLabel = maxPrice
-        ? `${details.currency || 'EUR'} ${minPrice}–${maxPrice}/kg`
-        : `${details.currency || 'EUR'} ${minPrice}/kg`
+      const price = parseFloat(details.pricePerKg || details.minPricePerKg) || 0
+      const minPrice = parseFloat(details.minPricePerKg) || price
+      const maxPrice = parseFloat(details.maxPricePerKg) || price
+      const priceLabel = maxPrice && maxPrice !== minPrice
+        ? `EUR ${minPrice}–${maxPrice}/kg`
+        : `EUR ${minPrice || price}/kg`
       title = `${details.productName} — ${priceLabel}`
     }
 

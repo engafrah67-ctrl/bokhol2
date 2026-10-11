@@ -11,6 +11,7 @@ import {
   ResponsiveContainer,
 } from 'recharts'
 import { LiveCountryMarketData, LiveSpeciesIndex } from '@/lib/data/market-data'
+import { useLanguage } from '@/contexts/language-context'
 
 export interface SpeciesData {
   id: string
@@ -52,6 +53,7 @@ interface SeafoodIndexCardProps {
 }
 
 export function SeafoodIndexCard({ initialCountryData }: SeafoodIndexCardProps) {
+  const { t } = useLanguage()
   const countryList = initialCountryData && initialCountryData.length > 0 ? initialCountryData : []
   const [selectedCountryId, setSelectedCountryId] = useState(countryList[0]?.id || 'eu')
   const [activeSpeciesId, setActiveSpeciesId] = useState<string>('')
@@ -86,9 +88,9 @@ export function SeafoodIndexCard({ initialCountryData }: SeafoodIndexCardProps) 
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
             </svg>
           </div>
-          <h2 className="text-2xl font-bold tracking-tight text-foreground">European Seafood Index</h2>
+          <h2 className="text-2xl font-bold tracking-tight text-foreground">{t('index_no_listings_title', 'European Seafood Index')}</h2>
           <p className="text-sm text-muted-foreground">
-            No active supplier listings available yet. As suppliers publish active products, real-time pricing benchmarks and price trends will display here automatically.
+            {t('index_no_listings_desc', 'No active supplier listings available yet. As suppliers publish active products, real-time pricing benchmarks and price trends will display here automatically.')}
           </p>
         </div>
       </section>
@@ -104,7 +106,7 @@ export function SeafoodIndexCard({ initialCountryData }: SeafoodIndexCardProps) 
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
           <div>
             <h2 className="text-2xl sm:text-3xl font-extrabold text-foreground tracking-tight">
-              {currentCountry.id === 'eu' ? 'European Seafood Index' : `${currentCountry.name} Seafood Index`}
+              {currentCountry.id === 'eu' ? t('index_title', 'European Seafood Index') : `${currentCountry.name} ${t('index_country_suffix', 'Seafood Index')}`}
             </h2>
             <p className="text-sm text-muted-foreground mt-1">
               {currentCountry.description}
@@ -175,15 +177,15 @@ export function SeafoodIndexCard({ initialCountryData }: SeafoodIndexCardProps) 
             {(activeSpecies as any).suppliersCount > 0 ? (
               <span className="inline-flex items-center gap-1.5 text-[11px] font-bold text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200/60 dark:border-emerald-800/60 px-2 py-0.5 rounded-full">
                 <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                Live · {(activeSpecies as any).suppliersCount} offer{(activeSpecies as any).suppliersCount !== 1 ? 's' : ''}
+                {t('index_live', 'Live')} · {(activeSpecies as any).suppliersCount} {(activeSpecies as any).suppliersCount !== 1 ? t('index_offers', 'offers') : t('index_offer', 'offer')}
               </span>
             ) : (
               <span className="inline-flex items-center gap-1.5 text-[11px] font-bold text-slate-600 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 px-2 py-0.5 rounded-full">
-                Market Index
+                {t('index_market_index', 'Market Index')}
               </span>
             )}
             <span className="text-xs text-slate-400 font-medium">
-              Source: <strong className="text-slate-700 dark:text-slate-300">{currentCountry.source}</strong>
+              {t('index_source', 'Source')}: <strong className="text-slate-700 dark:text-slate-300">{currentCountry.source}</strong>
             </span>
           </div>
         </div>
@@ -197,7 +199,7 @@ export function SeafoodIndexCard({ initialCountryData }: SeafoodIndexCardProps) 
         <div className="lg:col-span-4 space-y-5">
           <div>
             <p className="text-xs font-semibold text-muted-foreground mb-1">
-              Current index price ({currentCountry.name})
+              {t('index_current_price', 'Current index price')} ({currentCountry.name})
             </p>
             <div className="flex items-baseline gap-3">
               <span className="text-5xl font-black tracking-tight text-foreground">
@@ -214,7 +216,7 @@ export function SeafoodIndexCard({ initialCountryData }: SeafoodIndexCardProps) 
                   : 'bg-red-50 text-red-600 dark:bg-red-950/40 dark:text-red-400'
               }`}
             >
-              {isUp ? '▲' : '▼'} {Math.abs(activeSpecies.change)}% this week
+              {isUp ? '▲' : '▼'} {Math.abs(activeSpecies.change)}% {t('index_this_week', 'this week')}
             </span>
           </div>
 
@@ -224,27 +226,27 @@ export function SeafoodIndexCard({ initialCountryData }: SeafoodIndexCardProps) 
             {activeSpecies.weekHigh === activeSpecies.weekLow ? (
               <>
                 <div className="space-y-0.5 col-span-2">
-                  <p className="text-xs font-semibold text-muted-foreground">Supplier price</p>
+                  <p className="text-xs font-semibold text-muted-foreground">{t('index_supplier_price', 'Supplier price')}</p>
                   <p className="text-sm font-bold text-foreground">
                     {activeSpecies.currency === 'EUR' ? '€' : '$'} {activeSpecies.weekHigh.toFixed(2)}
-                    <span className="ml-2 text-[11px] font-normal text-muted-foreground">(Single listing)</span>
+                    <span className="ml-2 text-[11px] font-normal text-muted-foreground">({t('index_single_listing', 'Single listing')})</span>
                   </p>
                 </div>
                 <div className="space-y-0.5">
-                  <p className="text-xs font-semibold text-muted-foreground">Source</p>
+                  <p className="text-xs font-semibold text-muted-foreground">{t('index_source', 'Source')}</p>
                   <p className="text-sm font-bold text-foreground truncate" title={currentCountry.source}>{currentCountry.source}</p>
                 </div>
                 <div className="space-y-0.5">
-                  <p className="text-xs font-semibold text-muted-foreground">Products listed</p>
-                  <p className="text-sm font-bold text-foreground">{currentSpeciesList.length} active</p>
+                  <p className="text-xs font-semibold text-muted-foreground">{t('index_products_listed', 'Products listed')}</p>
+                  <p className="text-sm font-bold text-foreground">{currentSpeciesList.length} {t('stats_products', 'active')}</p>
                 </div>
               </>
             ) : (
               [
-                { label: 'Weekly high', value: `${activeSpecies.currency === 'EUR' ? '€' : '$'} ${activeSpecies.weekHigh.toFixed(2)}` },
-                { label: 'Weekly low',  value: `${activeSpecies.currency === 'EUR' ? '€' : '$'} ${activeSpecies.weekLow.toFixed(2)}` },
-                { label: 'Source',      value: currentCountry.source },
-                { label: 'Products listed', value: `${currentSpeciesList.length} active` },
+                { label: t('index_weekly_high', 'Weekly high'), value: `${activeSpecies.currency === 'EUR' ? '€' : '$'} ${activeSpecies.weekHigh.toFixed(2)}` },
+                { label: t('index_weekly_low', 'Weekly low'),  value: `${activeSpecies.currency === 'EUR' ? '€' : '$'} ${activeSpecies.weekLow.toFixed(2)}` },
+                { label: t('index_source', 'Source'),      value: currentCountry.source },
+                { label: t('index_products_listed', 'Products listed'), value: `${currentSpeciesList.length}` },
               ].map(({ label, value }) => (
                 <div key={label} className="space-y-0.5">
                   <p className="text-xs font-semibold text-muted-foreground">{label}</p>
@@ -304,7 +306,7 @@ export function SeafoodIndexCard({ initialCountryData }: SeafoodIndexCardProps) 
             </ResponsiveContainer>
           ) : (
             <div className="w-full h-full bg-slate-100/50 dark:bg-slate-800/30 rounded-xl flex items-center justify-center text-xs text-muted-foreground">
-              {isMounted ? 'No trend data available' : 'Loading graph...'}
+              {isMounted ? t('index_no_trend_data', 'No trend data available') : t('index_loading_graph', 'Loading graph...')}
             </div>
           )}
         </div>

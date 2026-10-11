@@ -1,4 +1,4 @@
-﻿'use client'
+'use client'
 
 import React, { useState, useEffect, useCallback } from 'react'
 import { Search, TrendingUp, Globe, Clock, ChevronRight, Fish } from 'lucide-react'
@@ -6,7 +6,7 @@ import Link from 'next/link'
 import Image from 'next/image'
 import { BlurGate } from '@/components/blur-gate'
 import { createClient } from '@/lib/supabase/client'
-import { getFishImageForProduct } from '@/lib/data/products-data'
+import { getFishImageForProduct, getFlagUrl } from '@/lib/data/products-data'
 
 const CATEGORIES = ['All', 'Finfish', 'Shellfish', 'Cephalopods']
 
@@ -26,6 +26,7 @@ export interface ProductCard {
   avgPrice: string
   priceRange: string
   topOrigin: string
+  origins?: string[]
   lastUpdated: string
   suppliers: { name: string; logoUrl: string | null }[]
 }
@@ -162,7 +163,9 @@ export function ProductsClient({ initialProducts }: ProductsClientProps) {
         const originCounts = group.origins.reduce((acc: Record<string, number>, o: string) => {
           acc[o] = (acc[o] || 0) + 1; return acc
         }, {})
-        const topOrigin = Object.entries(originCounts).sort((a, b) => (b[1] as number) - (a[1] as number))[0]?.[0] || 'Europe'
+        const sortedOrigins = Object.entries(originCounts).sort((a, b) => (b[1] as number) - (a[1] as number)).map(e => e[0])
+        const uniqueOrigins = sortedOrigins.length > 0 ? sortedOrigins : ['Europe']
+        const topOrigin = uniqueOrigins.join(', ')
 
         const lastUpdated = group.latestDate
           ? new Date(group.latestDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
@@ -180,6 +183,7 @@ export function ProductsClient({ initialProducts }: ProductsClientProps) {
           avgPrice,
           priceRange,
           topOrigin,
+          origins: uniqueOrigins,
           lastUpdated,
           suppliers,
         }
@@ -328,12 +332,37 @@ export function ProductsClient({ initialProducts }: ProductsClientProps) {
                         <BlurGate>{product.suppliersCount}</BlurGate>
                       </span>
                     </div>
-                    <div className="flex justify-between items-center">
-                      <span className="flex items-center gap-1.5 text-slate-500 font-medium">
+                    <div className="flex justify-between items-center gap-2">
+                      <span className="flex items-center gap-1.5 text-slate-500 font-medium shrink-0">
                         <Globe className="w-3 h-3 text-slate-400" />
                         Top origin
                       </span>
-                      <span className="font-bold text-slate-800">{product.topOrigin}</span>
+                      <div className="flex items-center gap-1 flex-wrap justify-end">
+                        {(() => {
+                          const allOrigins = (product.origins && product.origins.length > 0)
+                            ? product.origins
+                            : (product.topOrigin ? product.topOrigin.split(',').map((s: string) => s.trim()) : ['Europe'])
+                          const shown = allOrigins.slice(0, 1)
+                          const extra = allOrigins.length - 1
+                          return (
+                            <>
+                              {shown.map((orig: string) => (
+                                <span key={orig} className="inline-flex items-center gap-1 font-bold text-slate-800">
+                                  {getFlagUrl(orig) ? (
+                                    <img src={getFlagUrl(orig)!} alt={orig} className="h-3 w-4 object-cover rounded-xs shrink-0" />
+                                  ) : null}
+                                  <span>{orig}</span>
+                                </span>
+                              ))}
+                              {extra > 0 && (
+                                <span className="text-[9px] font-semibold text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded-full shrink-0">
+                                  +{extra} more
+                                </span>
+                              )}
+                            </>
+                          )
+                        })()}
+                      </div>
                     </div>
                     <div className="flex justify-between items-center pt-2 border-t border-slate-100">
                       <span className="flex items-center gap-1.5 text-slate-400 font-medium">

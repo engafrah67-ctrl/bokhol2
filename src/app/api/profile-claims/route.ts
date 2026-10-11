@@ -218,6 +218,23 @@ export async function PATCH(req: NextRequest) {
         } else if (company_id) {
           await supabase.from('profile_claims').update(updateData).eq('company_id', company_id)
         }
+
+        // When approved, mark the company in companies table as verified and active
+        if (action === 'approve') {
+          const targetCompId = company_id || (idx !== -1 ? claims[idx]?.company_id : null)
+          const targetCompName = company_name || (idx !== -1 ? claims[idx]?.company_name : null)
+          if (targetCompId) {
+            await supabase
+              .from('companies')
+              .update({ is_verified: true, status: 'active' })
+              .eq('id', targetCompId)
+          } else if (targetCompName) {
+            await supabase
+              .from('companies')
+              .update({ is_verified: true, status: 'active' })
+              .ilike('name', targetCompName)
+          }
+        }
       }
     } catch (_) {}
 

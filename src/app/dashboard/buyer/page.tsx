@@ -37,6 +37,7 @@ import {
 import { useUser } from '@/hooks/use-user'
 import { createClient } from '@/lib/supabase/client'
 import { performSignOut } from '@/lib/auth-helpers'
+import { useLanguage } from '@/contexts/language-context'
 
 export interface BuyerRequestItem {
   id: string
@@ -71,6 +72,7 @@ export interface SupplierOfferNotification {
 export default function BuyerDashboardPage() {
   const router = useRouter()
   const { user, profile, role, isLoading: isUserLoading } = useUser()
+  const { t } = useLanguage()
   const supabase = createClient()
 
   const [activeNav, setActiveNav] = useState<'notifications' | 'requests'>('notifications')
@@ -245,8 +247,8 @@ export default function BuyerDashboardPage() {
   })
 
   const SIDEBAR_ITEMS = [
-    { key: 'notifications', label: 'Notifications (Replies)', icon: Bell, badge: unreadOffersCount },
-    { key: 'requests', label: 'Product Requests', icon: ShoppingBag, badge: requests.length },
+    { key: 'notifications', label: t('buyer_nav_notifications', 'Notifications (Replies)'), icon: Bell, badge: unreadOffersCount },
+    { key: 'requests', label: t('buyer_nav_requests', 'Product Requests'), icon: ShoppingBag, badge: requests.length },
   ]
 
   return (
@@ -264,7 +266,7 @@ export default function BuyerDashboardPage() {
               </div>
               <div>
                 <h2 className="text-sm font-bold text-gray-900 leading-none">Bokhol</h2>
-                <span className="text-[10px] text-gray-400 font-medium uppercase tracking-wide">Buyer Center</span>
+                <span className="text-[10px] text-gray-400 font-medium uppercase tracking-wide">{t('buyer_portal_subtitle', 'Buyer Center')}</span>
               </div>
             </div>
 
@@ -307,7 +309,7 @@ export default function BuyerDashboardPage() {
               className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-semibold text-gray-400 hover:text-red-500 hover:bg-red-50 transition cursor-pointer"
             >
               <LogOut className="w-3.5 h-3.5" />
-              <span>Sign Out</span>
+              <span>{t('buyer_sign_out', 'Sign Out')}</span>
             </button>
           </div>
         </aside>
@@ -338,15 +340,15 @@ export default function BuyerDashboardPage() {
               <div className="space-y-5">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                   <div>
-                    <h1 className="text-xl font-bold text-gray-900">Product Requests</h1>
-                    <p className="text-xs text-gray-400 mt-0.5">Submit sourcing requests to receive direct quotes from verified suppliers.</p>
+                    <h1 className="text-xl font-bold text-gray-900">{t('buyer_req_title', 'Product Requests')}</h1>
+                    <p className="text-xs text-gray-400 mt-0.5">{t('buyer_req_subtitle', 'Submit sourcing requests to receive direct quotes from verified suppliers.')}</p>
                   </div>
                   <button
                     onClick={() => setShowRequestModal(true)}
                     className="inline-flex items-center gap-1.5 px-4 py-2 bg-[#022B96] hover:bg-[#011a5e] text-white text-xs font-semibold rounded-lg transition cursor-pointer self-start sm:self-auto"
                   >
                     <Plus className="w-3.5 h-3.5" />
-                    New Request
+                    {t('buyer_new_request_btn', 'New Request')}
                   </button>
                 </div>
 
@@ -355,7 +357,7 @@ export default function BuyerDashboardPage() {
                   <Search className="w-3.5 h-3.5 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
                   <input
                     type="text"
-                    placeholder="Search requests..."
+                    placeholder={t('buyer_search_placeholder', 'Search requests...')}
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
                     className="w-full pl-8 pr-4 py-2 bg-white border border-gray-200 rounded-lg text-xs text-gray-900 placeholder:text-gray-400 outline-none focus:border-[#022B96] focus:ring-1 focus:ring-[#022B96]/20 transition"
@@ -375,7 +377,7 @@ export default function BuyerDashboardPage() {
                                 {req.quantity} {req.productNeeded}
                               </h3>
                               <p className="text-xs text-gray-400 mt-0.5">
-                                Posted {new Date(req.createdAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}
+                                {t('buyer_posted', 'Posted')} {new Date(req.createdAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}
                               </p>
                             </div>
                             <div className="flex items-center gap-2">
@@ -385,12 +387,12 @@ export default function BuyerDashboardPage() {
                                   className="inline-flex items-center gap-1 px-2.5 py-1 bg-emerald-50 text-emerald-700 border border-emerald-100 text-xs font-semibold rounded-md cursor-pointer hover:bg-emerald-100 transition"
                                 >
                                   <Bell className="w-3 h-3" />
-                                  {relatedOffers.length} Quote{relatedOffers.length > 1 ? 's' : ''}
+                                  {relatedOffers.length} {t('buyer_quotes', 'Quotes')}
                                 </button>
                               ) : (
                                 <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-gray-100 text-gray-500 text-xs font-medium rounded-md">
                                   <Clock className="w-3 h-3" />
-                                  Awaiting quotes
+                                  {t('buyer_awaiting_quotes', 'Awaiting quotes')}
                                 </span>
                               )}
                               <button
@@ -404,19 +406,19 @@ export default function BuyerDashboardPage() {
 
                           <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs pt-3 border-t border-gray-100">
                             <div>
-                              <span className="text-gray-400 block mb-0.5">Condition</span>
+                              <span className="text-gray-400 block mb-0.5">{t('buyer_condition', 'Condition')}</span>
                               <span className="font-medium text-gray-700">{req.freshFrozen}</span>
                             </div>
                             <div>
-                              <span className="text-gray-400 block mb-0.5">Location</span>
+                              <span className="text-gray-400 block mb-0.5">{t('buyer_location', 'Location')}</span>
                               <span className="font-medium text-gray-700 truncate block">{req.location}</span>
                             </div>
                             <div>
-                              <span className="text-gray-400 block mb-0.5">Packaging</span>
+                              <span className="text-gray-400 block mb-0.5">{t('buyer_packaging', 'Packaging')}</span>
                               <span className="font-medium text-gray-700 truncate block">{req.packagingProcessing}</span>
                             </div>
                             <div>
-                              <span className="text-gray-400 block mb-0.5">Delivery</span>
+                              <span className="text-gray-400 block mb-0.5">{t('buyer_delivery', 'Delivery')}</span>
                               <span className="font-medium text-[#022B96]">
                                 {req.deliveryDate}{req.targetPrice ? ` · ${req.targetPrice}` : ''}
                               </span>
@@ -435,14 +437,14 @@ export default function BuyerDashboardPage() {
                 ) : (
                   <div className="text-center py-16 bg-white border border-gray-200 rounded-xl space-y-3">
                     <ShoppingBag className="h-8 w-8 text-gray-200 mx-auto" />
-                    <h3 className="text-sm font-semibold text-gray-700">No requests yet</h3>
-                    <p className="text-xs text-gray-400 max-w-sm mx-auto">Submit your first sourcing request to receive supplier quotes.</p>
+                    <h3 className="text-sm font-semibold text-gray-700">{t('buyer_empty_req_title', 'No requests yet')}</h3>
+                    <p className="text-xs text-gray-400 max-w-sm mx-auto">{t('buyer_empty_req_desc', 'Submit your first sourcing request to receive supplier quotes.')}</p>
                     <button
                       onClick={() => setShowRequestModal(true)}
                       className="inline-flex items-center gap-1.5 px-4 py-2 bg-[#022B96] text-white text-xs font-semibold rounded-lg transition hover:bg-[#011a5e] cursor-pointer"
                     >
                       <Plus className="w-3.5 h-3.5" />
-                      Post First Request
+                      {t('buyer_post_first_btn', 'Post First Request')}
                     </button>
                   </div>
                 )}
@@ -457,14 +459,14 @@ export default function BuyerDashboardPage() {
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                   <div>
                     <h1 className="text-xl font-bold text-gray-900 flex items-center gap-2">
-                      Supplier Offers
+                      {t('buyer_offers_title', 'Supplier Offers')}
                       {unreadOffersCount > 0 && (
                         <span className="text-[10px] bg-[#022B96] text-white font-semibold px-2 py-0.5 rounded-full">
-                          {unreadOffersCount} New
+                          {unreadOffersCount} {t('buyer_offers_new', 'New')}
                         </span>
                       )}
                     </h1>
-                    <p className="text-xs text-gray-400 mt-0.5">Price quotes and replies from verified suppliers.</p>
+                    <p className="text-xs text-gray-400 mt-0.5">{t('buyer_offers_subtitle', 'Price quotes and replies from verified suppliers.')}</p>
                   </div>
 
                   {/* Filter tabs */}
@@ -477,7 +479,7 @@ export default function BuyerDashboardPage() {
                           : 'text-gray-500 hover:text-gray-700'
                       }`}
                     >
-                      All Offers ({offers.length})
+                      {t('buyer_filter_all', 'All Offers')} ({offers.length})
                     </button>
                     <button
                       onClick={() => setNotificationFilter('unread')}
@@ -487,7 +489,7 @@ export default function BuyerDashboardPage() {
                           : 'text-gray-500 hover:text-gray-700'
                       }`}
                     >
-                      Unread ({unreadOffersCount})
+                      {t('buyer_filter_unread', 'Unread')} ({unreadOffersCount})
                     </button>
                   </div>
                 </div>
@@ -509,14 +511,14 @@ export default function BuyerDashboardPage() {
                               <h3 className="font-semibold text-gray-900 text-sm">{offer.supplierName}</h3>
                               <span className="inline-flex items-center gap-1 bg-emerald-50 text-emerald-600 text-[10px] font-semibold px-1.5 py-0.5 rounded">
                                 <CheckCircle2 className="w-2.5 h-2.5" />
-                                Verified
+                                {t('buyer_verified', 'Verified')}
                               </span>
                               {offer.supplierCountry && (
                                 <span className="text-xs text-gray-400">({offer.supplierCountry})</span>
                               )}
                             </div>
                             <p className="text-xs text-gray-400 mt-1">
-                              In response to: <span className="text-gray-600">{offer.requestTitle}</span>
+                              {t('buyer_response_to', 'In response to:')} <span className="text-gray-600">{offer.requestTitle}</span>
                             </p>
                           </div>
                           <div className="text-right">
@@ -531,11 +533,11 @@ export default function BuyerDashboardPage() {
                         {/* Details */}
                         <div className="space-y-2 pt-3 border-t border-gray-100">
                           <div className="text-xs">
-                            <span className="text-gray-400 font-medium block mb-0.5">Delivery &amp; Logistics</span>
+                            <span className="text-gray-400 font-medium block mb-0.5">{t('buyer_logistics', 'Delivery & Logistics')}</span>
                             <span className="text-gray-700">{offer.deliveryTerms}</span>
                           </div>
                           <div className="text-xs">
-                            <span className="text-gray-400 font-medium block mb-0.5">Supplier Message</span>
+                            <span className="text-gray-400 font-medium block mb-0.5">{t('buyer_supplier_msg', 'Supplier Message')}</span>
                             <p className="text-gray-600 leading-relaxed">{offer.message}</p>
                           </div>
                         </div>
@@ -546,7 +548,7 @@ export default function BuyerDashboardPage() {
                             onClick={() => handleToggleReadOffer(offer.id)}
                             className="text-xs text-gray-400 hover:text-gray-700 transition cursor-pointer"
                           >
-                            {offer.isRead ? 'Mark as Unread' : '✓ Mark as Read'}
+                            {offer.isRead ? t('buyer_mark_unread', 'Mark as Unread') : t('buyer_mark_read', '✓ Mark as Read')}
                           </button>
 
                           <div className="flex items-center gap-2">
@@ -556,7 +558,7 @@ export default function BuyerDashboardPage() {
                                 className="inline-flex items-center gap-1.5 px-3 py-1.5 border border-gray-200 hover:bg-gray-50 text-gray-600 text-xs font-medium rounded-lg transition cursor-pointer"
                               >
                                 <Mail className="w-3 h-3" />
-                                Email Supplier
+                                {t('buyer_email_supplier', 'Email Supplier')}
                               </a>
                             )}
                             <a
@@ -570,7 +572,7 @@ export default function BuyerDashboardPage() {
                               <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="h-3 w-3">
                                 <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z" />
                               </svg>
-                              Chat on WhatsApp
+                              {t('buyer_whatsapp', 'Chat on WhatsApp')}
                             </a>
                           </div>
                         </div>
@@ -580,9 +582,9 @@ export default function BuyerDashboardPage() {
                 ) : (
                   <div className="text-center py-16 bg-white border border-gray-200 rounded-xl space-y-3">
                     <Bell className="h-8 w-8 text-gray-200 mx-auto" />
-                    <h3 className="text-sm font-semibold text-gray-700">No supplier offers yet</h3>
+                    <h3 className="text-sm font-semibold text-gray-700">{t('buyer_empty_offers_title', 'No supplier offers yet')}</h3>
                     <p className="text-xs text-gray-400 max-w-sm mx-auto">
-                      When suppliers submit quotes to your requests, they will appear here.
+                      {t('buyer_empty_offers_desc', 'When suppliers submit quotes to your requests, they will appear here.')}
                     </p>
                   </div>
                 )}
@@ -592,8 +594,8 @@ export default function BuyerDashboardPage() {
 
           {/* Footer */}
           <div className="pt-6 mt-8 border-t border-gray-100 flex items-center justify-between text-[11px] text-gray-400">
-            <span>Bokhol Buyer Portal</span>
-            <span>Real-time synchronized</span>
+            <span>{t('buyer_portal_footer', 'Bokhol Buyer Portal')}</span>
+            <span>{t('buyer_portal_synced', 'Real-time synchronized')}</span>
           </div>
         </main>
       </div>
@@ -607,8 +609,8 @@ export default function BuyerDashboardPage() {
             {/* Header */}
             <div className="flex items-center justify-between p-5 border-b border-gray-100">
               <div>
-                <h3 className="text-base font-semibold text-gray-900">New Sourcing Request</h3>
-                <p className="text-xs text-gray-400 mt-0.5">Tell suppliers what you need and they'll send you quotes.</p>
+                <h3 className="text-base font-semibold text-gray-900">{t('buyer_modal_title', 'New Sourcing Request')}</h3>
+                <p className="text-xs text-gray-400 mt-0.5">{t('buyer_modal_subtitle', "Tell suppliers what you need and they'll send you quotes.")}</p>
               </div>
               <button
                 onClick={() => setShowRequestModal(false)}
@@ -629,7 +631,7 @@ export default function BuyerDashboardPage() {
               {/* Product & Quantity */}
               <div className="grid sm:grid-cols-2 gap-3">
                 <div className="space-y-1">
-                  <label className="block text-xs font-medium text-gray-600">Product Needed <span className="text-red-400">*</span></label>
+                  <label className="block text-xs font-medium text-gray-600">{t('buyer_label_product', 'Product Needed')} <span className="text-red-400">*</span></label>
                   <input
                     type="text"
                     required
@@ -640,7 +642,7 @@ export default function BuyerDashboardPage() {
                   />
                 </div>
                 <div className="space-y-1">
-                  <label className="block text-xs font-medium text-gray-600">Quantity <span className="text-red-400">*</span></label>
+                  <label className="block text-xs font-medium text-gray-600">{t('buyer_label_quantity', 'Quantity')} <span className="text-red-400">*</span></label>
                   <input
                     type="text"
                     required
@@ -654,7 +656,7 @@ export default function BuyerDashboardPage() {
 
               {/* Condition */}
               <div className="space-y-1">
-                <label className="block text-xs font-medium text-gray-600">Condition <span className="text-red-400">*</span></label>
+                <label className="block text-xs font-medium text-gray-600">{t('buyer_label_condition', 'Condition')} <span className="text-red-400">*</span></label>
                 <div className="flex gap-2">
                   {['Fresh', 'Frozen', 'Fresh / Frozen'].map((cond) => (
                     <button
@@ -676,7 +678,7 @@ export default function BuyerDashboardPage() {
               {/* Location & Processing */}
               <div className="grid sm:grid-cols-2 gap-3">
                 <div className="space-y-1">
-                  <label className="block text-xs font-medium text-gray-600">Delivery Location <span className="text-red-400">*</span></label>
+                  <label className="block text-xs font-medium text-gray-600">{t('buyer_label_location', 'Delivery Location')} <span className="text-red-400">*</span></label>
                   <input
                     type="text"
                     required
@@ -687,7 +689,7 @@ export default function BuyerDashboardPage() {
                   />
                 </div>
                 <div className="space-y-1">
-                  <label className="block text-xs font-medium text-gray-600">Packaging / Processing</label>
+                  <label className="block text-xs font-medium text-gray-600">{t('buyer_label_packaging', 'Packaging / Processing')}</label>
                   <input
                     type="text"
                     placeholder="e.g. Fillet, Whole Gutted, IQF"
@@ -701,7 +703,7 @@ export default function BuyerDashboardPage() {
               {/* Delivery & Price */}
               <div className="grid sm:grid-cols-2 gap-3">
                 <div className="space-y-1">
-                  <label className="block text-xs font-medium text-gray-600">Target Delivery</label>
+                  <label className="block text-xs font-medium text-gray-600">{t('buyer_label_date', 'Target Delivery')}</label>
                   <input
                     type="text"
                     placeholder="e.g. Friday, Next Week"
@@ -711,7 +713,7 @@ export default function BuyerDashboardPage() {
                   />
                 </div>
                 <div className="space-y-1">
-                  <label className="block text-xs font-medium text-gray-600">Target Price (optional)</label>
+                  <label className="block text-xs font-medium text-gray-600">{t('buyer_label_target_price', 'Target Price (optional)')}</label>
                   <input
                     type="text"
                     placeholder="e.g. €7.50 / kg"
@@ -724,7 +726,7 @@ export default function BuyerDashboardPage() {
 
               {/* Notes */}
               <div className="space-y-1">
-                <label className="block text-xs font-medium text-gray-600">Extra Notes</label>
+                <label className="block text-xs font-medium text-gray-600">{t('buyer_label_notes', 'Extra Notes')}</label>
                 <textarea
                   rows={3}
                   placeholder="Certification requirements, size specs, temperature, etc."
@@ -741,14 +743,14 @@ export default function BuyerDashboardPage() {
                   onClick={() => setShowRequestModal(false)}
                   className="flex-1 py-2 border border-gray-200 text-gray-600 font-medium rounded-lg text-xs hover:bg-gray-50 transition cursor-pointer"
                 >
-                  Cancel
+                  {t('buyer_btn_cancel', 'Cancel')}
                 </button>
                 <button
                   type="submit"
                   className="flex-1 py-2 bg-[#022B96] hover:bg-[#011a5e] text-white font-medium rounded-lg text-xs transition cursor-pointer flex items-center justify-center gap-1.5"
                 >
                   <ShoppingBag className="w-3 h-3" />
-                  Post Request
+                  {t('buyer_btn_submit', 'Post Request')}
                 </button>
               </div>
             </form>

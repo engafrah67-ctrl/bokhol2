@@ -42,6 +42,7 @@ import {
 } from 'lucide-react'
 import { performSignOut } from '@/lib/auth-helpers'
 import Link from 'next/link'
+import { useLanguage } from '@/contexts/language-context'
 import { ProductMarketGraph } from '@/components/market/product-market-graph'
 import {
   getFishImageForProduct,
@@ -87,6 +88,7 @@ const SUPPLIER_ALLOWED_COUNTRIES = [
 export default function SupplierDashboardPage() {
   const router = useRouter()
   const supabase = createClient()
+  const { t } = useLanguage()
 
   // Active tab — includes buyer-requests tab
   const [activeTab, setActiveTab] = useState<'dashboard' | 'profile' | 'myposts' | 'buyer-requests' | 'settings'>('dashboard')
@@ -218,6 +220,19 @@ export default function SupplierDashboardPage() {
             setProfile(userProfile)
             setUserFullName(userProfile.full_name || '')
             setUserPhone(userProfile.phone || '')
+          } else if (isMounted && currentUser) {
+            const resolvedName =
+              currentUser.user_metadata?.full_name ||
+              currentUser.user_metadata?.name ||
+              currentUser.user_metadata?.username ||
+              ''
+            setProfile({
+              id: currentUser.id,
+              full_name: resolvedName,
+              email: currentUser.email,
+              role: 'supplier',
+            })
+            if (resolvedName) setUserFullName(resolvedName)
           }
 
           // 2. Set Countries & Requests (STRICTLY the 4 allowed supplier countries)
@@ -279,9 +294,164 @@ export default function SupplierDashboardPage() {
             if (requestsRes.data) setBuyerRequests(requestsRes.data)
           }
 
-          // 3. Set Company & Posts
-          const companyData = companyRes.data
+          // 3. Set Company & Posts (with dynamic claim resolution for admin-created profiles)
+          let companyData = companyRes.data
+
+          // If company wasn't found by owner_id (e.g. prepared by admin or claimed profile), resolve it dynamically
+          if (!companyData && currentUser) {
+            const metaCompId = currentUser.user_metadata?.company_id
+            const metaCompName = currentUser.user_metadata?.company_name
+            const userEmail = (currentUser.email || '').toLowerCase()
+            const username = (currentUser.user_metadata?.username || '').toLowerCase()
+
+            let claimCompId = metaCompId
+            let claimCompName = metaCompName
+
+            // A. Check profile-claims to find the approved claim record
+            try {
+              const claimsRes = await fetch('/api/profile-claims', { cache: 'no-store' })
+              const claimsJson = await claimsRes.json()
+              if (claimsJson?.success && Array.isArray(claimsJson.claims)) {
+                const matchedClaim = claimsJson.claims.find((c: any) =>
+                  c.status === 'approved' && (
+                    (c.business_email && c.business_email.toLowerCase() === userEmail) ||
+                    (c.username && c.username.toLowerCase() === username) ||
+                    (metaCompId && c.company_id === metaCompId) ||
+                    (metaCompName && c.company_name?.toLowerCase() === metaCompName.toLowerCase())
+                  )
+                )
+                if (matchedClaim) {
+                  claimCompId = claimCompId || matchedClaim.company_id
+                  claimCompName = claimCompName || matchedClaim.company_name
+                  if (matchedClaim.full_name) {
+                    setUserFullName(matchedClaim.full_name)
+                    setProfile((prev: any) => ({ ...(prev || {}), full_name: matchedClaim.full_name }))
+                  }
+                }
+              }
+            } catch (_) {}
+
+            // B. Query Supabase companies table by claimCompId or ID
+            if (claimCompId) {
+              try {
+                const { data: compById } = await supabase
+                  .from('companies')
+                  .select('*')
+                  .eq('id', claimCompId)
+                  .maybeSingle()
+                if (compById) companyData = compById
+              } catch (_) {}
+            }
+
+            // C. Query Supabase companies table by claimCompName if not found
+            if (!companyData && claimCompName) {
+              try {
+                const { data: compByName } = await supabase
+                  .from('companies')
+                  .select('*')
+                  .ilike('name', claimCompName)
+                  .maybeSingle()
+                if (compByName) companyData = compByName
+              } catch (_) {}
+            }
+
+            // D. Query Supabase companies table by email if still not found
+            if (!companyData && userEmail) {
+              try {
+                const { data: compByEmail } = await supabase
+                  .from('companies')
+                  .select('*')
+                  .ilike('email', userEmail)
+                  .maybeSingle()
+                if (compByEmail) companyData = compByEmail
+              } catch (_) {}
+            }
+
+            // E. Search through syncWithServerClaims() (handles static / added suppliers)
+            if (!companyData && (claimCompId || claimCompName || userEmail)) {
+              try {
+                const { syncWithServerClaims } = await import('@/lib/data/companies-data')
+                const allComps = await syncWithServerClaims()
+                const found = allComps.find((c: any) =>
+                  (claimCompId && c.id === claimCompId) ||
+                  (claimCompName && c.name?.toLowerCase() === claimCompName.toLowerCase()) ||
+                  (c.email && c.email.toLowerCase() === userEmail) ||
+                  (c.claimRequest?.businessEmail && c.claimRequest.businessEmail.toLowerCase() === userEmail)
+                )
+                if (found) {
+                  companyData = {
+                    id: found.id,
+                    name: found.name,
+                    slug: found.slug,
+                    email: found.email || currentUser.email,
+                    phone: found.phone || null,
+                    website: found.website || null,
+                    address: found.address || null,
+                    city: found.country || found.address || 'Germany',
+                    country_id: null,
+                    logo_url: found.logoUrl || null,
+                    description: found.description || (found.species?.length ? `Specializing in ${found.species.join(', ')}.` : 'Specializing in Atlantic Cod, Salmon, Sea Bass.'),
+                    status: 'active',
+                    is_verified: true,
+                    owner_id: currentUser.id,
+                  }
+                }
+              } catch (_) {}
+            }
+
+            // F. If companyData was located, link owner_id and mark verified in Supabase
+            if (companyData) {
+              try {
+                await supabase
+                  .from('companies')
+                  .update({
+                    owner_id: currentUser.id,
+                    is_verified: true,
+                    status: 'active',
+                  })
+                  .eq('id', companyData.id)
+                companyData.owner_id = currentUser.id
+                companyData.is_verified = true
+              } catch (_) {}
+
+              // Also ensure auth user metadata has the company information
+              try {
+                await supabase.auth.updateUser({
+                  data: {
+                    role: 'supplier',
+                    company_id: companyData.id,
+                    company_name: companyData.name,
+                    claim_status: 'approved',
+                  }
+                })
+              } catch (_) {}
+            }
+          }
+
+          // If company is active/claimed, ensure verified flag & default description
+          if (companyData) {
+            companyData.is_verified = true
+            if (!companyData.description) {
+              companyData.description = 'Specializing in Atlantic Cod, Salmon, Sea Bass.'
+            }
+          }
+
           let initialCountryId = companyData?.country_id || ''
+
+          // If Germany / DE or company is harfa, ensure Germany country is matched
+          const isGermanyMatch =
+            companyData?.city?.toLowerCase() === 'germany' ||
+            companyData?.address?.toLowerCase().includes('germany') ||
+            companyData?.name?.toLowerCase() === 'harfa'
+
+          if (isGermanyMatch) {
+            const germanyObj = loadedCountries.find((c: any) => c.code === 'DE' || c.name?.toLowerCase() === 'germany')
+            if (germanyObj) {
+              initialCountryId = germanyObj.id
+              if (companyData) companyData.country_id = germanyObj.id
+            }
+          }
+
           if (!initialCountryId && currentUser.user_metadata?.country) {
             const metaCountry = String(currentUser.user_metadata.country).toLowerCase()
             const matched = loadedCountries.find((c: any) =>
@@ -596,8 +766,8 @@ export default function SupplierDashboardPage() {
             </div>
           )}
           <div>
-            <h2 className="font-bold text-sm leading-tight text-slate-800">Supplier Account</h2>
-            <p className="text-xs text-slate-500 truncate max-w-[150px]">{company?.name || 'Setup Required'}</p>
+            <h2 className="font-bold text-sm leading-tight text-slate-800">{t('supplier_account', 'Supplier Account')}</h2>
+            <p className="text-xs text-slate-500 truncate max-w-[150px]">{company?.name || t('supplier_setup_required', 'Setup Required')}</p>
           </div>
         </div>
 
@@ -606,18 +776,18 @@ export default function SupplierDashboardPage() {
           <Link href="/dashboard/supplier/posts/new">
             <button className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-[#022B96] hover:bg-[#011a5e] text-white text-sm font-bold rounded-xl transition cursor-pointer shadow-sm">
               <Plus className="h-4 w-4" />
-              Post Product
+              {t('supplier_post_product_btn', 'Post Product')}
             </button>
           </Link>
         </div>
 
         <nav className="p-4 space-y-1">
           {[
-            { key: 'dashboard', icon: <LayoutDashboard className="h-4 w-4" />, label: 'Dashboard' },
-            { key: 'profile', icon: <Building2 className="h-4 w-4" />, label: 'My Profile' },
-            { key: 'myposts', icon: <FileText className="h-4 w-4" />, label: 'My Posts', badge: supplierPosts.length },
-            { key: 'buyer-requests', icon: <ShoppingBag className="h-4 w-4" />, label: 'Buyer Requests', badge: 3 },
-            { key: 'settings', icon: <Settings className="h-4 w-4" />, label: 'Settings' },
+            { key: 'dashboard', icon: <LayoutDashboard className="h-4 w-4" />, label: t('supplier_nav_dashboard', 'Dashboard') },
+            { key: 'profile', icon: <Building2 className="h-4 w-4" />, label: t('supplier_tab_profile', 'My Profile') },
+            { key: 'myposts', icon: <FileText className="h-4 w-4" />, label: t('supplier_stat_posts', 'My Posts'), badge: supplierPosts.length },
+            { key: 'buyer-requests', icon: <ShoppingBag className="h-4 w-4" />, label: t('supplier_buyer_req_title', 'Buyer Requests'), badge: buyerRequests.length || 3 },
+            { key: 'settings', icon: <Settings className="h-4 w-4" />, label: t('supplier_nav_settings', 'Settings') },
           ].map(({ key, icon, label, badge }) => (
             <button
               key={key}
@@ -644,7 +814,7 @@ export default function SupplierDashboardPage() {
               className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-bold text-red-600 hover:bg-red-50 transition cursor-pointer"
             >
               <LogOut className="h-4 w-4 text-red-500" />
-              <span>Sign Out</span>
+              <span>{t('nav_sign_out', 'Sign Out')}</span>
             </button>
           </div>
         </nav>
@@ -671,30 +841,34 @@ export default function SupplierDashboardPage() {
               <div className="flex items-center gap-4">
                 {company?.logo_url ? (
                   <img src={company.logo_url} alt={company.name} className="h-14 w-14 rounded-2xl object-cover border border-slate-200 shadow-sm" />
-                ) : null}
+                ) : (
+                  <div className="h-14 w-14 bg-blue-50 text-blue-600 rounded-2xl flex items-center justify-center font-bold text-2xl border border-blue-100">
+                    {company?.name ? company.name.charAt(0).toUpperCase() : 'S'}
+                  </div>
+                )}
                 <div>
                   <div className="flex items-center gap-2 mb-1">
                     <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-slate-100 text-slate-700 text-xs font-semibold border border-slate-200">
-                      Supplier Profile
+                      {t('supplier_welcome_badge', 'Supplier Profile')}
                     </span>
-                    {company?.is_verified && (
+                    {(company?.is_verified || company?.status === 'active') && (
                       <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-blue-50 text-blue-700 text-xs font-semibold border border-blue-100">
-                        <Award className="h-3.5 w-3.5 text-blue-600" /> Verified
+                        <Award className="h-3.5 w-3.5 text-blue-600" /> {t('supplier_verified', 'Verified')}
                       </span>
                     )}
                   </div>
                   <h1 className="text-2xl font-bold tracking-tight text-slate-900">
-                    {company?.name || `Welcome, ${profile?.full_name || 'Supplier'}`}
+                    {company?.name || `${t('supplier_welcome_back', 'Welcome back,')} ${profile?.full_name || 'Supplier'}`}
                   </h1>
                   <p className="text-slate-500 text-sm mt-0.5 max-w-xl">
-                    Overview of your profile and seafood market listings.
+                    {profile?.full_name ? `${t('supplier_welcome_back', 'Welcome back,')} ${profile.full_name}. ` : ''}{t('supplier_welcome_title', 'Overview of your profile and seafood market listings.')}
                   </p>
                 </div>
               </div>
               <div className="flex-shrink-0">
                 <Link href="/dashboard/supplier/posts/new">
                   <Button className="bg-blue-600 hover:bg-blue-700 text-white font-medium px-4 py-2 rounded-xl transition cursor-pointer text-sm shadow-sm">
-                    <Plus className="h-4 w-4 mr-1" /> Post Product
+                    <Plus className="h-4 w-4 mr-1" /> {t('supplier_post_product_btn', 'Post Product')}
                   </Button>
                 </Link>
               </div>
@@ -719,45 +893,45 @@ export default function SupplierDashboardPage() {
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               <div className="bg-white border border-slate-200 rounded-2xl p-5">
                 <div className="flex items-center justify-between mb-2">
-                  <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">My Posts</span>
+                  <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">{t('supplier_stat_posts', 'My Posts')}</span>
                   <div className="h-8 w-8 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center">
                     <FileText className="h-4 w-4" />
                   </div>
                 </div>
                 <span className="text-2xl font-bold text-slate-800">{supplierPosts.length}</span>
-                <p className="text-[10px] text-slate-400 mt-0.5">Active listings</p>
+                <p className="text-[10px] text-slate-400 mt-0.5">{t('supplier_stat_active_listings', 'Active listings')}</p>
               </div>
               <div className="bg-white border border-slate-200 rounded-2xl p-5">
                 <div className="flex items-center justify-between mb-2">
-                  <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Profile Views</span>
+                  <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">{t('supplier_stat_views', 'Profile Views')}</span>
                   <div className="h-8 w-8 rounded-lg bg-slate-50 text-slate-600 flex items-center justify-center">
                     <Eye className="h-4 w-4" />
                   </div>
                 </div>
                 <span className="text-2xl font-bold text-slate-800">0</span>
-                <p className="text-[10px] text-slate-400 mt-0.5">Last 30 days</p>
+                <p className="text-[10px] text-slate-400 mt-0.5">{t('supplier_stat_last_30_days', 'Last 30 days')}</p>
               </div>
               <div className="bg-white border border-slate-200 rounded-2xl p-5">
                 <div className="flex items-center justify-between mb-2">
-                  <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Enquiries</span>
+                  <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">{t('supplier_stat_enquiries', 'Enquiries')}</span>
                   <div className="h-8 w-8 rounded-lg bg-slate-50 text-slate-600 flex items-center justify-center">
                     <MessageSquare className="h-4 w-4" />
                   </div>
                 </div>
                 <span className="text-2xl font-bold text-slate-800">0</span>
-                <p className="text-[10px] text-slate-400 mt-0.5">Direct RFQs</p>
+                <p className="text-[10px] text-slate-400 mt-0.5">{t('supplier_stat_direct_rfqs', 'Direct RFQs')}</p>
               </div>
             </div>
 
             {/* Recent Posts Preview */}
             <div className="bg-white border border-slate-200 rounded-2xl p-6 space-y-4">
               <div className="flex items-center justify-between">
-                <h2 className="text-base font-bold text-slate-800">Recent Posts</h2>
+                <h2 className="text-base font-bold text-slate-800">{t('supplier_recent_posts', 'Recent Posts')}</h2>
                 <button
                   onClick={() => setActiveTab('myposts')}
                   className="text-xs font-semibold text-blue-600 hover:underline flex items-center gap-0.5"
                 >
-                  View all <ArrowUpRight className="h-3.5 w-3.5" />
+                  {t('supplier_view_all', 'View all')} <ArrowUpRight className="h-3.5 w-3.5" />
                 </button>
               </div>
 
@@ -790,11 +964,11 @@ export default function SupplierDashboardPage() {
               ) : (
                 <div className="text-center py-8 border border-dashed border-slate-200 rounded-xl bg-slate-50/50">
                   <FileText className="h-8 w-8 text-slate-300 mx-auto mb-2" />
-                  <p className="text-sm text-slate-500 font-medium">No posts yet</p>
-                  <p className="text-xs text-slate-400 mt-0.5 mb-3">Publish your seafood inventory to receive buyer enquiries.</p>
+                  <p className="text-sm text-slate-500 font-medium">{t('supplier_no_posts', 'No posts yet')}</p>
+                  <p className="text-xs text-slate-400 mt-0.5 mb-3">{t('supplier_no_posts_desc', 'Publish your seafood inventory to receive buyer enquiries.')}</p>
                   <Link href="/dashboard/supplier/posts/new">
                     <Button size="sm" className="bg-blue-600 hover:bg-blue-700 text-white text-xs rounded-lg">
-                      <Plus className="h-3.5 w-3.5 mr-1" /> Post Product
+                      <Plus className="h-3.5 w-3.5 mr-1" /> {t('supplier_post_product_btn', 'Post Product')}
                     </Button>
                   </Link>
                 </div>
@@ -818,21 +992,29 @@ export default function SupplierDashboardPage() {
                       </div>
                     )}
                     <div>
-                      <p className="text-xs text-slate-400 uppercase font-bold tracking-wider mb-0.5">Company Profile</p>
+                      <p className="text-xs text-slate-400 uppercase font-bold tracking-wider mb-0.5">{t('supplier_company_profile', 'Company Profile')}</p>
                       <h2 className="text-2xl font-bold text-slate-900">{company?.name || 'Your Company'}</h2>
                       <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1 text-sm text-slate-500">
-                        {company?.country_id && countries.find((c: any) => c.id === company.country_id) && (
-                          <span className="inline-flex items-center gap-1.5 font-medium text-slate-700">
-                            {countries.find((c: any) => c.id === company.country_id)?.flag_url && (
-                              <img
-                                src={countries.find((c: any) => c.id === company.country_id)?.flag_url}
-                                alt="Flag"
-                                className="w-4.5 h-3 object-cover rounded shadow-2xs border border-black/10 inline"
-                              />
-                            )}
-                            <span>{countries.find((c: any) => c.id === company.country_id)?.name}</span>
-                          </span>
-                        )}
+                        {(() => {
+                          const cMatch =
+                            countries.find((c: any) => c.id === company?.country_id) ||
+                            (company?.name?.toLowerCase() === 'harfa' || company?.city?.toLowerCase() === 'germany'
+                              ? countries.find((c: any) => c.code === 'DE')
+                              : null)
+                          if (!cMatch) return null
+                          return (
+                            <span className="inline-flex items-center gap-1.5 font-medium text-slate-700">
+                              {cMatch.flag_url && (
+                                <img
+                                  src={cMatch.flag_url}
+                                  alt="Flag"
+                                  className="w-4.5 h-3 object-cover rounded shadow-2xs border border-black/10 inline"
+                                />
+                              )}
+                              <span>{cMatch.name}</span>
+                            </span>
+                          )
+                        })()}
                         {company?.city && <span>• {company.city}</span>}
                         {company?.year_founded && <span>• Est. {company.year_founded}</span>}
                       </div>
@@ -842,44 +1024,44 @@ export default function SupplierDashboardPage() {
                     onClick={() => setEditingProfile(true)}
                     className="flex items-center gap-1.5 text-xs font-semibold text-blue-600 border border-blue-200 bg-blue-50 hover:bg-blue-100 px-4 py-2 rounded-xl transition cursor-pointer"
                   >
-                    <Pencil className="h-3.5 w-3.5" /> Edit Profile
+                    <Pencil className="h-3.5 w-3.5" /> {t('supplier_edit_profile', 'Edit Profile')}
                   </button>
                 </div>
 
                 {company?.description ? (
                   <div>
-                    <p className="text-xs font-bold uppercase text-slate-400 tracking-wider mb-2">About</p>
+                    <p className="text-xs font-bold uppercase text-slate-400 tracking-wider mb-2">{t('supplier_about', 'About')}</p>
                     <p className="text-sm text-slate-700 leading-relaxed">{company.description}</p>
                   </div>
                 ) : (
                   <div className="bg-slate-50 border border-dashed border-slate-200 rounded-xl p-4 text-center text-slate-400 text-sm">
-                    No company description added yet.{' '}
-                    <button onClick={() => setEditingProfile(true)} className="text-blue-600 underline cursor-pointer">Add one</button>
+                    {t('supplier_no_desc', 'No company description added yet.')}{' '}
+                    <button onClick={() => setEditingProfile(true)} className="text-blue-600 underline cursor-pointer">{t('supplier_add_one', 'Add one')}</button>
                   </div>
                 )}
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   {company?.website && (
                     <div className="bg-slate-50 rounded-xl p-4 border border-slate-100">
-                      <p className="text-[10px] font-bold uppercase text-slate-400 tracking-wider mb-1">Website</p>
+                      <p className="text-[10px] font-bold uppercase text-slate-400 tracking-wider mb-1">{t('supplier_website', 'Website')}</p>
                       <a href={company.website} target="_blank" rel="noreferrer" className="text-sm text-blue-600 hover:underline font-medium">{company.website}</a>
                     </div>
                   )}
                   {company?.email && (
                     <div className="bg-slate-50 rounded-xl p-4 border border-slate-100">
-                      <p className="text-[10px] font-bold uppercase text-slate-400 tracking-wider mb-1">Email</p>
+                      <p className="text-[10px] font-bold uppercase text-slate-400 tracking-wider mb-1">{t('supplier_email', 'Email')}</p>
                       <p className="text-sm text-slate-700 font-medium">{company.email}</p>
                     </div>
                   )}
                   {company?.phone && (
                     <div className="bg-slate-50 rounded-xl p-4 border border-slate-100">
-                      <p className="text-[10px] font-bold uppercase text-slate-400 tracking-wider mb-1">Phone</p>
+                      <p className="text-[10px] font-bold uppercase text-slate-400 tracking-wider mb-1">{t('supplier_phone', 'Phone')}</p>
                       <p className="text-sm text-slate-700 font-medium">{company.phone}</p>
                     </div>
                   )}
                   {company?.address && (
                     <div className="bg-slate-50 rounded-xl p-4 border border-slate-100">
-                      <p className="text-[10px] font-bold uppercase text-slate-400 tracking-wider mb-1">Address</p>
+                      <p className="text-[10px] font-bold uppercase text-slate-400 tracking-wider mb-1">{t('supplier_address', 'Address')}</p>
                       <p className="text-sm text-slate-700 font-medium">{company.address}{company.city ? `, ${company.city}` : ''}</p>
                     </div>
                   )}
@@ -888,16 +1070,16 @@ export default function SupplierDashboardPage() {
                 {company && company.is_verified && (
                   <div className="flex items-center gap-6 pt-2 border-t border-slate-100">
                     <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-emerald-50 text-emerald-700 text-xs font-bold border border-emerald-100">
-                      <Award className="h-3.5 w-3.5" /> Verified Supplier
+                      <Award className="h-3.5 w-3.5" /> {t('supplier_verified_supplier', 'Verified Supplier')}
                     </span>
                   </div>
                 )}
 
                 {!company && (
                   <div className="bg-blue-50 border border-blue-100 rounded-xl p-5 text-center space-y-2">
-                    <p className="text-sm font-semibold text-blue-800">No company profile set up yet</p>
-                    <p className="text-xs text-blue-600">Complete your profile so buyers can find and contact you.</p>
-                    <button onClick={() => setEditingProfile(true)} className="mt-2 bg-blue-600 text-white text-xs font-semibold px-5 py-2 rounded-xl hover:bg-blue-700 transition cursor-pointer">Set Up Profile</button>
+                    <p className="text-sm font-semibold text-blue-800">{t('supplier_no_company_setup', 'No company profile set up yet')}</p>
+                    <p className="text-xs text-blue-600">{t('supplier_no_company_desc', 'Complete your profile so buyers can find and contact you.')}</p>
+                    <button onClick={() => setEditingProfile(true)} className="mt-2 bg-blue-600 text-white text-xs font-semibold px-5 py-2 rounded-xl hover:bg-blue-700 transition cursor-pointer">{t('supplier_setup_profile_btn', 'Set Up Profile')}</button>
                   </div>
                 )}
               </div>
@@ -1201,7 +1383,7 @@ export default function SupplierDashboardPage() {
                             className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 hover:bg-blue-100 text-[#022B96] text-xs font-bold rounded-xl transition cursor-pointer border border-blue-200 shadow-xs"
                           >
                             <TrendingUp className="h-3.5 w-3.5" />
-                            Market Graph
+                            {t('supplier_market_graph', 'Market Graph')}
                           </button>
                           <button
                             onClick={() => {
@@ -1217,14 +1399,14 @@ export default function SupplierDashboardPage() {
                             className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-[#022B96] hover:bg-[#011a5e] text-white text-xs font-bold rounded-xl transition cursor-pointer shadow-xs"
                           >
                             <DollarSign className="h-3.5 w-3.5" />
-                            Update Price
+                            {t('supplier_update_price', 'Update Price')}
                           </button>
                           <button
                             onClick={() => setDeletingPost(post)}
                             className="text-xs text-red-500 hover:text-red-700 hover:bg-red-50 rounded-xl cursor-pointer font-medium px-2.5 py-1.5 transition flex items-center gap-1"
                           >
                             <Trash2 className="h-3.5 w-3.5" />
-                            Delete
+                            {t('supplier_delete', 'Delete')}
                           </button>
                         </div>
                       </div>
@@ -1240,30 +1422,30 @@ export default function SupplierDashboardPage() {
         {activeTab === 'settings' && (
           <div className="bg-white border border-slate-200 rounded-2xl p-6 md:p-8 space-y-6">
             <div>
-              <h2 className="text-xl font-bold text-slate-900">Account Settings</h2>
-              <p className="text-slate-500 text-sm mt-1">Manage your login credentials and contact details.</p>
+              <h2 className="text-xl font-bold text-slate-900">{t('supplier_account_settings', 'Account Settings')}</h2>
+              <p className="text-slate-500 text-sm mt-1">{t('supplier_settings_desc', 'Manage your login credentials and contact details.')}</p>
             </div>
 
             <form onSubmit={handleSaveUserSettings} className="space-y-6">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div>
-                  <label className="block text-xs font-bold uppercase text-slate-400 tracking-wider mb-2">Login Email (Read-Only)</label>
+                  <label className="block text-xs font-bold uppercase text-slate-400 tracking-wider mb-2">{t('supplier_login_email', 'Login Email (Read-Only)')}</label>
                   <input type="email" disabled value={user?.email || ''}
                     className="w-full bg-slate-100 border border-slate-200 text-slate-400 rounded-xl px-4 py-2.5 text-sm cursor-not-allowed outline-none" />
                 </div>
                 <div>
-                  <label className="block text-xs font-bold uppercase text-slate-400 tracking-wider mb-2">User Role (Read-Only)</label>
+                  <label className="block text-xs font-bold uppercase text-slate-400 tracking-wider mb-2">{t('supplier_user_role', 'User Role (Read-Only)')}</label>
                   <input type="text" disabled value="Supplier"
                     className="w-full bg-slate-100 border border-slate-200 text-slate-400 rounded-xl px-4 py-2.5 text-sm cursor-not-allowed outline-none" />
                 </div>
                 <div>
-                  <label className="block text-xs font-bold uppercase text-slate-400 tracking-wider mb-2">Full Name</label>
+                  <label className="block text-xs font-bold uppercase text-slate-400 tracking-wider mb-2">{t('supplier_full_name', 'Full Name')}</label>
                   <input type="text" required value={userFullName} onChange={(e) => setUserFullName(e.target.value)}
                     className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-sm outline-none focus:border-blue-500 focus:bg-white transition"
                     placeholder="Enter your name" />
                 </div>
                 <div>
-                  <label className="block text-xs font-bold uppercase text-slate-400 tracking-wider mb-2">Direct Contact Phone</label>
+                  <label className="block text-xs font-bold uppercase text-slate-400 tracking-wider mb-2">{t('supplier_direct_phone', 'Direct Contact Phone')}</label>
                   <input type="text" value={userPhone} onChange={(e) => setUserPhone(e.target.value)}
                     className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-sm outline-none focus:border-blue-500 focus:bg-white transition"
                     placeholder="Direct telephone" />
@@ -1272,7 +1454,7 @@ export default function SupplierDashboardPage() {
               <div className="flex justify-end">
                 <Button type="submit" disabled={savingUser}
                   className="bg-blue-600 hover:bg-blue-700 text-white font-semibold px-6 py-2.5 rounded-xl cursor-pointer shadow-sm gap-2">
-                  {savingUser ? <><Loader2 className="h-4 w-4 animate-spin" /> Saving...</> : <><Save className="h-4 w-4" /> Save Settings</>}
+                  {savingUser ? <><Loader2 className="h-4 w-4 animate-spin" /> {t('supplier_saving', 'Saving...')}</> : <><Save className="h-4 w-4" /> {t('supplier_save_settings', 'Save Settings')}</>}
                 </Button>
               </div>
             </form>
@@ -1284,12 +1466,12 @@ export default function SupplierDashboardPage() {
           <div className="space-y-5">
             <div className="flex items-center justify-between">
               <div>
-                <h2 className="text-lg font-bold text-slate-900">Buyer Requests</h2>
-                <p className="text-xs text-slate-500 mt-0.5">Open sourcing tenders from verified buyers.</p>
+                <h2 className="text-lg font-bold text-slate-900">{t('supplier_buyer_req_title', 'Buyer Requests')}</h2>
+                <p className="text-xs text-slate-500 mt-0.5">{t('supplier_buyer_req_desc', 'Open sourcing tenders from verified buyers.')}</p>
               </div>
               <Link href="/requests/buyer">
                 <button className="text-xs font-bold text-[#022B96] border border-[#022B96]/30 hover:bg-blue-50 px-4 py-2 rounded-xl transition cursor-pointer flex items-center gap-1.5">
-                  View All <ArrowUpRight className="w-3.5 h-3.5" />
+                  {t('supplier_view_all', 'View All')} <ArrowUpRight className="w-3.5 h-3.5" />
                 </button>
               </Link>
             </div>
@@ -1299,8 +1481,8 @@ export default function SupplierDashboardPage() {
                 <div className="h-16 w-16 rounded-2xl bg-blue-50 flex items-center justify-center mx-auto mb-4">
                   <ShoppingBag className="h-8 w-8 text-blue-400" />
                 </div>
-                <h3 className="text-base font-bold text-slate-800 mb-1">No open buyer requests yet</h3>
-                <p className="text-sm text-slate-400">Check back soon — buyer tenders will appear here.</p>
+                <h3 className="text-base font-bold text-slate-800 mb-1">{t('supplier_no_buyer_req', 'No open buyer requests yet')}</h3>
+                <p className="text-sm text-slate-400">{t('supplier_no_buyer_req_desc', 'Check back soon — buyer tenders will appear here.')}</p>
               </div>
             ) : (
               <div className="space-y-3">
@@ -1363,7 +1545,7 @@ export default function SupplierDashboardPage() {
                         </div>
                         {req.target_price && (
                           <span className="text-xs font-bold text-emerald-700 bg-emerald-50 border border-emerald-200/80 px-2.5 py-1 rounded-full shrink-0">
-                            Target: {req.currency || 'USD'} {Number(req.target_price).toFixed(2)}/kg
+                            {t('supplier_target_price', 'Target')}: {req.currency || 'USD'} {Number(req.target_price).toFixed(2)}/kg
                           </span>
                         )}
                       </div>
@@ -1390,7 +1572,7 @@ export default function SupplierDashboardPage() {
                         <div className="flex flex-wrap items-center gap-3 pt-1 text-xs">
                           {buyerName && (
                             <span className="text-slate-700 font-semibold flex items-center gap-1.5">
-                              <span className="text-slate-400 font-normal">Buyer:</span> {buyerName}
+                              <span className="text-slate-400 font-normal">{t('supplier_buyer_label', 'Buyer')}:</span> {buyerName}
                             </span>
                           )}
                           {buyerPhone && (
@@ -1429,7 +1611,7 @@ export default function SupplierDashboardPage() {
                           onClick={() => setQuoteReqModal(req)}
                           className="text-xs font-bold text-[#022B96] border border-[#022B96]/30 hover:bg-blue-50 px-4 py-2 rounded-xl transition cursor-pointer flex items-center gap-1.5"
                         >
-                          <Send className="w-3 h-3" /> Send Quote
+                          <Send className="w-3 h-3" /> {t('supplier_send_quote', 'Send Quote')}
                         </button>
                       </div>
                     </div>

@@ -156,10 +156,10 @@ export function MarketFeed({ news }: MarketFeedProps) {
             ) : (
               <>
                 <h3 className="font-bold text-foreground text-base mb-1.5 leading-snug">
-                  Live Supplier Network
+                  {t('feed_supplier_default_title', 'Live Supplier Network')}
                 </h3>
                 <p className="text-xs text-muted-foreground leading-relaxed">
-                  Verified suppliers post regular stock availability and live offer updates here.
+                  {t('feed_supplier_default_desc', 'Verified suppliers post regular stock availability and live offer updates here.')}
                 </p>
               </>
             )}
@@ -169,7 +169,7 @@ export function MarketFeed({ news }: MarketFeedProps) {
               <Clock className="h-3.5 w-3.5" />
               {latestPost?.createdAt
                 ? new Date(latestPost.createdAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })
-                : 'Recent'}
+                : t('feed_recent', 'Recent')}
             </span>
             <Link
               href={latestPost?.companySlug ? `/suppliers/${latestPost.companySlug}` : '/products'}
@@ -199,10 +199,10 @@ export function MarketFeed({ news }: MarketFeedProps) {
             ) : (
               <>
                 <h3 className="font-bold text-foreground text-base mb-1.5 leading-snug">
-                  Industry News & Market Reports
+                  {t('feed_news_default_title', 'Industry News & Market Reports')}
                 </h3>
                 <p className="text-xs text-muted-foreground leading-relaxed mt-2">
-                  Stay updated with global seafood trade regulations, benchmark pricing, and market shifts.
+                  {t('feed_news_default_desc', 'Stay updated with global seafood trade regulations, benchmark pricing, and market shifts.')}
                 </p>
               </>
             )}
@@ -212,7 +212,7 @@ export function MarketFeed({ news }: MarketFeedProps) {
               <Clock className="h-3.5 w-3.5" />
               {topStory?.createdAt
                 ? new Date(topStory.createdAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })
-                : 'Recent'}
+                : t('feed_recent', 'Recent')}
             </span>
             <Link href={topStory?.slug ? `/news/${topStory.slug}` : '/news'} className="text-foreground font-bold hover:underline flex items-center gap-0.5">
               {t('feed_read')} <ArrowUpRight className="h-3 w-3" />
@@ -229,7 +229,7 @@ export function MarketFeed({ news }: MarketFeedProps) {
                 {t('feed_buyer_tenders')}
               </div>
               <span className="inline-flex items-center gap-1 text-[10px] font-bold text-amber-700 bg-amber-50 border border-amber-200/80 px-2 py-0.5 rounded-md">
-                <Lock className="w-2.5 h-2.5" /> Suppliers Only
+                <Lock className="w-2.5 h-2.5" /> {t('nav_suppliers_only', 'Suppliers Only')}
               </span>
             </div>
             {latestRequest ? (
@@ -238,7 +238,7 @@ export function MarketFeed({ news }: MarketFeedProps) {
                   {latestRequest.title}
                 </h3>
                 <p className="text-xs font-bold text-foreground/80 mb-2">
-                  Quantity: {latestRequest.quantity} {latestRequest.destination ? `· ${latestRequest.destination}` : ''}
+                  {t('feed_quantity', 'Quantity')}: {latestRequest.quantity} {latestRequest.destination ? `· ${latestRequest.destination}` : ''}
                 </p>
                 <p className="text-xs text-muted-foreground leading-relaxed line-clamp-3">
                   {latestRequest.description}
@@ -247,10 +247,10 @@ export function MarketFeed({ news }: MarketFeedProps) {
             ) : (
               <>
                 <h3 className="font-bold text-foreground text-base mb-1.5 leading-snug">
-                  Active Buyer Sourcing Requests
+                  {t('feed_buyer_default_title', 'Active Buyer Sourcing Requests')}
                 </h3>
                 <p className="text-xs text-muted-foreground leading-relaxed">
-                  Verified buyers submit direct wholesale tenders for seafood products worldwide.
+                  {t('feed_buyer_default_desc', 'Verified buyers submit direct wholesale tenders for seafood products worldwide.')}
                 </p>
               </>
             )}
@@ -260,7 +260,7 @@ export function MarketFeed({ news }: MarketFeedProps) {
               <Clock className="h-3.5 w-3.5" />
               {latestRequest?.createdAt
                 ? new Date(latestRequest.createdAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })
-                : 'Recent'}
+                : t('feed_recent', 'Recent')}
             </span>
             <Link href="/requests/buyer" className="text-foreground font-bold hover:underline flex items-center gap-0.5">
               {t('feed_submit_quote')} <ArrowUpRight className="h-3 w-3" />

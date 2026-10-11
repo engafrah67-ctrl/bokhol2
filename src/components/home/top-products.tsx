@@ -1,8 +1,11 @@
+'use client'
+
 import Link from 'next/link'
 import { Product } from '@/types/database'
 import { ArrowUpRight, Fish } from 'lucide-react'
 import { BlurGate } from '@/components/blur-gate'
 import { TopMarketProduct } from '@/lib/data/market-data'
+import { useLanguage } from '@/contexts/language-context'
 
 interface TopProductsProps {
   products?: Product[]
@@ -63,6 +66,7 @@ function getFlagUrl(country: string): string | null {
 }
 
 export function TopProducts({ topProducts }: TopProductsProps) {
+  const { t } = useLanguage()
   const productsList = (topProducts && topProducts.length > 0)
     ? topProducts.slice(0, 6)
     : []
@@ -72,20 +76,20 @@ export function TopProducts({ topProducts }: TopProductsProps) {
       <div className="py-8 px-8 bg-background text-foreground transition-all border border-border rounded-2xl shadow-sm">
         <div className="flex items-center justify-between mb-6">
           <div>
-            <h3 className="text-base font-extrabold text-foreground tracking-tight">Top Seafood Products</h3>
-            <p className="text-[11px] text-muted-foreground mt-0.5">Most active species across European spot markets with verified live supplier offers.</p>
+            <h3 className="text-base font-extrabold text-foreground tracking-tight">{t('top_products_title', 'Top Seafood Products')}</h3>
+            <p className="text-[11px] text-muted-foreground mt-0.5">{t('top_products_subtitle', 'Most active species across European spot markets with verified live supplier offers.')}</p>
           </div>
           <Link href="/products" className="text-xs font-bold text-foreground hover:text-foreground/80 transition-colors inline-flex items-center gap-1 bg-muted px-3 py-1.5 rounded-lg border border-border">
-            View all
+            {t('top_products_view_all', 'View all')}
             <ArrowUpRight className="h-3.5 w-3.5" />
           </Link>
         </div>
 
         <div className="py-12 px-4 text-center border border-dashed border-border rounded-xl">
           <Fish className="h-10 w-10 mx-auto text-muted-foreground/40 mb-3" />
-          <h4 className="text-sm font-bold text-foreground">No seafood products listed yet</h4>
+          <h4 className="text-sm font-bold text-foreground">{t('top_products_empty_title', 'No seafood products listed yet')}</h4>
           <p className="text-xs text-muted-foreground mt-1 max-w-md mx-auto">
-            Suppliers haven&apos;t posted any products yet. When verified exporters list active products and offers, market prices and species will appear here.
+            {t('top_products_empty_desc', "Suppliers haven't posted any products yet. When verified exporters list active products and offers, market prices and species will appear here.")}
           </p>
         </div>
       </div>
@@ -96,11 +100,11 @@ export function TopProducts({ topProducts }: TopProductsProps) {
     <div className="py-8 px-8 bg-background text-foreground transition-all border border-border rounded-2xl shadow-sm">
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h3 className="text-base font-extrabold text-foreground tracking-tight">Top Seafood Products</h3>
-          <p className="text-[11px] text-muted-foreground mt-0.5">Most active species across European spot markets with verified live supplier offers.</p>
+          <h3 className="text-base font-extrabold text-foreground tracking-tight">{t('top_products_title', 'Top Seafood Products')}</h3>
+          <p className="text-[11px] text-muted-foreground mt-0.5">{t('top_products_subtitle', 'Most active species across European spot markets with verified live supplier offers.')}</p>
         </div>
         <Link href="/products" className="text-xs font-bold text-foreground hover:text-foreground/80 transition-colors inline-flex items-center gap-1 bg-muted px-3 py-1.5 rounded-lg border border-border">
-          View all
+          {t('top_products_view_all', 'View all')}
           <ArrowUpRight className="h-3.5 w-3.5" />
         </Link>
       </div>
@@ -109,11 +113,11 @@ export function TopProducts({ topProducts }: TopProductsProps) {
         <table className="w-full text-left text-sm">
           <thead>
             <tr className="border-b border-slate-200 dark:border-slate-800 text-xs text-slate-500 font-medium">
-              <th className="py-4 px-4 w-32">Fish</th>
-              <th className="py-4 px-4">Name</th>
-              <th className="py-4 px-4">Top Origin</th>
-              <th className="py-4 px-4">Avg. Market Price</th>
-              <th className="py-4 px-4 text-right">Active Suppliers</th>
+              <th className="py-4 px-4 w-32">{t('top_products_col_fish', 'Fish')}</th>
+              <th className="py-4 px-4">{t('top_products_col_name', 'Name')}</th>
+              <th className="py-4 px-4">{t('top_products_col_origin', 'Top Origin')}</th>
+              <th className="py-4 px-4">{t('top_products_col_avg_price', 'Avg. Market Price')}</th>
+              <th className="py-4 px-4 text-right">{t('top_products_col_suppliers', 'Active Suppliers')}</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
@@ -142,20 +146,38 @@ export function TopProducts({ topProducts }: TopProductsProps) {
                   </Link>
                 </td>
 
-                {/* 3. Country with flag image */}
+                {/* 3. Country with flag image — max 2 shown, rest collapsed */}
                 <td className="py-4 px-4 font-medium text-slate-700 dark:text-slate-300">
-                  <div className="flex items-center gap-2">
-                    {getFlagUrl(p.origin) ? (
-                      <img
-                        src={getFlagUrl(p.origin)!}
-                        alt={p.origin}
-                        className="h-3.5 w-5 object-cover rounded-xs shadow-xs"
-                      />
-                    ) : (
-                      <span className="text-sm leading-none">🏳️</span>
-                    )}
-                    <span>{p.origin}</span>
-                  </div>
+                  {(() => {
+                    const allOrigins = (p.origins && p.origins.length > 0)
+                      ? p.origins
+                      : (p.origin ? p.origin.split(',').map((s: string) => s.trim()) : ['Europe'])
+                    const shown = allOrigins.slice(0, 1)
+                    const extra = allOrigins.length - 1
+                    return (
+                      <div className="flex items-center gap-2 flex-wrap">
+                        {shown.map((orig: string) => (
+                          <div key={orig} className="flex items-center gap-1.5 shrink-0">
+                            {getFlagUrl(orig) ? (
+                              <img
+                                src={getFlagUrl(orig)!}
+                                alt={orig}
+                                className="h-3.5 w-5 object-cover rounded-xs shadow-xs"
+                              />
+                            ) : (
+                              <span className="text-sm leading-none">🏳️</span>
+                            )}
+                            <span className="text-xs">{orig}</span>
+                          </div>
+                        ))}
+                        {extra > 0 && (
+                          <span className="text-[10px] font-semibold text-slate-400 bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded-full shrink-0">
+                            +{extra} more
+                          </span>
+                        )}
+                      </div>
+                    )
+                  })()}
                 </td>
 
                 {/* 4. Avg Market Price */}
@@ -171,7 +193,7 @@ export function TopProducts({ topProducts }: TopProductsProps) {
                     <BlurGate>
                       <span>{p.suppliersCount}</span>
                     </BlurGate>
-                    <span className="ml-1">{p.suppliersCount === 1 ? 'Supplier' : 'Suppliers'}</span>
+                    <span className="ml-1">{p.suppliersCount === 1 ? t('role_supplier', 'Supplier') : t('top_products_suppliers', 'Suppliers')}</span>
                   </span>
                 </td>
               </tr>

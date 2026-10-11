@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { Plus, Search, ShoppingBag, Calendar, MapPin, Package, DollarSign, MessageSquare, Send, CheckCircle2, X, Tag, Clock, Lock, ShieldAlert, LogIn, UserPlus, Building2 } from 'lucide-react'
 import { useUser } from '@/hooks/use-user'
 import { createClient } from '@/lib/supabase/client'
+import { useLanguage } from '@/contexts/language-context'
 
 interface BuyerSourcingRequest {
   id: string
@@ -32,6 +33,7 @@ interface SupplierReply {
 
 export default function BuyerRequestsPage() {
   const { user, profile, role, isLoading } = useUser()
+  const { t } = useLanguage()
   const [requests, setRequests] = useState<BuyerSourcingRequest[]>([])
   const [replies, setReplies] = useState<Record<string, SupplierReply[]>>({})
   const [searchTerm, setSearchTerm] = useState('')
@@ -150,8 +152,8 @@ export default function BuyerRequestsPage() {
         <div className="border-b border-slate-200/80 bg-white/60 backdrop-blur-sm py-10">
           <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
             <div>
-              <h1 className="text-3xl font-extrabold text-slate-900 tracking-tight">Buyer Sourcing Requests</h1>
-              <p className="mt-1 text-slate-500 text-sm">Exclusive tender access for verified seafood suppliers & exporters.</p>
+              <h1 className="text-3xl font-extrabold text-slate-900 tracking-tight">{t('requests_buyer_page_title', 'Buyer Sourcing Requests')}</h1>
+              <p className="mt-1 text-slate-500 text-sm">{t('requests_buyer_page_subtitle', 'Exclusive tender access for verified seafood suppliers & exporters.')}</p>
             </div>
           </div>
         </div>
@@ -161,10 +163,10 @@ export default function BuyerRequestsPage() {
             <div className="space-y-6">
               <div>
                 <h2 className="text-2xl md:text-3xl font-extrabold text-slate-900 leading-tight">
-                  Buyer Requests are Restricted to Logged-in Suppliers
+                  {t('requests_gated_buyer_title', 'Buyer Requests are Restricted to Logged-in Suppliers')}
                 </h2>
                 <p className="text-slate-600 text-sm md:text-base mt-2 leading-relaxed max-w-2xl">
-                  To protect buyer trade confidentiality and preserve competitive bidding, active buyer tenders and sourcing specifications are only visible to authenticated seafood suppliers.
+                  {t('requests_gated_buyer_desc', 'To protect buyer trade confidentiality and preserve competitive bidding, active buyer tenders and sourcing specifications are only visible to authenticated seafood suppliers.')}
                 </p>
               </div>
 
@@ -174,9 +176,9 @@ export default function BuyerRequestsPage() {
                   <div className="w-8 h-8 rounded-xl bg-blue-100 text-[#022B96] flex items-center justify-center font-bold text-sm mb-2 border border-blue-200">
                     <ShieldAlert className="w-4 h-4" />
                   </div>
-                  <h4 className="font-extrabold text-slate-900 text-sm">Protected Trade Privacy</h4>
+                  <h4 className="font-extrabold text-slate-900 text-sm">{t('requests_val_privacy_title', 'Protected Trade Privacy')}</h4>
                   <p className="text-xs text-slate-500 leading-relaxed">
-                    Sourcing specifications and buyer tender volumes are kept confidential from public web indexing.
+                    {t('requests_val_privacy_desc', 'Sourcing specifications and buyer tender volumes are kept confidential from public web indexing.')}
                   </p>
                 </div>
 
@@ -184,9 +186,9 @@ export default function BuyerRequestsPage() {
                   <div className="w-8 h-8 rounded-xl bg-amber-100 text-amber-800 flex items-center justify-center font-bold text-sm mb-2 border border-amber-200">
                     <Building2 className="w-4 h-4" />
                   </div>
-                  <h4 className="font-extrabold text-slate-900 text-sm">Verified Importers Only</h4>
+                  <h4 className="font-extrabold text-slate-900 text-sm">{t('requests_val_verified_importers_title', 'Verified Importers Only')}</h4>
                   <p className="text-xs text-slate-500 leading-relaxed">
-                    Connecting authenticated seafood suppliers directly with vetted global buyers and processors.
+                    {t('requests_val_verified_importers_desc', 'Connecting authenticated seafood suppliers directly with vetted global buyers and processors.')}
                   </p>
                 </div>
 
@@ -194,9 +196,9 @@ export default function BuyerRequestsPage() {
                   <div className="w-8 h-8 rounded-xl bg-emerald-100 text-emerald-800 flex items-center justify-center font-bold text-sm mb-2 border border-emerald-200">
                     <Send className="w-4 h-4" />
                   </div>
-                  <h4 className="font-extrabold text-slate-900 text-sm">Direct Wholesale Quotes</h4>
+                  <h4 className="font-extrabold text-slate-900 text-sm">{t('requests_val_wholesale_quotes_title', 'Direct Wholesale Quotes')}</h4>
                   <p className="text-xs text-slate-500 leading-relaxed">
-                    Submit wholesale pricing, incoterms, and product availability directly to active buyers.
+                    {t('requests_val_wholesale_quotes_desc', 'Submit wholesale pricing, incoterms, and product availability directly to active buyers.')}
                   </p>
                 </div>
               </div>
@@ -206,7 +208,7 @@ export default function BuyerRequestsPage() {
                 <Link href="/login?next=/requests/buyer">
                   <button className="inline-flex items-center justify-center gap-2 px-8 py-3.5 bg-[#022B96] hover:bg-[#011a5e] text-white text-sm font-extrabold rounded-2xl shadow-md transition cursor-pointer">
                     <LogIn className="w-4 h-4" />
-                    Log In as Supplier
+                    {t('requests_login_supplier_btn', 'Log In as Supplier')}
                   </button>
                 </Link>
               </div>
@@ -225,13 +227,13 @@ export default function BuyerRequestsPage() {
         <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
             <div>
-              <h1 className="text-3xl font-extrabold text-slate-900 tracking-tight">Buyer Sourcing Requests</h1>
-              <p className="mt-2 text-slate-500 text-sm">Active buyer tenders and seafood procurement demands from verified importers.</p>
+              <h1 className="text-3xl font-extrabold text-slate-900 tracking-tight">{t('requests_buyer_live_title', 'Buyer Sourcing Requests')}</h1>
+              <p className="mt-2 text-slate-500 text-sm">{t('requests_buyer_live_desc', 'Active purchasing tenders from verified European seafood buyers & importers.')}</p>
             </div>
             <Link href="/requests/buyer/new">
               <button className="inline-flex items-center gap-2 px-5 py-2.5 bg-[#022B96] hover:bg-[#011a5e] text-white text-sm font-bold rounded-2xl shadow-md transition cursor-pointer">
                 <Plus className="h-4 w-4" />
-                Post Sourcing Request
+                {t('buyer_new_request_btn', 'Post Sourcing Request')}
               </button>
             </Link>
           </div>
@@ -247,7 +249,7 @@ export default function BuyerRequestsPage() {
             </div>
             <input
               type="text"
-              placeholder="Search product (Salmon), location (Amsterdam)..."
+              placeholder={t('requests_buyer_search_placeholder', 'Search by species, destination port, packaging requirement...')}
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               className="flex-1 min-w-0 py-2 px-1 bg-transparent outline-none text-slate-900 placeholder:text-slate-400 text-sm font-medium"
@@ -268,11 +270,11 @@ export default function BuyerRequestsPage() {
                     <div className="flex items-center justify-between gap-2">
                       <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-blue-50 text-[#022B96] text-xs font-black uppercase tracking-wider border border-blue-100">
                         <ShoppingBag className="h-3.5 w-3.5" />
-                        Buyer Request
+                        {t('nav_buyer_request', 'Buyer Request')}
                       </span>
                       <span className="text-xs text-slate-500 font-semibold flex items-center gap-1">
                         <Calendar className="h-3.5 w-3.5 text-slate-400" />
-                        Delivery: <strong className="text-slate-800">{req.deliveryDate}</strong>
+                        {t('buyer_delivery', 'Delivery')}: <strong className="text-slate-800">{req.deliveryDate}</strong>
                       </span>
                     </div>
 
@@ -285,7 +287,7 @@ export default function BuyerRequestsPage() {
                       </div>
                       {req.targetPrice && (
                         <span className="text-xs font-black bg-emerald-50 text-emerald-700 border border-emerald-200/80 px-3 py-1.5 rounded-xl shrink-0">
-                          Target: {req.targetPrice}
+                          {t('buyer_target_price', 'Target Price')}: {req.targetPrice}
                         </span>
                       )}
                     </div>
@@ -361,7 +363,7 @@ export default function BuyerRequestsPage() {
                       className="inline-flex items-center gap-2 px-5 py-2.5 bg-[#022B96] hover:bg-[#011a5e] text-white text-xs font-extrabold rounded-xl transition cursor-pointer shadow-sm"
                     >
                       <MessageSquare className="h-3.5 w-3.5" />
-                      Supplier Reply
+                      {t('supplier_send_quote', 'Supplier Reply')}
                     </button>
                     <span className="text-xs text-slate-400 font-semibold">
                       Replies: <strong className="text-slate-700">{reqReplies.length}</strong>
@@ -379,12 +381,12 @@ export default function BuyerRequestsPage() {
         ) : (
           <div className="text-center py-20 bg-white border border-slate-200 rounded-3xl">
             <ShoppingBag className="h-12 w-12 text-slate-200 mx-auto mb-4" />
-            <h3 className="text-base font-bold text-slate-800">No requests found</h3>
-            <p className="text-sm text-slate-400 mt-1 mb-6">Post a sourcing request to get supplier quotes.</p>
+            <h3 className="text-base font-bold text-slate-800">{t('buyer_empty_req_title', 'No requests found')}</h3>
+            <p className="text-sm text-slate-400 mt-1 mb-6">{t('buyer_empty_req_desc', 'Post a sourcing request to get supplier quotes.')}</p>
             <Link href="/requests/buyer/new">
               <button className="inline-flex items-center gap-2 px-5 py-2.5 bg-[#022B96] hover:bg-[#011a5e] text-white text-sm font-semibold rounded-xl shadow-md transition cursor-pointer">
                 <Plus className="h-4 w-4" />
-                Post Sourcing Request
+                {t('buyer_new_request_btn', 'Post Sourcing Request')}
               </button>
             </Link>
           </div>
@@ -407,20 +409,20 @@ export default function BuyerRequestsPage() {
                 <div className="h-16 w-16 bg-emerald-50 text-emerald-600 rounded-full flex items-center justify-center mx-auto">
                   <CheckCircle2 className="h-8 w-8" />
                 </div>
-                <h3 className="text-xl font-extrabold text-slate-900">Reply Sent to Buyer!</h3>
+                <h3 className="text-xl font-extrabold text-slate-900">{t('requests_modal_quote_success', 'Reply Sent to Buyer!')}</h3>
                 <p className="text-xs text-slate-500">Your price per KG and delivery details have been submitted.</p>
               </div>
             ) : (
               <form onSubmit={handleSendReply} className="space-y-5">
                 <div>
                   <span className="text-[10px] font-black uppercase tracking-wider text-blue-600 bg-blue-50 px-2.5 py-1 rounded-md">
-                    Supplier Reply Form
+                    {t('requests_quote_modal_title', 'Supplier Reply Form')}
                   </span>
                   <h3 className="text-xl font-extrabold text-slate-900 mt-2">
                     Offer for {selectedRequest.quantity} {selectedRequest.productNeeded}
                   </h3>
                   <p className="text-xs text-slate-400 mt-0.5">
-                    Location: {selectedRequest.location} · Required: {selectedRequest.deliveryDate}
+                    {t('buyer_location', 'Location')}: {selectedRequest.location} · {t('buyer_delivery', 'Delivery')}: {selectedRequest.deliveryDate}
                   </p>
                 </div>
 
@@ -477,14 +479,14 @@ export default function BuyerRequestsPage() {
                     onClick={() => setSelectedRequest(null)}
                     className="px-5 py-2.5 text-xs font-bold text-slate-500 hover:text-slate-700 rounded-xl transition cursor-pointer"
                   >
-                    Cancel
+                    {t('buyer_btn_cancel', 'Cancel')}
                   </button>
                   <button
                     type="submit"
                     className="inline-flex items-center gap-2 px-6 py-2.5 bg-[#022B96] hover:bg-[#011a5e] text-white text-xs font-bold rounded-xl shadow-md transition cursor-pointer"
                   >
                     <Send className="h-3.5 w-3.5" />
-                    Submit Reply
+                    {t('requests_btn_send_reply', 'Submit Reply')}
                   </button>
                 </div>
               </form>

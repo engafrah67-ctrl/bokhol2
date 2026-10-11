@@ -604,26 +604,24 @@ export default function PostStockPage() {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
 
-    // Validate min price
+    // Validate price
     if (!form.minPricePerKg || parseFloat(form.minPricePerKg) <= 0) {
-      alert('Please enter a valid minimum price per KG.')
+      alert('Please enter a valid price per KG.')
       return
     }
 
     setSubmitting(true)
 
-    // Build the content JSON with all 9 product fields
-    const minPrice = parseFloat(form.minPricePerKg) || 0
-    const maxPrice = parseFloat(form.maxPricePerKg) || 0
-    const priceLabel = form.maxPricePerKg
-      ? `${form.currency} ${form.minPricePerKg}–${form.maxPricePerKg}/kg`
-      : `${form.currency} ${form.minPricePerKg}/kg`
+    // Build the content JSON with single price and EUR currency
+    const price = parseFloat(form.minPricePerKg) || 0
+    const priceLabel = `EUR ${form.minPricePerKg}/kg`
 
     const details = {
       productName: form.productName,
-      minPricePerKg: minPrice,
-      maxPricePerKg: maxPrice,
-      currency: form.currency,
+      pricePerKg: price,
+      minPricePerKg: price,
+      maxPricePerKg: price,
+      currency: 'EUR',
       countryOfOrigin: form.countryOfOrigin,
       freshFrozen: form.freshFrozen,
       sizeWeight: form.sizeWeight,
@@ -808,40 +806,27 @@ export default function PostStockPage() {
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-5">
 
-              {/* Field 2: Price per KG — Min & Max */}
+              {/* Field 2: Price per KG (One price, EUR only) */}
               <div>
                 <label className="block text-xs font-bold text-slate-700 mb-1.5">
-                  2. Price per KG <span className="text-rose-500">*</span>
+                  2. Price per KG (EUR) <span className="text-rose-500">*</span>
                 </label>
-                <div className="flex items-center gap-2">
-                  <select
-                    value={form.currency}
-                    onChange={(e) => set('currency', e.target.value)}
-                    className="h-[38px] w-20 shrink-0 bg-slate-50 border border-slate-200 text-slate-800 font-bold rounded-xl px-2.5 text-xs outline-none focus:border-[#022B96] transition cursor-pointer"
-                  >
-                    <option>EUR</option>
-                    <option>USD</option>
-                    <option>GBP</option>
-                  </select>
+                <div className="flex items-center">
+                  <div className="h-[38px] px-3.5 bg-slate-100 border border-r-0 border-slate-200 text-slate-700 font-bold rounded-l-xl text-xs flex items-center justify-center shrink-0 select-none">
+                    EUR (€)
+                  </div>
                   <input
                     type="number"
                     required
                     min="0"
                     step="0.01"
-                    placeholder="Min"
+                    placeholder="Enter price per KG"
                     value={form.minPricePerKg}
-                    onChange={(e) => set('minPricePerKg', e.target.value)}
-                    className="h-[38px] w-full min-w-0 flex-1 bg-white border border-slate-200 text-slate-800 font-semibold rounded-xl px-3 text-xs outline-none focus:border-[#022B96] transition placeholder:text-slate-300"
-                  />
-                  <span className="text-slate-400 text-xs font-medium shrink-0">—</span>
-                  <input
-                    type="number"
-                    min="0"
-                    step="0.01"
-                    placeholder="Max"
-                    value={form.maxPricePerKg}
-                    onChange={(e) => set('maxPricePerKg', e.target.value)}
-                    className="h-[38px] w-full min-w-0 flex-1 bg-white border border-slate-200 text-slate-800 font-semibold rounded-xl px-3 text-xs outline-none focus:border-[#022B96] transition placeholder:text-slate-300"
+                    onChange={(e) => {
+                      set('minPricePerKg', e.target.value)
+                      set('maxPricePerKg', e.target.value)
+                    }}
+                    className="h-[38px] w-full min-w-0 flex-1 bg-white border border-slate-200 text-slate-800 font-semibold rounded-r-xl px-3 text-xs outline-none focus:border-[#022B96] transition placeholder:text-slate-300"
                   />
                 </div>
               </div>

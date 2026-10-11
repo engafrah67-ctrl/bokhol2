@@ -14,12 +14,6 @@ import ReactCountryFlag from 'react-country-flag'
 import { createClient } from '@/lib/supabase/client'
 import { performSignOut } from '@/lib/auth-helpers'
 
-const ROLE_BADGE: Record<string, { label: string; color: string }> = {
-  buyer:    { label: 'Buyer',    color: 'bg-sky-500/10 text-sky-600 dark:text-sky-400 border border-sky-500/20' },
-  supplier: { label: 'Supplier', color: 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20' },
-  admin:    { label: 'Admin',    color: 'bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/20' },
-}
-
 export function Navbar() {
   const [isOpen, setIsOpen] = React.useState(false)
   const [requestsOpen, setRequestsOpen] = React.useState(false)
@@ -30,13 +24,19 @@ export function Navbar() {
 
   const { t, locale, setLocale } = useLanguage()
 
+  const ROLE_BADGE: Record<string, { label: string; color: string }> = {
+    buyer:    { label: t('role_buyer', 'Buyer'),       color: 'bg-sky-500/10 text-sky-600 dark:text-sky-400 border border-sky-500/20' },
+    supplier: { label: t('role_supplier', 'Supplier'), color: 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20' },
+    admin:    { label: t('role_admin', 'Admin'),       color: 'bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/20' },
+  }
+
   // Build nav items from translations
   const NAV_ITEMS = [
     { name: t('nav_countries'),      href: '/countries' },
     { name: t('nav_products'),       href: '/products' },
     { name: t('nav_news'),           href: '/news' },
     { name: t('nav_about'),          href: '/about' },
-    { name: 'Membership',            href: '/membership' },
+    { name: t('nav_membership'),     href: '/membership' },
   ]
 
   const REQUEST_ITEMS = [
@@ -138,7 +138,7 @@ export function Navbar() {
                     <span>{item.name}</span>
                     {item.href === '/requests/buyer' && (
                       <span className="inline-flex items-center gap-1 text-[10px] font-bold text-amber-700 bg-amber-50 border border-amber-200/80 px-2 py-0.5 rounded-full">
-                        <Lock className="w-2.5 h-2.5" /> Suppliers Only
+                        <Lock className="w-2.5 h-2.5" /> {t('nav_suppliers_only', 'Suppliers Only')}
                       </span>
                     )}
                   </Link>
@@ -209,7 +209,7 @@ export function Navbar() {
                   <Link href="/dashboard/buyer" prefetch={true}>
                     <Button variant="ghost" size="sm" className="gap-2 cursor-pointer font-semibold rounded-lg hover:bg-muted text-slate-800">
                       <LayoutDashboard className="h-4 w-4 text-[#022B96]" />
-                      Buyer Dashboard
+                      {t('nav_buyer_dashboard', 'Buyer Dashboard')}
                     </Button>
                   </Link>
                 ) : activeRole === 'supplier' ? (
@@ -223,7 +223,7 @@ export function Navbar() {
                   <Link href={activeRole === 'admin' ? '/dashboard/admin' : '/dashboard'} prefetch={true}>
                     <Button variant="ghost" size="sm" className="gap-2 cursor-pointer font-semibold rounded-lg hover:bg-muted">
                       <LayoutDashboard className="h-4 w-4" />
-                      {activeRole === 'admin' ? 'Admin Panel' : t('nav_dashboard')}
+                      {activeRole === 'admin' ? t('nav_admin_panel', 'Admin Panel') : t('nav_dashboard')}
                     </Button>
                   </Link>
                 )}
@@ -311,7 +311,7 @@ export function Navbar() {
 
             {/* Mobile Language Switcher */}
             <div className="border-t border-slate-100 pt-3 mt-1">
-              <p className="text-xs font-bold text-slate-400 uppercase tracking-wider px-1 pb-2">Language</p>
+              <p className="text-xs font-bold text-slate-400 uppercase tracking-wider px-1 pb-2">{t('nav_language', 'Language')}</p>
               <div className="flex gap-2 flex-wrap">
                 {LOCALES.map((loc) => (
                   <button
@@ -346,7 +346,7 @@ export function Navbar() {
                 >
                   <Button variant="outline" className="w-full gap-2 cursor-pointer">
                     <LayoutDashboard className="h-4 w-4" />
-                    {activeRole === 'admin' ? 'Admin Panel' : activeRole === 'buyer' ? 'Buyer Dashboard' : t('nav_dashboard')}
+                    {activeRole === 'admin' ? t('nav_admin_panel', 'Admin Panel') : activeRole === 'buyer' ? t('nav_buyer_dashboard', 'Buyer Dashboard') : t('nav_dashboard')}
                   </Button>
                 </Link>
                 <Button

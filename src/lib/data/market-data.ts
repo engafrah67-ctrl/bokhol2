@@ -20,6 +20,7 @@ export interface LiveSpeciesIndex {
   color: string
   suppliersCount: number
   topOrigin: string
+  origins?: string[]
   imageUrl: string
   data: SpeciesTrendPoint[]
 }
@@ -37,6 +38,7 @@ export interface TopMarketProduct {
   name: string
   slug: string
   origin: string
+  origins?: string[]
   avgPrice: string
   avgPriceNum: number
   suppliersCount: number
@@ -242,7 +244,9 @@ export function parseSupplierPostsToMarketData(posts: any[]): {
 
     const change = KNOWN_CHANGE_RATES[slug] ?? parseFloat((((latestPrice - weekLow) / weekLow) * 5).toFixed(1))
     const originCounts = item.origins.reduce((acc: Record<string, number>, o) => { acc[o] = (acc[o] || 0) + 1; return acc }, {})
-    const topOrigin = Object.entries(originCounts).sort((a, b) => b[1] - a[1])[0]?.[0] || 'Europe'
+    const sortedOrigins = Object.entries(originCounts).sort((a, b) => b[1] - a[1]).map(e => e[0])
+    const uniqueOrigins = sortedOrigins.length > 0 ? sortedOrigins : ['Europe']
+    const topOrigin = uniqueOrigins.join(', ')
     const suppliersCount = Math.max(item.prices.length, item.totalPosts, 1)
 
     const trendPoints = item.weeklyPrices.size >= 3
@@ -252,7 +256,7 @@ export function parseSupplierPostsToMarketData(posts: any[]): {
     allEuropeSpecies.push({
       id: slug, slug, label: item.name, currency: item.currencies[0] || 'EUR', unit: 'kg',
       latest: latestPrice, weekHigh, weekLow, change, color: SPECIES_COLORS[slug] || '#0284c7',
-      suppliersCount, topOrigin,
+      suppliersCount, topOrigin, origins: uniqueOrigins,
       imageUrl: item.images[0] || getFishImageForProduct(item.name), data: trendPoints,
     })
   }
@@ -296,7 +300,7 @@ export function parseSupplierPostsToMarketData(posts: any[]): {
   const topProducts: TopMarketProduct[] = allEuropeSpecies.slice(0, 6).map(sp => {
     const symbol = sp.currency === 'USD' ? '$' : sp.currency === 'GBP' ? '£' : '€'
     return {
-      name: sp.label, slug: sp.slug, origin: sp.topOrigin,
+      name: sp.label, slug: sp.slug, origin: sp.topOrigin, origins: sp.origins || [sp.topOrigin],
       avgPrice: `${symbol}${sp.latest.toFixed(2)} / kg`, avgPriceNum: sp.latest,
       suppliersCount: sp.suppliersCount, imageUrl: sp.imageUrl || getFishImageForProduct(sp.label),
       category: ['shrimp', 'crab', 'lobster'].includes(sp.slug) ? 'Shellfish' : 'Finfish',

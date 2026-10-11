@@ -142,7 +142,9 @@ export default async function ProductsPage() {
       const originCounts = group.origins.reduce((acc: Record<string, number>, o) => {
         acc[o] = (acc[o] || 0) + 1; return acc
       }, {})
-      const topOrigin = Object.entries(originCounts).sort((a, b) => b[1] - a[1])[0]?.[0] || 'Europe'
+      const sortedOrigins = Object.entries(originCounts).sort((a, b) => b[1] - a[1]).map(e => e[0])
+      const uniqueOrigins = sortedOrigins.length > 0 ? sortedOrigins : ['Europe']
+      const topOrigin = uniqueOrigins.join(', ')
 
       const lastUpdated = group.latestDate
         ? new Date(group.latestDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
@@ -161,6 +163,7 @@ export default async function ProductsPage() {
         avgPrice,
         priceRange,
         topOrigin,
+        origins: uniqueOrigins,
         lastUpdated,
         suppliers,
       }

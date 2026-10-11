@@ -10,7 +10,7 @@ import {
 } from 'lucide-react'
 import ReactCountryFlag from 'react-country-flag'
 import { BlurGate } from '@/components/blur-gate'
-import { getFishImageForProduct } from '@/lib/data/products-data'
+import { getFishImageForProduct, getFlagUrl } from '@/lib/data/products-data'
 import { createClient } from '@/lib/supabase/client'
 import { ProductMarketGraph } from '@/components/market/product-market-graph'
 import { syncWithServerClaims } from '@/lib/data/companies-data'
@@ -32,6 +32,17 @@ function normalizeToFourCountries(countryName: string): { name: string; code: st
   return { name: 'Netherlands', code: 'NL' }
 }
 
+function formatCleanLocation(loc: string, fallbackCountry: string): string {
+  const raw = loc || fallbackCountry || ''
+  if (!raw) return ''
+  return raw
+    .split(/[,·]/)
+    .map(p => p.trim())
+    .filter(Boolean)
+    .map(p => p.charAt(0).toUpperCase() + p.slice(1).toLowerCase())
+    .join(', ')
+}
+
 interface SupplierOffer {
   id: string
   companyName: string
@@ -39,6 +50,7 @@ interface SupplierOffer {
   logoUrl: string | null
   country: string
   countryCode: string
+  origin: string
   location: string
   pricePerKg: number
   currency: string
@@ -125,6 +137,7 @@ export default function ProductDetailsPage({ params }: { params: Promise<{ slug:
 
           // Normalize to one of the 4 supported countries (Germany, Norway, Netherlands, Belgium)
           const { name: countryName, code: countryCode } = normalizeToFourCountries(regCountry)
+          const offerOrigin = details.countryOfOrigin || countryName || '—'
 
           matchingOffers.push({
             id: post.id,
@@ -133,6 +146,7 @@ export default function ProductDetailsPage({ params }: { params: Promise<{ slug:
             logoUrl: company?.logo_url || null,
             country: countryName,
             countryCode,
+            origin: offerOrigin,
             location: details.location || (company?.city ? `${company.city}` : ''),
             pricePerKg: parseFloat(details.pricePerKg ?? details.minPricePerKg ?? 0),
             currency: details.currency || 'EUR',
@@ -161,11 +175,12 @@ export default function ProductDetailsPage({ params }: { params: Promise<{ slug:
     .filter(o => {
       if (filterCountry === 'All') return true
       const oCountry = (o.country || '').toLowerCase()
+      const oOrigin = (o.origin || '').toLowerCase()
       const fCountry = filterCountry.toLowerCase()
       if (fCountry.includes('neth') || fCountry.includes('hol')) {
-        return oCountry.includes('neth') || oCountry.includes('hol')
+        return oCountry.includes('neth') || oCountry.includes('hol') || oOrigin.includes('neth') || oOrigin.includes('hol')
       }
-      return oCountry.includes(fCountry)
+      return oCountry.includes(fCountry) || oOrigin.includes(fCountry)
     })
     .sort((a, b) => {
       if (sortBy === 'price') return a.pricePerKg - b.pricePerKg
@@ -179,41 +194,77 @@ export default function ProductDetailsPage({ params }: { params: Promise<{ slug:
   const currencySymbol = offers[0]?.currency === 'USD' ? '$' : offers[0]?.currency === 'GBP' ? '£' : '€'
 
   return (
-    <main className="min-h-screen bg-transparent pb-20">
+    <main className="min-h-screen bg-slate-50/50 dark:bg-slate-950 pb-20">
 
-      {/* Header */}
-      <div className="relative w-full px-4 sm:px-8 pt-7 pb-8 border-b border-white/50">
-        <div className="relative z-10 max-w-6xl mx-auto">
-          <Link href="/products" className="inline-flex items-center gap-2 text-sm text-slate-500 hover:text-[#022B96] mb-6 transition-colors font-medium">
-            <ArrowLeft className="w-4 h-4" />
+      {/* Header Container */}
+      <div className="w-full px-4 sm:px-8 pt-6 pb-4">
+        <div className="max-w-6xl mx-auto space-y-4">
+          <Link
+            href="/products"
+            className="inline-flex items-center gap-1.5 text-xs text-slate-500 hover:text-slate-900 dark:hover:text-white transition-colors font-medium"
+          >
+            <ArrowLeft className="w-3.5 h-3.5" />
             Back to Products
           </Link>
-          <div className="flex flex-col sm:flex-row sm:items-center gap-5">
-            <div className="h-28 w-28 bg-white/70 backdrop-blur-sm rounded-2xl flex items-center justify-center border border-white/80 shadow-sm shrink-0 overflow-hidden">
-              <Image src={getFishImageForProduct(productName)} alt={productName} width={100} height={100} className="object-contain" />
+
+          {/* Unified Product Header Card */}
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 bg-white dark:bg-slate-900 p-6 rounded-2xl border border-slate-200/80 dark:border-slate-800 shadow-xs">
+            <div className="flex items-center gap-4">
+              <div className="h-20 w-24 bg-slate-50 dark:bg-slate-800 rounded-xl flex items-center justify-center p-2 border border-slate-100 dark:border-slate-700/60 shrink-0">
+                <Image
+                  src={getFishImageForProduct(productName)}
+                  alt={productName}
+                  width={80}
+                  height={80}
+                  className="object-contain max-h-full"
+                />
+              </div>
+              <div>
+                <span className="text-[11px] font-bold text-[#022B96] uppercase tracking-wider block">
+                  Seafood Species
+                </span>
+                <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 dark:text-white tracking-tight">
+                  {productName}
+                </h1>
+                <p className="text-slate-400 text-xs mt-0.5">
+                  Live supplier offers from verified exporters
+                </p>
+              </div>
             </div>
-            <div>
-              <span className="inline-block text-xs font-bold text-[#022B96] uppercase tracking-widest mb-2 bg-[#022B96]/10 px-3 py-1 rounded-full">Seafood Species</span>
-              <h1 className="text-3xl sm:text-4xl font-black text-slate-900 tracking-tight">{productName}</h1>
-              <p className="text-slate-500 text-sm mt-1">Live supplier offers from verified exporters</p>
-            </div>
-            <div className="sm:ml-auto flex flex-wrap gap-3">
-              <div className="bg-white/70 backdrop-blur-sm border border-white/80 rounded-xl px-4 py-3 text-center shadow-sm">
-                <p className="text-xs text-slate-500 font-medium uppercase tracking-wider">Avg. Price</p>
+
+            {/* Clean Key Metrics */}
+            <div className="flex items-center divide-x divide-slate-100 dark:divide-slate-800 bg-slate-50/80 dark:bg-slate-800/40 rounded-xl border border-slate-100 dark:border-slate-800 p-2 shrink-0">
+              <div className="px-5 py-1 text-center">
+                <span className="text-[10px] uppercase font-bold text-slate-400 block tracking-wider">
+                  Avg. Price
+                </span>
                 <BlurGate>
-                  <p className="text-xl font-black text-slate-900 mt-1">
-                    {avgPrice ? <>{currencySymbol}{avgPrice}<span className="text-sm font-normal text-slate-400">/kg</span></> : '—'}
-                  </p>
+                  <span className="text-base font-extrabold text-slate-900 dark:text-white">
+                    {avgPrice ? `${currencySymbol}${avgPrice}` : '—'}
+                    <span className="text-xs font-normal text-slate-400">/kg</span>
+                  </span>
                 </BlurGate>
               </div>
-              <div className="bg-white/70 backdrop-blur-sm border border-white/80 rounded-xl px-4 py-3 text-center shadow-sm">
-                <p className="text-xs text-slate-500 font-medium uppercase tracking-wider">Active Offers</p>
-                <BlurGate><p className="text-xl font-black text-slate-900 mt-1">{offers.length}</p></BlurGate>
+              <div className="px-5 py-1 text-center">
+                <span className="text-[10px] uppercase font-bold text-slate-400 block tracking-wider">
+                  Active Offers
+                </span>
+                <BlurGate>
+                  <span className="text-base font-extrabold text-slate-900 dark:text-white">
+                    {offers.length}
+                  </span>
+                </BlurGate>
               </div>
               {minPrice && maxPrice && (
-                <div className="bg-white/70 backdrop-blur-sm border border-white/80 rounded-xl px-4 py-3 text-center shadow-sm">
-                  <p className="text-xs text-slate-500 font-medium uppercase tracking-wider">Price Range</p>
-                  <BlurGate><p className="text-xl font-black text-slate-900 mt-1">{currencySymbol}{minPrice}–{maxPrice}</p></BlurGate>
+                <div className="px-5 py-1 text-center">
+                  <span className="text-[10px] uppercase font-bold text-slate-400 block tracking-wider">
+                    Price Range
+                  </span>
+                  <BlurGate>
+                    <span className="text-base font-extrabold text-slate-900 dark:text-white">
+                      {currencySymbol}{minPrice}–{maxPrice}
+                    </span>
+                  </BlurGate>
                 </div>
               )}
             </div>
@@ -221,7 +272,7 @@ export default function ProductDetailsPage({ params }: { params: Promise<{ slug:
         </div>
       </div>
 
-      <div className="max-w-6xl mx-auto px-4 sm:px-6 mt-8 relative z-10 space-y-6">
+      <div className="max-w-6xl mx-auto px-4 sm:px-8 mt-2 space-y-6">
 
         {/* Live Market Benchmark & Trend Graph */}
         <ProductMarketGraph
@@ -229,22 +280,27 @@ export default function ProductDetailsPage({ params }: { params: Promise<{ slug:
           currency={offers[0]?.currency || 'EUR'}
         />
 
-        {/* Supplier Offers Table */}
-        <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden">
+        {/* Clean Supplier Offers Table Card */}
+        <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200/80 dark:border-slate-800 shadow-xs overflow-hidden">
 
-          {/* Table Controls */}
-          <div className="flex flex-wrap items-center justify-between gap-3 px-5 py-4 border-b border-slate-100 dark:border-slate-800">
-            <h2 className="font-bold text-slate-900 dark:text-white text-base">
-              Supplier Offers
-              <span className="ml-2 text-xs font-semibold text-slate-400 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded-full">{filteredOffers.length}</span>
-            </h2>
+          {/* Table Toolbar */}
+          <div className="flex flex-wrap items-center justify-between gap-3 px-6 py-4 border-b border-slate-100 dark:border-slate-800">
+            <div className="flex items-center gap-2">
+              <h2 className="font-bold text-slate-900 dark:text-white text-base">
+                Supplier Offers
+              </h2>
+              <span className="text-xs font-bold text-slate-600 bg-slate-100 dark:bg-slate-800 px-2.5 py-0.5 rounded-full">
+                {filteredOffers.length}
+              </span>
+            </div>
+
             <div className="flex flex-wrap items-center gap-2">
-              {/* Country Filter - 4 Countries Only */}
+              {/* Country Filter */}
               <div className="relative">
                 <select
                   value={filterCountry}
                   onChange={e => setFilterCountry(e.target.value)}
-                  className="appearance-none text-xs font-semibold text-slate-700 dark:text-slate-300 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 pr-7 outline-none cursor-pointer hover:border-slate-300 transition"
+                  className="appearance-none text-xs font-medium text-slate-700 dark:text-slate-300 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg px-3 py-1.5 pr-7 outline-none cursor-pointer hover:border-slate-300 transition"
                 >
                   {ALLOWED_COUNTRY_OPTIONS.map(c => (
                     <option key={c.value} value={c.value}>{c.label}</option>
@@ -253,17 +309,19 @@ export default function ProductDetailsPage({ params }: { params: Promise<{ slug:
                 <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400 pointer-events-none" />
               </div>
 
-              {/* Fresh/Frozen Filter */}
-              <div className="flex bg-slate-100 dark:bg-slate-800 rounded-xl p-1 gap-1">
+              {/* Condition Filter */}
+              <div className="flex bg-slate-100 dark:bg-slate-800 rounded-lg p-0.5 gap-0.5">
                 {(['All', 'Fresh', 'Frozen'] as const).map(f => (
                   <button
                     key={f}
                     onClick={() => setFilterFresh(f)}
-                    className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition cursor-pointer ${
-                      filterFresh === f ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-sm' : 'text-slate-500 hover:text-slate-700'
+                    className={`px-3 py-1 text-xs rounded-md transition cursor-pointer ${
+                      filterFresh === f
+                        ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-2xs font-semibold'
+                        : 'text-slate-500 hover:text-slate-800 font-medium'
                     }`}
                   >
-                    {f === 'Fresh' ? '🧊 ' : f === 'Frozen' ? '❄️ ' : ''}{f}
+                    {f}
                   </button>
                 ))}
               </div>
@@ -273,165 +331,163 @@ export default function ProductDetailsPage({ params }: { params: Promise<{ slug:
                 <select
                   value={sortBy}
                   onChange={e => setSortBy(e.target.value as any)}
-                  className="appearance-none text-xs font-semibold text-slate-700 dark:text-slate-300 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 pr-7 outline-none cursor-pointer"
+                  className="appearance-none text-xs font-medium text-slate-700 dark:text-slate-300 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg px-3 py-1.5 pr-7 outline-none cursor-pointer hover:border-slate-300 transition"
                 >
-                  <option value="price">Sort: Lowest Price</option>
-                  <option value="availability">Sort: Availability</option>
+                  <option value="price">Lowest Price</option>
+                  <option value="availability">Availability</option>
                 </select>
                 <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400 pointer-events-none" />
               </div>
             </div>
           </div>
 
-          {/* Column Headers */}
-          <div className="hidden md:grid grid-cols-[1.8fr_0.8fr_0.9fr_1fr_1fr_auto] gap-3 px-5 py-3 bg-slate-50 dark:bg-slate-800/50 border-b border-slate-100 dark:border-slate-800">
-            {['Supplier', 'Price / kg', 'Fresh / Frozen', 'Packaging', 'Availability', ''].map(h => (
-              <span key={h} className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">{h}</span>
-            ))}
-          </div>
-
-          {/* Rows */}
-          <div className="divide-y divide-slate-100 dark:divide-slate-800">
-            {loading ? (
-              <div className="flex flex-col items-center justify-center py-16 gap-3 text-slate-400">
-                <Loader2 className="h-6 w-6 animate-spin text-[#022B96]" />
-                <span className="text-sm font-medium">Loading supplier offers...</span>
-              </div>
-            ) : filteredOffers.length > 0 ? (
-              filteredOffers.map((offer, idx) => (
-                <div
-                  key={offer.id}
-                  className={`px-5 py-4 grid md:grid-cols-[1.8fr_0.8fr_0.9fr_1fr_1fr_auto] gap-3 items-center hover:bg-blue-50/30 dark:hover:bg-blue-950/10 transition-colors ${idx === 0 ? 'bg-emerald-50/30 dark:bg-emerald-950/10' : ''}`}
-                >
-                  {/* Supplier */}
-                  <div className="flex items-center gap-3 min-w-0">
-                    {offer.companySlug ? (
-                      <Link href={`/suppliers/${offer.companySlug}`} className="flex items-center gap-3 min-w-0 group/supplier">
-                        <div className="h-10 w-10 rounded-xl bg-[#022B96]/10 dark:bg-blue-950/40 flex items-center justify-center text-[#022B96] dark:text-blue-400 font-black text-sm shrink-0 overflow-hidden group-hover/supplier:ring-2 group-hover/supplier:ring-[#022B96] transition-all">
-                          {offer.logoUrl ? (
-                            <img src={offer.logoUrl} alt={offer.companyName} className="w-full h-full object-cover rounded-xl" />
-                          ) : (
-                            <span className="group-hover/supplier:text-white group-hover/supplier:bg-[#022B96] w-full h-full flex items-center justify-center rounded-xl transition-colors">{offer.companyName[0]}</span>
-                          )}
-                        </div>
-                        <div className="min-w-0">
-                          <div className="flex items-center gap-1.5 flex-wrap">
-                            <span className="font-bold text-slate-900 dark:text-white text-sm truncate group-hover/supplier:text-[#022B96] transition-colors underline-offset-2 group-hover/supplier:underline">
-                              {offer.companyName}
-                            </span>
-                            {idx === 0 && prices.length > 1 && (
-                              <span className="text-[9px] font-bold bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded-full shrink-0">BEST PRICE</span>
+          {/* Semantic Table */}
+          <div className="overflow-x-auto">
+            <table className="w-full text-left border-collapse">
+              <thead>
+                <tr className="border-b border-slate-100 dark:border-slate-800 text-[11px] font-semibold text-slate-400 uppercase tracking-wider bg-slate-50/50 dark:bg-slate-800/30">
+                  <th className="py-3 px-6 font-semibold">Supplier</th>
+                  <th className="py-3 px-6 font-semibold">Top Origin</th>
+                  <th className="py-3 px-6 font-semibold">Price</th>
+                  <th className="py-3 px-6 font-semibold">Condition</th>
+                  <th className="py-3 px-6 font-semibold">Packaging</th>
+                  <th className="py-3 px-6 font-semibold">Availability</th>
+                  <th className="py-3 px-6 font-semibold text-right">Action</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100 dark:divide-slate-800 text-sm">
+                {loading ? (
+                  <tr>
+                    <td colSpan={7} className="py-16 text-center text-slate-400">
+                      <Loader2 className="h-5 w-5 animate-spin mx-auto text-[#022B96] mb-2" />
+                      <span className="text-xs">Loading supplier offers...</span>
+                    </td>
+                  </tr>
+                ) : filteredOffers.length > 0 ? (
+                  filteredOffers.map((offer, idx) => (
+                    <tr
+                      key={offer.id}
+                      className="hover:bg-slate-50/60 dark:hover:bg-slate-800/40 transition-colors"
+                    >
+                      {/* 1. Supplier */}
+                      <td className="py-4 px-6">
+                        <div className="flex items-center gap-3">
+                          <div className="h-9 w-9 rounded-lg bg-slate-100 dark:bg-slate-800 border border-slate-200/80 flex items-center justify-center text-[#022B96] font-bold text-xs shrink-0 overflow-hidden">
+                            {offer.logoUrl ? (
+                              <img src={offer.logoUrl} alt={offer.companyName} className="w-full h-full object-cover" />
+                            ) : (
+                              offer.companyName[0]
                             )}
                           </div>
-                          <div className="flex items-center gap-1.5 text-xs text-slate-500 mt-0.5">
-                            <ReactCountryFlag
-                              countryCode={offer.countryCode}
-                              svg
-                              style={{ width: '15px', height: '11px', borderRadius: '2px' }}
-                            />
-                            <span className="font-semibold text-slate-700 dark:text-slate-300">{offer.country}</span>
-                            {offer.location && <><span>·</span><MapPin className="h-3 w-3 text-slate-400" /><span className="truncate">{offer.location}</span></>}
+                          <div className="min-w-0">
+                            <div className="flex items-center gap-1.5">
+                              {offer.companySlug ? (
+                                <Link
+                                  href={`/suppliers/${offer.companySlug}`}
+                                  className="font-semibold text-slate-900 dark:text-white hover:text-[#022B96] transition-colors truncate"
+                                >
+                                  {offer.companyName}
+                                </Link>
+                              ) : (
+                                <span className="font-semibold text-slate-900 dark:text-white truncate">
+                                  {offer.companyName}
+                                </span>
+                              )}
+                              {idx === 0 && prices.length > 1 && (
+                                <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200/70 px-1.5 py-0.5 rounded shrink-0">
+                                  Best Price
+                                </span>
+                              )}
+                            </div>
+                            <div className="text-xs text-slate-400 mt-0.5 truncate">
+                              {formatCleanLocation(offer.location, offer.country)}
+                              {offer.supplierInfoExtra && ` · ${offer.supplierInfoExtra.replace(/[()]/g, '')}`}
+                            </div>
                           </div>
-                          {offer.supplierInfoExtra && (
-                            <p className="text-[10px] text-slate-400 mt-0.5 truncate max-w-xs">{offer.supplierInfoExtra}</p>
-                          )}
                         </div>
-                      </Link>
-                    ) : (
-                      <>
-                        <div className="h-10 w-10 rounded-xl bg-[#022B96]/10 dark:bg-blue-950/40 flex items-center justify-center text-[#022B96] dark:text-blue-400 font-black text-sm shrink-0 overflow-hidden">
-                          {offer.logoUrl ? (
-                            <img src={offer.logoUrl} alt={offer.companyName} className="w-full h-full object-cover rounded-xl" />
+                      </td>
+
+                      {/* 2. Top Origin */}
+                      <td className="py-4 px-6">
+                        <div className="flex items-center gap-2">
+                          {getFlagUrl(offer.origin) ? (
+                            <img
+                              src={getFlagUrl(offer.origin)!}
+                              alt={offer.origin}
+                              className="h-3.5 w-5 object-cover rounded shadow-2xs border border-slate-200/60 shrink-0"
+                            />
                           ) : (
-                            offer.companyName[0]
+                            <span className="text-xs">🏳️</span>
                           )}
+                          <span className="font-medium text-slate-800 dark:text-slate-200 whitespace-nowrap">
+                            {offer.origin}
+                          </span>
                         </div>
-                        <div className="min-w-0">
-                          <span className="font-bold text-slate-900 dark:text-white text-sm truncate">{offer.companyName}</span>
-                          <div className="flex items-center gap-1.5 text-xs text-slate-500 mt-0.5">
-                            <ReactCountryFlag
-                              countryCode={offer.countryCode}
-                              svg
-                              style={{ width: '15px', height: '11px', borderRadius: '2px' }}
-                            />
-                            <span className="font-semibold text-slate-700 dark:text-slate-300">{offer.country}</span>
-                            {offer.location && <><span>·</span><MapPin className="h-3 w-3 text-slate-400" /><span className="truncate">{offer.location}</span></>}
-                          </div>
-                        </div>
-                      </>
-                    )}
-                  </div>
+                      </td>
 
-                  {/* Price */}
-                  <div>
-                    <BlurGate>
-                      <span className="font-black text-slate-900 dark:text-white text-base">
-                        {currencySymbol}{offer.pricePerKg > 0 ? offer.pricePerKg.toFixed(2) : '—'}
-                      </span>
-                      {offer.pricePerKg > 0 && <span className="text-xs text-slate-400 font-normal"> /kg</span>}
-                    </BlurGate>
-                  </div>
+                      {/* 3. Price */}
+                      <td className="py-4 px-6">
+                        <BlurGate>
+                          <span className="font-bold text-slate-900 dark:text-white">
+                            {currencySymbol}{offer.pricePerKg > 0 ? offer.pricePerKg.toFixed(2) : '—'}
+                          </span>
+                          <span className="text-xs text-slate-400 font-normal"> /kg</span>
+                        </BlurGate>
+                      </td>
 
-                  {/* Fresh/Frozen */}
-                  <div className="flex items-center gap-1.5">
-                    {offer.freshFrozen === 'Fresh'
-                      ? <Droplets className="h-3.5 w-3.5 text-blue-400" />
-                      : <Snowflake className="h-3.5 w-3.5 text-cyan-400" />}
-                    <span className="text-sm text-slate-700 dark:text-slate-300 font-medium">{offer.freshFrozen}</span>
-                  </div>
+                      {/* 4. Condition */}
+                      <td className="py-4 px-6 text-slate-700 dark:text-slate-300">
+                        {offer.freshFrozen}
+                      </td>
 
-                  {/* Packaging */}
-                  <div className="flex items-center gap-1.5">
-                    <Package className="h-3.5 w-3.5 text-slate-400 shrink-0" />
-                    <span className="text-sm text-slate-700 dark:text-slate-300 leading-tight">{offer.packaging}</span>
-                  </div>
+                      {/* 5. Packaging */}
+                      <td className="py-4 px-6 text-slate-700 dark:text-slate-300">
+                        {offer.packaging}
+                      </td>
 
-                  {/* Availability */}
-                  <div>
-                    <span className={`inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1.5 rounded-full ${
-                      offer.availability.toLowerCase().includes('stock')
-                        ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40'
-                        : 'bg-amber-50 text-amber-700 dark:bg-amber-950/40'
-                    }`}>
-                      <span className={`h-1.5 w-1.5 rounded-full ${offer.availability.toLowerCase().includes('stock') ? 'bg-emerald-500' : 'bg-amber-500'}`} />
-                      {offer.availability.replace(' — Ready to Ship', '').replace(' — ', ' ')}
-                    </span>
-                  </div>
+                      {/* 6. Availability */}
+                      <td className="py-4 px-6">
+                        <span className="inline-flex items-center gap-1.5 text-xs font-medium text-emerald-700 bg-emerald-50 dark:bg-emerald-950/40 dark:text-emerald-300 border border-emerald-100 dark:border-emerald-800 px-2.5 py-0.5 rounded-full">
+                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                          {offer.availability.replace(' — Ready to Ship', '').replace(' — ', ' ')}
+                        </span>
+                      </td>
 
-                  {/* CTA */}
-                  <div>
-                    <BlurGate>
-                      {offer.companySlug ? (
-                        <Link href={`/suppliers/${offer.companySlug}`}>
-                          <button className="flex items-center gap-1.5 text-xs font-bold bg-[#022B96] hover:bg-[#011a5e] text-white px-3 py-2 rounded-xl transition cursor-pointer whitespace-nowrap">
-                            <MessageSquare className="h-3.5 w-3.5" />
-                            Contact
-                          </button>
-                        </Link>
-                      ) : (
-                        <button className="flex items-center gap-1.5 text-xs font-bold bg-[#022B96] hover:bg-[#011a5e] text-white px-3 py-2 rounded-xl transition cursor-pointer whitespace-nowrap">
-                          <MessageSquare className="h-3.5 w-3.5" />
-                          Contact
-                        </button>
-                      )}
-                    </BlurGate>
-                  </div>
-                </div>
-              ))
-            ) : (
-              <div className="text-center py-16 px-4">
-                <div className="h-16 w-16 rounded-2xl bg-blue-50 flex items-center justify-center mx-auto mb-4">
-                  <Fish className="h-8 w-8 text-blue-300" />
-                </div>
-                <p className="text-base font-semibold text-slate-600 mb-1">No offers listed yet</p>
-                <p className="text-sm text-slate-400">
-                  {filterFresh !== 'All' || filterCountry !== 'All'
-                    ? 'No results match your filters. Try adjusting them.'
-                    : 'No supplier has posted this product yet.'}
-                </p>
-              </div>
-            )}
+                      {/* 7. Action */}
+                      <td className="py-4 px-6 text-right">
+                        <BlurGate>
+                          {offer.companySlug ? (
+                            <Link href={`/suppliers/${offer.companySlug}`}>
+                              <button className="text-xs font-semibold bg-[#022B96] hover:bg-[#011a5e] text-white px-3.5 py-1.5 rounded-lg transition-colors shadow-2xs cursor-pointer whitespace-nowrap">
+                                Contact
+                              </button>
+                            </Link>
+                          ) : (
+                            <button className="text-xs font-semibold bg-[#022B96] hover:bg-[#011a5e] text-white px-3.5 py-1.5 rounded-lg transition-colors shadow-2xs cursor-pointer whitespace-nowrap">
+                              Contact
+                            </button>
+                          )}
+                        </BlurGate>
+                      </td>
+                    </tr>
+                  ))
+                ) : (
+                  <tr>
+                    <td colSpan={7} className="py-16 text-center">
+                      <Fish className="h-8 w-8 text-slate-300 mx-auto mb-2" />
+                      <p className="text-sm font-semibold text-slate-600 mb-0.5">No offers listed</p>
+                      <p className="text-xs text-slate-400">
+                        {filterFresh !== 'All' || filterCountry !== 'All'
+                          ? 'Try adjusting your filters.'
+                          : 'No supplier has posted this product yet.'}
+                      </p>
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
           </div>
+
         </div>
 
       </div>

@@ -1,5 +1,18 @@
 [
   {
+    "id": "claim-1791454857766-k2fwa",
+    "company_id": "d5187379-6f59-4881-b3f3-979a3e56e38b",
+    "company_name": "harfa",
+    "username": "abi",
+    "full_name": "ali",
+    "job_title": "cty",
+    "business_email": "aif@f.com",
+    "password": "12345678",
+    "status": "approved",
+    "created_at": "2026-10-08T10:20:57.766Z",
+    "updated_at": "2026-10-08T10:21:07.769Z"
+  },
+  {
     "id": "claim-1791412625918-gpzyb",
     "company_id": "comp-1",
     "company_name": "Amacore B.V.",

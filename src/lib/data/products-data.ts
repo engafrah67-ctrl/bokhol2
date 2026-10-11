@@ -31,7 +31,56 @@ export interface MarketProductCard {
   suppliersCount: number
   avgPrice: string
   topOrigin: string
+  origins?: string[]
   lastUpdated: string
+}
+
+export const COUNTRY_ISO: Record<string, string> = {
+  Belgium: 'be', Netherlands: 'nl', Germany: 'de', Norway: 'no', Spain: 'es',
+  France: 'fr', Portugal: 'pt', Italy: 'it', Greece: 'gr', Ireland: 'ie',
+  Denmark: 'dk', Sweden: 'se', Finland: 'fi', Iceland: 'is', Poland: 'pl',
+  Chile: 'cl', Vietnam: 'vn', China: 'cn', Japan: 'jp', India: 'in',
+  Indonesia: 'id', Thailand: 'th', Philippines: 'ph', Taiwan: 'tw', 'South Korea': 'kr',
+  Ecuador: 'ec', Peru: 'pe', Argentina: 'ar', Brazil: 'br', Mexico: 'mx',
+  Morocco: 'ma', Senegal: 'sn', Mauritania: 'mr', Egypt: 'eg', 'South Africa': 'za', Ghana: 'gh',
+  'United States': 'us', Canada: 'ca', Australia: 'au', 'New Zealand': 'nz',
+  Russia: 'ru', Turkey: 'tr', Ukraine: 'ua', Myanmar: 'mm', Bangladesh: 'bd',
+  Malaysia: 'my', 'Sri Lanka': 'lk', Pakistan: 'pk', 'Saudi Arabia': 'sa',
+  Namibia: 'na', Oman: 'om', Maldives: 'mv', Faroe: 'fo', 'Faroe Islands': 'fo',
+  Somalia: 'so', Ethiopia: 'et', Kenya: 'ke', Tanzania: 'tz', Madagascar: 'mg',
+  Nigeria: 'ng', Cameroon: 'cm', Angola: 'ao', "Côte d'Ivoire": 'ci',
+  Cambodia: 'kh', Laos: 'la', Singapore: 'sg',
+  Croatia: 'hr', Romania: 'ro', Bulgaria: 'bg', Austria: 'at', Switzerland: 'ch',
+  Colombia: 'co', Greenland: 'gl',
+}
+
+export function getFlagUrl(country: string): string | null {
+  if (!country) return null
+  const clean = country.trim().toLowerCase()
+
+  const direct = COUNTRY_ISO[country.trim()]
+  if (direct) return `https://flagcdn.com/w40/${direct.toLowerCase()}.png`
+
+  for (const [name, iso] of Object.entries(COUNTRY_ISO)) {
+    if (clean === name.toLowerCase()) {
+      return `https://flagcdn.com/w40/${iso.toLowerCase()}.png`
+    }
+  }
+
+  for (const [name, iso] of Object.entries(COUNTRY_ISO)) {
+    if (clean.includes(name.toLowerCase()) || name.toLowerCase().includes(clean)) {
+      return `https://flagcdn.com/w40/${iso.toLowerCase()}.png`
+    }
+  }
+
+  if (clean.includes('holland')) return 'https://flagcdn.com/w40/nl.png'
+  if (clean.includes('uae') || clean.includes('emirates')) return 'https://flagcdn.com/w40/ae.png'
+  if (clean.includes('usa') || clean.includes('united states')) return 'https://flagcdn.com/w40/us.png'
+  if (clean.includes('uk') || clean.includes('united kingdom') || clean.includes('britain')) return 'https://flagcdn.com/w40/gb.png'
+  if (clean.includes('vietnam') || clean.includes('viet nam')) return 'https://flagcdn.com/w40/vn.png'
+  if (clean.includes('india')) return 'https://flagcdn.com/w40/in.png'
+
+  return null
 }
 
 // Fish image mapping — 100% consistent across entire platform

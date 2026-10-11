@@ -194,9 +194,9 @@ export function ProductMarketGraph({
         <ResponsiveContainer width="100%" height="100%">
           <AreaChart data={trendData.trendPoints} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
             <defs>
-              <linearGradient id={`grad-${productName}`} x1="0" y1="0" x2="0" y2="1">
-                <stop offset="5%" stopColor="#022B96" stopOpacity={0.25} />
-                <stop offset="95%" stopColor="#022B96" stopOpacity={0.01} />
+              <linearGradient id="productMarketTrendGrad" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="5%" stopColor="#0284c7" stopOpacity={0.25} />
+                <stop offset="95%" stopColor="#0284c7" stopOpacity={0.02} />
               </linearGradient>
             </defs>
             <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" opacity={0.6} />
@@ -229,11 +229,11 @@ export function ProductMarketGraph({
             <Area
               type="monotone"
               dataKey="price"
-              stroke="#022B96"
+              stroke="#0284c7"
               strokeWidth={2.5}
-              fill={`url(#grad-${productName})`}
-              dot={{ r: 3, fill: '#022B96', strokeWidth: 0 }}
-              activeDot={{ r: 5, fill: '#022B96', strokeWidth: 0 }}
+              fill="url(#productMarketTrendGrad)"
+              dot={{ r: 3, fill: '#0284c7', strokeWidth: 0 }}
+              activeDot={{ r: 5, fill: '#0284c7', strokeWidth: 0 }}
             />
           </AreaChart>
         </ResponsiveContainer>

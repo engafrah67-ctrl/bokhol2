@@ -6,13 +6,13 @@ import { Locale, translations } from '@/lib/i18n/translations'
 interface LanguageContextValue {
   locale: Locale
   setLocale: (l: Locale) => void
-  t: (key: string) => string
+  t: (key: string, fallback?: string) => string
 }
 
 const LanguageContext = createContext<LanguageContextValue>({
   locale: 'en',
   setLocale: () => {},
-  t: (key) => key,
+  t: (key, fallback) => fallback ?? key,
 })
 
 export function LanguageProvider({ children }: { children: React.ReactNode }) {
@@ -29,8 +29,8 @@ export function LanguageProvider({ children }: { children: React.ReactNode }) {
     localStorage.setItem('locale', l)
   }
 
-  const t = (key: string): string => {
-    return translations[locale][key] ?? translations['en'][key] ?? key
+  const t = (key: string, fallback?: string): string => {
+    return translations[locale]?.[key] ?? translations['en']?.[key] ?? fallback ?? key
   }
 
   return (

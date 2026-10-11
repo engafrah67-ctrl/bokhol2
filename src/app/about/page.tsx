@@ -41,144 +41,6 @@ function useInView(threshold = 0.2) {
   return { ref, inView }
 }
 
-// ─── Data ─────────────────────────────────────────────────────────────────────
-
-const VALUES = [
-  {
-    icon: Eye,
-    title: 'Transparency',
-    color: 'from-blue-500 to-cyan-400',
-    bg: 'bg-blue-50 dark:bg-blue-950/30',
-    border: 'border-blue-200 dark:border-blue-800',
-    description:
-      'We believe businesses should have access to clear and accessible market information. No hidden data, no opaque processes.',
-  },
-  {
-    icon: ShieldCheck,
-    title: 'Trust',
-    color: 'from-emerald-500 to-teal-400',
-    bg: 'bg-emerald-50 dark:bg-emerald-950/30',
-    border: 'border-emerald-200 dark:border-emerald-800',
-    description:
-      'Strong business relationships are built on credibility and trust. We verify every participant on our platform.',
-  },
-  {
-    icon: Network,
-    title: 'Connectivity',
-    color: 'from-violet-500 to-purple-400',
-    bg: 'bg-violet-50 dark:bg-violet-950/30',
-    border: 'border-violet-200 dark:border-violet-800',
-    description:
-      'The seafood industry grows when businesses can easily find and connect with each other — across borders and time zones.',
-  },
-  {
-    icon: Lightbulb,
-    title: 'Growth',
-    color: 'from-amber-500 to-orange-400',
-    bg: 'bg-amber-50 dark:bg-amber-950/30',
-    border: 'border-amber-200 dark:border-amber-800',
-    description:
-      'We help companies increase their visibility and discover new opportunities in markets they have not reached yet.',
-  },
-]
-
-const WHAT_WE_DO = [
-  {
-    icon: Fish,
-    text: 'Discover seafood suppliers',
-    bgClass: 'bg-blue-600 dark:bg-blue-500 text-white',
-    hoverBorder: 'hover:border-blue-500/50 hover:shadow-blue-500/5',
-  },
-  {
-    icon: Package,
-    text: 'Promote products and company offers',
-    bgClass: 'bg-emerald-600 dark:bg-emerald-500 text-white',
-    hoverBorder: 'hover:border-emerald-500/50 hover:shadow-emerald-500/5',
-  },
-  {
-    icon: Handshake,
-    text: 'Connect buyers and sellers',
-    bgClass: 'bg-violet-600 dark:bg-violet-500 text-white',
-    hoverBorder: 'hover:border-violet-500/50 hover:shadow-violet-500/5',
-  },
-  {
-    icon: Globe2,
-    text: 'Increase business visibility',
-    bgClass: 'bg-amber-600 dark:bg-amber-500 text-white',
-    hoverBorder: 'hover:border-amber-500/50 hover:shadow-amber-500/5',
-  },
-  {
-    icon: TrendingUp,
-    text: 'Explore new market opportunities',
-    bgClass: 'bg-rose-600 dark:bg-rose-500 text-white',
-    hoverBorder: 'hover:border-rose-500/50 hover:shadow-rose-500/5',
-  },
-  {
-    icon: ShieldCheck,
-    text: 'Stay informed about industry activity',
-    bgClass: 'bg-indigo-600 dark:bg-indigo-500 text-white',
-    hoverBorder: 'hover:border-indigo-500/50 hover:shadow-indigo-500/5',
-  },
-  {
-    icon: Network,
-    text: 'Build professional seafood networks',
-    bgClass: 'bg-teal-600 dark:bg-teal-500 text-white',
-    hoverBorder: 'hover:border-teal-500/50 hover:shadow-teal-500/5',
-  },
-]
-
-const WHO_WE_SERVE = [
-  {
-    icon: Truck,
-    label: 'Wholesalers',
-    desc: 'Find new customers & expand reach',
-    bgClass: 'bg-blue-600 dark:bg-blue-500 text-white',
-    hoverBorder: 'hover:border-blue-500/50 hover:shadow-blue-500/5',
-  },
-  {
-    icon: Building2,
-    label: 'Importers',
-    desc: 'Gain EU market exposure',
-    bgClass: 'bg-emerald-600 dark:bg-emerald-500 text-white',
-    hoverBorder: 'hover:border-emerald-500/50 hover:shadow-emerald-500/5',
-  },
-  {
-    icon: Fish,
-    label: 'Suppliers',
-    desc: 'Showcase your products globally',
-    bgClass: 'bg-violet-600 dark:bg-violet-500 text-white',
-    hoverBorder: 'hover:border-violet-500/50 hover:shadow-violet-500/5',
-  },
-  {
-    icon: ChefHat,
-    label: 'Restaurants',
-    desc: 'Source trusted, verified suppliers',
-    bgClass: 'bg-amber-600 dark:bg-amber-500 text-white',
-    hoverBorder: 'hover:border-amber-500/50 hover:shadow-amber-500/5',
-  },
-  {
-    icon: Store,
-    label: 'Fish Shops',
-    desc: 'Discover fresh product lines',
-    bgClass: 'bg-rose-600 dark:bg-rose-500 text-white',
-    hoverBorder: 'hover:border-rose-500/50 hover:shadow-rose-500/5',
-  },
-  {
-    icon: Users,
-    label: 'Processors',
-    desc: 'Connect with raw material sources',
-    bgClass: 'bg-indigo-600 dark:bg-indigo-500 text-white',
-    hoverBorder: 'hover:border-indigo-500/50 hover:shadow-indigo-500/5',
-  },
-]
-
-const WHY_ITEMS = [
-  'Calling multiple suppliers',
-  'Comparing offers manually',
-  'Searching for trusted companies',
-  'Looking for new sourcing opportunities',
-]
-
 // ─── Main Page ────────────────────────────────────────────────────────────────
 export default function AboutPage() {
   const { t } = useLanguage()
@@ -197,6 +59,76 @@ export default function AboutPage() {
     }
   }, [])
 
+  const VALUES = [
+    {
+      icon: Eye,
+      title: t('about_val_transparency', 'Transparency'),
+      color: 'from-blue-500 to-cyan-400',
+      bg: 'bg-blue-50 dark:bg-blue-950/30',
+      border: 'border-blue-200 dark:border-blue-800',
+      description: t('about_val_transparency_desc', 'We believe businesses should have access to clear and accessible market information. No hidden data, no opaque processes.'),
+    },
+    {
+      icon: ShieldCheck,
+      title: t('about_val_trust', 'Trust'),
+      color: 'from-emerald-500 to-teal-400',
+      bg: 'bg-emerald-50 dark:bg-emerald-950/30',
+      border: 'border-emerald-200 dark:border-emerald-800',
+      description: t('about_val_trust_desc', 'Strong business relationships are built on credibility and trust. We verify every participant on our platform.'),
+    },
+    {
+      icon: Network,
+      title: t('about_val_connectivity', 'Connectivity'),
+      color: 'from-violet-500 to-purple-400',
+      bg: 'bg-violet-50 dark:bg-violet-950/30',
+      border: 'border-violet-200 dark:border-violet-800',
+      description: t('about_val_connectivity_desc', 'The seafood industry grows when businesses can easily find and connect with each other — across borders and time zones.'),
+    },
+    {
+      icon: Lightbulb,
+      title: t('about_val_growth', 'Growth'),
+      color: 'from-amber-500 to-orange-400',
+      bg: 'bg-amber-50 dark:bg-amber-950/30',
+      border: 'border-amber-200 dark:border-amber-800',
+      description: t('about_val_growth_desc', 'We help companies increase their visibility and discover new opportunities in markets they have not reached yet.'),
+    },
+  ]
+
+  const WHAT_WE_DO = [
+    { icon: Fish, text: t('about_do_1', 'Discover seafood suppliers'), bgClass: 'bg-blue-600 dark:bg-blue-500 text-white', hoverBorder: 'hover:border-blue-500/50 hover:shadow-blue-500/5' },
+    { icon: Package, text: t('about_do_2', 'Promote products and company offers'), bgClass: 'bg-emerald-600 dark:bg-emerald-500 text-white', hoverBorder: 'hover:border-emerald-500/50 hover:shadow-emerald-500/5' },
+    { icon: Handshake, text: t('about_do_3', 'Connect buyers and sellers'), bgClass: 'bg-violet-600 dark:bg-violet-500 text-white', hoverBorder: 'hover:border-violet-500/50 hover:shadow-violet-500/5' },
+    { icon: Globe2, text: t('about_do_4', 'Increase business visibility'), bgClass: 'bg-amber-600 dark:bg-amber-500 text-white', hoverBorder: 'hover:border-amber-500/50 hover:shadow-amber-500/5' },
+    { icon: TrendingUp, text: t('about_do_5', 'Explore new market opportunities'), bgClass: 'bg-rose-600 dark:bg-rose-500 text-white', hoverBorder: 'hover:border-rose-500/50 hover:shadow-rose-500/5' },
+    { icon: ShieldCheck, text: t('about_do_6', 'Stay informed about industry activity'), bgClass: 'bg-indigo-600 dark:bg-indigo-500 text-white', hoverBorder: 'hover:border-indigo-500/50 hover:shadow-indigo-500/5' },
+    { icon: Network, text: t('about_do_7', 'Build professional seafood networks'), bgClass: 'bg-teal-600 dark:bg-teal-500 text-white', hoverBorder: 'hover:border-teal-500/50 hover:shadow-teal-500/5' },
+  ]
+
+  const WHO_WE_SERVE = [
+    { icon: Truck, label: t('about_serve_wholesalers', 'Wholesalers'), desc: t('about_serve_wholesalers_desc', 'Find new customers & expand reach'), bgClass: 'bg-blue-600 dark:bg-blue-500 text-white', hoverBorder: 'hover:border-blue-500/50 hover:shadow-blue-500/5' },
+    { icon: Building2, label: t('about_serve_importers', 'Importers'), desc: t('about_serve_importers_desc', 'Gain EU market exposure'), bgClass: 'bg-emerald-600 dark:bg-emerald-500 text-white', hoverBorder: 'hover:border-emerald-500/50 hover:shadow-emerald-500/5' },
+    { icon: Fish, label: t('about_serve_suppliers', 'Suppliers'), desc: t('about_serve_suppliers_desc', 'Showcase your products globally'), bgClass: 'bg-violet-600 dark:bg-violet-500 text-white', hoverBorder: 'hover:border-violet-500/50 hover:shadow-violet-500/5' },
+    { icon: ChefHat, label: t('about_serve_restaurants', 'Restaurants'), desc: t('about_serve_restaurants_desc', 'Source trusted, verified suppliers'), bgClass: 'bg-amber-600 dark:bg-amber-500 text-white', hoverBorder: 'hover:border-amber-500/50 hover:shadow-amber-500/5' },
+    { icon: Store, label: t('about_serve_fish_shops', 'Fish Shops'), desc: t('about_serve_fish_shops_desc', 'Discover fresh product lines'), bgClass: 'bg-rose-600 dark:bg-rose-500 text-white', hoverBorder: 'hover:border-rose-500/50 hover:shadow-rose-500/5' },
+    { icon: Users, label: t('about_serve_processors', 'Processors'), desc: t('about_serve_processors_desc', 'Connect with raw material sources'), bgClass: 'bg-indigo-600 dark:bg-indigo-500 text-white', hoverBorder: 'hover:border-indigo-500/50 hover:shadow-indigo-500/5' },
+  ]
+
+  const WHY_ITEMS = [
+    t('about_problem_1', 'Calling multiple suppliers'),
+    t('about_problem_2', 'Comparing offers manually'),
+    t('about_problem_3', 'Searching for trusted companies'),
+    t('about_problem_4', 'Looking for new sourcing opportunities'),
+  ]
+
+  const GOAL_ITEMS = [
+    { label: t('about_goal_item_1', 'Seafood Companies'), icon: Building2 },
+    { label: t('about_goal_item_2', 'Wholesalers'), icon: Truck },
+    { label: t('about_goal_item_3', 'Importers & Exporters'), icon: Globe2 },
+    { label: t('about_goal_item_4', 'Restaurants & Hotels'), icon: ChefHat },
+    { label: t('about_goal_item_5', 'Fish Shops'), icon: Store },
+    { label: t('about_goal_item_6', 'Foodservice Buyers'), icon: Users },
+  ]
+
   return (
     <main className="min-h-screen bg-transparent text-foreground pb-20 overflow-x-hidden">
 
@@ -205,10 +137,10 @@ export default function AboutPage() {
         {/* No image — global gradient shows through */}
         <div className="relative z-10 max-w-4xl mx-auto px-4 flex flex-col items-center text-center py-12">
           <h1 className="text-3xl sm:text-5xl font-extrabold tracking-tight leading-tight text-slate-900">
-            {t('about_title')}
+            {t('about_title', 'We Are Bokhol FishMarketCap')}
           </h1>
           <p className="mt-4 text-base sm:text-lg text-slate-600 max-w-2xl leading-relaxed">
-            {t('about_desc')}
+            {t('about_desc', 'Connecting seafood suppliers, importers, wholesalers, and buyers across Europe and beyond.')}
           </p>
         </div>
       </section>
@@ -223,11 +155,10 @@ export default function AboutPage() {
         <section className="space-y-10">
           <div className="text-center space-y-3 max-w-2xl mx-auto">
             <h2 className="text-3xl sm:text-4xl font-extrabold text-foreground tracking-tight">
-              Everything Your Seafood Business Needs
+              {t('about_what_we_do_title', 'Everything Your Seafood Business Needs')}
             </h2>
             <p className="text-muted-foreground text-base">
-              Bokhol FishMarketCap brings suppliers and buyers together in one digital environment,
-              helping businesses save time, expand their network, and make better purchasing decisions.
+              {t('about_what_we_do_desc', 'Bokhol FishMarketCap brings suppliers and buyers together in one digital environment, helping businesses save time, expand their network, and make better purchasing decisions.')}
             </p>
           </div>
 
@@ -248,7 +179,7 @@ export default function AboutPage() {
               <div className="w-10 h-10 rounded-xl bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 flex items-center justify-center flex-shrink-0">
                 <ArrowRight className="w-5 h-5" />
               </div>
-              <span className="text-sm font-semibold text-muted-foreground">…and much more</span>
+              <span className="text-sm font-semibold text-muted-foreground">{t('about_and_more', '…and much more')}</span>
             </div>
           </div>
         </section>
@@ -257,10 +188,10 @@ export default function AboutPage() {
         <section ref={missionRef} className="space-y-10">
           <div className="text-center space-y-3 max-w-2xl mx-auto">
             <h2 className="text-3xl sm:text-4xl font-extrabold text-foreground tracking-tight">
-              Mission &amp; Vision
+              {t('about_mission_vision_title', 'Mission & Vision')}
             </h2>
             <p className="text-muted-foreground text-sm">
-              The two pillars that drive everything we build at Bokhol FishMarketCap.
+              {t('about_mission_vision_desc', 'The two pillars that drive everything we build at Bokhol FishMarketCap.')}
             </p>
           </div>
 
@@ -288,12 +219,10 @@ export default function AboutPage() {
                 </div>
                 <div>
                   <h3 className="text-2xl font-extrabold text-white mb-4 leading-tight">
-                    Making Seafood Sourcing Easier
+                    {t('about_mission_title', 'Making Seafood Sourcing Easier')}
                   </h3>
                   <p className="text-blue-100/85 text-sm leading-relaxed">
-                    To make seafood sourcing and supplier discovery easier by creating a transparent
-                    platform where businesses can connect, promote their products, and understand
-                    the market before making purchasing decisions.
+                    {t('about_mission_desc', 'To make seafood sourcing and supplier discovery easier by creating a transparent platform where businesses can connect, promote their products, and understand the market before making purchasing decisions.')}
                   </p>
                 </div>
               </div>
@@ -322,12 +251,10 @@ export default function AboutPage() {
                 </div>
                 <div>
                   <h3 className="text-2xl font-extrabold text-white mb-4 leading-tight">
-                    The Leading Seafood Network
+                    {t('about_vision_title', 'The Leading Seafood Network')}
                   </h3>
                   <p className="text-cyan-50/85 text-sm leading-relaxed">
-                    To become the leading digital seafood business network where suppliers,
-                    wholesalers, importers, and buyers can connect, discover opportunities,
-                    and build long-term business relationships.
+                    {t('about_vision_desc', 'To become the leading digital seafood business network where suppliers, wholesalers, importers, and buyers can connect, discover opportunities, and build long-term business relationships.')}
                   </p>
                 </div>
               </div>
@@ -340,11 +267,11 @@ export default function AboutPage() {
           {/* Pain points */}
           <div className="space-y-6">
             <h2 className="text-3xl sm:text-4xl font-extrabold text-foreground tracking-tight leading-tight">
-              The Industry Problem{' '}
-              <span className="text-[#022B96]">We Solve</span>
+              {t('about_problem_title', 'The Industry Problem')}{' '}
+              <span className="text-[#022B96]">{t('about_problem_title', 'We Solve')}</span>
             </h2>
             <p className="text-muted-foreground text-base leading-relaxed">
-              Today, many seafood buyers spend valuable time on tasks that should not take this long:
+              {t('about_problem_desc', 'Today, many seafood buyers spend valuable time on tasks that should not take this long:')}
             </p>
             <ul className="space-y-3">
               {WHY_ITEMS.map((item, i) => (
@@ -380,13 +307,13 @@ export default function AboutPage() {
           <div className="text-center space-y-3 max-w-2xl mx-auto">
             <div className="inline-flex items-center gap-2 text-xs font-bold tracking-widest uppercase text-[#022B96] px-3 py-1.5 rounded-full bg-blue-50 border border-blue-200">
               <ShieldCheck className="w-3.5 h-3.5" />
-              Our Values
+              {t('about_values_badge', 'Our Values')}
             </div>
             <h2 className="text-3xl sm:text-4xl font-extrabold text-foreground tracking-tight">
-              What We Stand For
+              {t('about_values_title', 'What We Stand For')}
             </h2>
             <p className="text-muted-foreground text-base">
-              Four principles that guide every decision we make.
+              {t('about_values_desc', 'Four principles that guide every decision we make.')}
             </p>
           </div>
 
@@ -431,26 +358,17 @@ export default function AboutPage() {
             <div className="space-y-4">
               <div className="inline-flex items-center gap-2 text-xs font-bold tracking-widest uppercase text-[#022B96] px-3 py-1.5 rounded-full bg-[#022B96]/10 border border-[#022B96]/20">
                 <Target className="w-3.5 h-3.5" />
-                Our Goal
+                {t('about_goal_badge', 'Our Goal')}
               </div>
               <h2 className="text-3xl sm:text-4xl font-extrabold text-slate-900 tracking-tight leading-tight">
-                The Place Where Seafood Businesses Come Together
+                {t('about_goal_title', 'The Place Where Seafood Businesses Come Together')}
               </h2>
               <p className="text-slate-700 text-base leading-relaxed">
-                Our goal is to become the place where seafood companies, wholesalers, importers,
-                restaurants, hotels, fish shops, and foodservice buyers come together to discover
-                products, build relationships, and understand the market before placing their next order.
+                {t('about_goal_desc', 'Our goal is to become the place where seafood companies, wholesalers, importers, restaurants, hotels, fish shops, and foodservice buyers come together to discover products, build relationships, and understand the market before placing their next order.')}
               </p>
             </div>
             <div className="grid grid-cols-2 gap-4">
-              {[
-                { label: 'Seafood Companies', icon: Building2 },
-                { label: 'Wholesalers', icon: Truck },
-                { label: 'Importers & Exporters', icon: Globe2 },
-                { label: 'Restaurants & Hotels', icon: ChefHat },
-                { label: 'Fish Shops', icon: Store },
-                { label: 'Foodservice Buyers', icon: Users },
-              ].map((item, i) => (
+              {GOAL_ITEMS.map((item, i) => (
                 <div key={i} className="flex items-center gap-2.5 p-3 rounded-xl bg-white/70 border border-[#022B96]/10 shadow-sm">
                   <item.icon className="w-4 h-4 text-[#022B96] flex-shrink-0" />
                   <span className="text-xs font-semibold text-slate-700">{item.label}</span>
@@ -465,13 +383,13 @@ export default function AboutPage() {
           <div className="space-y-3">
             <div className="inline-flex items-center gap-2 text-xs font-bold tracking-widest uppercase text-[#022B96] px-3 py-1.5 rounded-full bg-blue-50 border border-blue-200">
               <Handshake className="w-3.5 h-3.5" />
-              Network
+              {t('about_network_badge', 'Network')}
             </div>
             <h2 className="text-2xl sm:text-4xl font-extrabold text-foreground tracking-tight">
-              Our EU Buyers &amp; Partners
+              {t('about_network_title', 'Our EU Buyers & Partners')}
             </h2>
             <p className="text-muted-foreground text-sm max-w-xl mx-auto">
-              A growing network of verified seafood importers, wholesalers, hotels, and restaurant chains on our platform.
+              {t('about_network_desc', 'A growing network of verified seafood importers, wholesalers, hotels, and restaurant chains on our platform.')}
             </p>
           </div>
 
@@ -518,11 +436,10 @@ export default function AboutPage() {
 
           <div className="relative z-10 px-8 sm:px-12 py-12 sm:py-16 space-y-6">
             <h2 className="text-3xl sm:text-4xl font-extrabold text-white tracking-tight">
-              Ready to Explore the EU Seafood Market?
+              {t('about_cta_title', 'Ready to Explore the EU Seafood Market?')}
             </h2>
             <p className="text-blue-100/85 text-base max-w-xl mx-auto leading-relaxed">
-              Whether you are a supplier looking for new customers, an importer seeking market exposure,
-              or a buyer searching for trusted suppliers — Bokhol FishMarketCap is your place.
+              {t('about_cta_desc', 'Whether you are a supplier looking for new customers, an importer seeking market exposure, or a buyer searching for trusted suppliers — Bokhol FishMarketCap is your place.')}
             </p>
             <div className="flex flex-wrap items-center justify-center gap-4 pt-2">
               <Link href="/suppliers">
@@ -530,7 +447,7 @@ export default function AboutPage() {
                   size="lg"
                   className="bg-white text-[#022B96] hover:bg-blue-50 font-bold rounded-xl gap-2 shadow-xl cursor-pointer"
                 >
-                  Browse Suppliers
+                  {t('about_cta_browse', 'Browse Suppliers')}
                   <ArrowRight className="h-4 w-4" />
                 </Button>
               </Link>
@@ -540,7 +457,7 @@ export default function AboutPage() {
                   variant="outline"
                   className="border-white/40 text-white hover:bg-white/10 font-semibold rounded-xl cursor-pointer bg-transparent"
                 >
-                  Explore Our Network
+                  {t('about_cta_explore', 'Explore Our Network')}
                 </Button>
               </Link>
             </div>

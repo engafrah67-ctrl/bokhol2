@@ -2,8 +2,10 @@
 
 import React, { useState, useEffect } from 'react'
 import { fetchPartnerBuyers, PartnerBuyer } from '@/lib/data/partner-buyers-data'
+import { useLanguage } from '@/contexts/language-context'
 
 export function PartnersSection() {
+  const { t } = useLanguage()
   const [partnerBuyers, setPartnerBuyers] = useState<PartnerBuyer[]>([])
 
   useEffect(() => {
@@ -32,7 +34,7 @@ export function PartnersSection() {
       {/* Centered Title */}
       <div className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mb-6 text-center">
         <p className="text-sm sm:text-base font-extrabold text-foreground tracking-tight uppercase">
-          Our EU Buyers Partners
+          {t('partners_title', 'Our EU Buyers Partners')}
         </p>
       </div>
 

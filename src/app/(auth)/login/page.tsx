@@ -96,6 +96,36 @@ export default function LoginPage() {
             authData = retry.data
           }
 
+          if (authData?.user) {
+            // 1. Ensure user metadata has role, company_id, and company_name
+            try {
+              await supabase.auth.updateUser({
+                data: {
+                  role: 'supplier',
+                  company_id: claimResult.company_id,
+                  company_name: claimResult.company_name,
+                  full_name: claimResult.full_name,
+                  username: claimResult.username,
+                  claim_status: 'approved',
+                },
+              })
+            } catch (_) {}
+
+            // 2. Link this company directly to this user in Supabase companies table
+            if (claimResult.company_id) {
+              try {
+                await supabase
+                  .from('companies')
+                  .update({
+                    owner_id: authData.user.id,
+                    is_verified: true,
+                    status: 'active',
+                  })
+                  .eq('id', claimResult.company_id)
+              } catch (_) {}
+            }
+          }
+
           if (typeof window !== 'undefined') {
             window.dispatchEvent(new Event('bokhol-auth-change'))
           }
