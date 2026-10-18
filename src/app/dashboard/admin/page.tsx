@@ -1,12 +1,11 @@
 'use client'
 
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
 import {
   LayoutDashboard,
-  ShieldCheck,
   Building2,
   Fish,
   TrendingUp,
@@ -35,26 +34,17 @@ import {
   LogOut,
   UserPlus,
   BadgeCheck,
-  BadgeX,
   Mail,
   Phone,
   MapPin,
+  Package,
+  Layers,
+  Scale,
+  Sparkles,
 } from 'lucide-react'
 import { performSignOut } from '@/lib/auth-helpers'
-import {
-  CompanyProfile,
-  getStoredCompanies,
-  syncWithServerClaims,
-  approveProfileClaim,
-  rejectProfileClaim,
-  revokeProfileClaim,
-  deleteCompany,
-} from '@/lib/data/companies-data'
 import ReactCountryFlag from 'react-country-flag'
-import {
-  getFishImageForProduct,
-  SupplierPost,
-} from '@/lib/data/products-data'
+import { getFishImageForProduct, SupplierPost } from '@/lib/data/products-data'
 import {
   fetchNewsArticles,
   addNewsArticle,
@@ -68,6 +58,8 @@ import {
   updatePartnerBuyer,
   deletePartnerBuyer,
 } from '@/lib/data/partner-buyers-data'
+import { ViewSuppliersTab } from '@/components/admin/view-suppliers'
+import { ProductPublishModal } from '@/components/admin/product-publish-modal'
 
 const KNOWN_SUPPLIERS: Record<string, { name: string; logoUrl: string | null; country: string }> = {
   'd154fad9-6250-425d-95bc-d87ad8ce685f': {
@@ -87,13 +79,11 @@ const KNOWN_SUPPLIERS: Record<string, { name: string; logoUrl: string | null; co
   },
 }
 
-function getSupplierForPost(p: any, companiesList: any[] = []): { name: string; logoUrl: string | null; country: string } {
-  // 1. By company_id in KNOWN_SUPPLIERS
+function getSupplierForPost(p: any, suppliersList: any[] = []): { name: string; logoUrl: string | null; country: string } {
   if (p?.company_id && KNOWN_SUPPLIERS[p.company_id]) {
     return KNOWN_SUPPLIERS[p.company_id]
   }
 
-  // 2. Direct company_name on post if it's not a generic placeholder
   if (p?.company_name && p.company_name !== 'Verified Supplier' && p.company_name !== 'Bokhol Supplier') {
     return {
       name: p.company_name,
@@ -102,8 +92,7 @@ function getSupplierForPost(p: any, companiesList: any[] = []): { name: string; 
     }
   }
 
-  // 3. Match from active companies list
-  const matched = companiesList.find(
+  const matched = suppliersList.find(
     (c: any) =>
       c.id === p?.company_id ||
       (p?.company_name && c.name?.toLowerCase() === p.company_name.toLowerCase())
@@ -116,7 +105,6 @@ function getSupplierForPost(p: any, companiesList: any[] = []): { name: string; 
     }
   }
 
-  // 4. By product name mapping
   const pName = (p?.product_name || p?.title || '').toLowerCase()
   if (pName.includes('brill') || pName.includes('sea bream')) {
     return KNOWN_SUPPLIERS['d154fad9-6250-425d-95bc-d87ad8ce685f']
@@ -142,240 +130,72 @@ export default function AdminDashboardPage() {
   const [loading, setLoading] = useState(true)
   const [authorized, setAuthorized] = useState(false)
 
-  const [activeNav, setActiveNav] = useState<'overview' | 'verification' | 'claimed-profiles' | 'unclaimed-profiles' | 'add-supplier' | 'buyer-users' | 'posts' | 'indexes' | 'news' | 'partners'>('overview')
+  // Clean Navigation Structure without obsolete verification/claim items
+  const [activeNav, setActiveNav] = useState<
+    'overview' | 'add-supplier' | 'view-suppliers' | 'posts' | 'buyer-users' | 'partners' | 'news'
+  >('overview')
 
-  // Add Supplier form states
+  // Suppliers state (from actual database via /api/admin/add-supplier)
+  const [suppliers, setSuppliers] = useState<any[]>([])
+  const [suppliersLoading, setSuppliersLoading] = useState(false)
+
+  // Add Supplier form state
   const [newSupplierLogo, setNewSupplierLogo] = useState('')
   const [newSupplierEmail, setNewSupplierEmail] = useState('')
   const [newSupplierCompany, setNewSupplierCompany] = useState('')
   const [newSupplierCountry, setNewSupplierCountry] = useState('')
   const [newSupplierPhone, setNewSupplierPhone] = useState('')
   const [newSupplierSpecialty, setNewSupplierSpecialty] = useState('')
+  const [newSupplierAddress, setNewSupplierAddress] = useState('')
   const [addSupplierMsg, setAddSupplierMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
   const [addSupplierLoading, setAddSupplierLoading] = useState(false)
-  const [addedSuppliers, setAddedSuppliers] = useState<any[]>([])
 
   const handleSupplierLogoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file) return
     const reader = new FileReader()
-    reader.onload = (ev) => { if (ev.target?.result) setNewSupplierLogo(ev.target.result as string) }
+    reader.onload = (ev) => {
+      if (ev.target?.result) setNewSupplierLogo(ev.target.result as string)
+    }
     reader.readAsDataURL(file)
   }
 
+  // System Stats
   const [stats, setStats] = useState({
     totalUsers: 0,
     totalBuyers: 0,
     totalSuppliers: 0,
-    totalBuyerRequests: 0,
+    totalProducts: 0,
   })
 
-  const [companies, setCompanies] = useState<CompanyProfile[]>(() => {
-    if (typeof window !== 'undefined') {
-      try {
-        const cached = JSON.parse(localStorage.getItem('admin_companies_cache') || '[]')
-        if (Array.isArray(cached) && cached.length > 0) return cached
-      } catch (_) {}
-    }
-    return getStoredCompanies()
-  })
+  // Supplier Posts (Seafood Products) state
+  const [supplierPosts, setSupplierPosts] = useState<any[]>([])
+  const [postsLoading, setPostsLoading] = useState(false)
+  const [postStatusFilter, setPostStatusFilter] = useState<'all' | 'published' | 'draft'>('all')
+  const [postSupplierFilter, setPostSupplierFilter] = useState<string>('all')
+  const [postSearchQuery, setPostSearchQuery] = useState('')
+  const [priceUpdateMsg, setPriceUpdateMsg] = useState<string | null>(null)
 
-  // ── Profile Claims (source of truth for Verification tab) ──
-  const [profileClaims, setProfileClaims] = useState<any[]>(() => {
-    if (typeof window !== 'undefined') {
-      try {
-        const cached = JSON.parse(localStorage.getItem('admin_profile_claims_cache') || '[]')
-        if (Array.isArray(cached) && cached.length > 0) return cached
-      } catch (_) {}
-    }
-    return []
-  })
-  const [claimsLoading, setClaimsLoading] = useState(false)
+  // Product Publishing Modal state
+  const [isProductModalOpen, setIsProductModalOpen] = useState(false)
+  const [editingPost, setEditingPost] = useState<any | null>(null)
+  const [defaultSupplierIdForModal, setDefaultSupplierIdForModal] = useState<string | null>(null)
 
-  const fetchProfileClaims = async () => {
-    setClaimsLoading(true)
-    try {
-      const res = await fetch('/api/profile-claims', { cache: 'no-store' })
-      const json = await res.json()
-      if (json.success && Array.isArray(json.claims)) {
-        setProfileClaims(json.claims)
-        try { localStorage.setItem('admin_profile_claims_cache', JSON.stringify(json.claims)) } catch (_) {}
-      } else {
-        const { data } = await supabase
-          .from('profile_claims')
-          .select('*')
-          .order('created_at', { ascending: false })
-        if (data) {
-          setProfileClaims(data)
-          try { localStorage.setItem('admin_profile_claims_cache', JSON.stringify(data)) } catch (_) {}
-        }
-      }
-    } catch (_) {
-      try {
-        const { data } = await supabase
-          .from('profile_claims')
-          .select('*')
-          .order('created_at', { ascending: false })
-        if (data) {
-          setProfileClaims(data)
-          try { localStorage.setItem('admin_profile_claims_cache', JSON.stringify(data)) } catch (_) {}
-        }
-      } catch (_) {}
-    }
-    setClaimsLoading(false)
-  }
-  const [supplierPosts, setSupplierPosts] = useState<SupplierPost[]>(() => {
-    if (typeof window !== 'undefined') {
-      try {
-        const cached = JSON.parse(localStorage.getItem('admin_supplier_posts_cache') || '[]')
-        if (Array.isArray(cached) && cached.length > 0) {
-          return cached.map((p: any) => {
-            const sup = getSupplierForPost(p, [])
-            return {
-              ...p,
-              company_name: p.company_name && p.company_name !== 'Verified Supplier' ? p.company_name : sup.name,
-              company_logo: p.company_logo || sup.logoUrl || undefined,
-              company_country: p.company_country || sup.country || '',
-            }
-          })
-        }
-      } catch (_) {}
-    }
-    return []
-  })
-  const [newsArticles, setNewsArticles] = useState<NewsArticle[]>(() => {
-    if (typeof window !== 'undefined') {
-      try {
-        const cached = JSON.parse(localStorage.getItem('admin_news_articles_cache') || '[]')
-        if (Array.isArray(cached) && cached.length > 0) return cached
-      } catch (_) {}
-    }
-    return []
-  })
-  const [partnerBuyers, setPartnerBuyers] = useState<PartnerBuyer[]>(() => {
-    if (typeof window !== 'undefined') {
-      try {
-        const cached = JSON.parse(localStorage.getItem('admin_partner_buyers_cache') || '[]')
-        if (Array.isArray(cached) && cached.length > 0) return cached
-      } catch (_) {}
-    }
-    return []
-  })
-  const [isDataLoaded, setIsDataLoaded] = useState(false)
-
-  // ── Registered Buyer Users state ──
-  const [buyerUsers, setBuyerUsers] = useState<any[]>(() => {
-    if (typeof window !== 'undefined') {
-      try {
-        const cached = JSON.parse(localStorage.getItem('admin_buyer_users_cache') || '[]')
-        if (Array.isArray(cached) && cached.length > 0) {
-          if (cached.some((b: any) => typeof b.id === 'string' && b.id.startsWith('buyer-00'))) {
-            localStorage.removeItem('admin_buyer_users_cache')
-            return []
-          }
-          return cached
-        }
-      } catch (_) {}
-    }
-    return []
-  })
+  // News and Partner Buyers state
+  const [newsArticles, setNewsArticles] = useState<NewsArticle[]>([])
+  const [partnerBuyers, setPartnerBuyers] = useState<PartnerBuyer[]>([])
+  const [buyerUsers, setBuyerUsers] = useState<any[]>([])
   const [buyerUsersLoading, setBuyerUsersLoading] = useState(false)
   const [buyerSearchQuery, setBuyerSearchQuery] = useState('')
-  const [deletingBuyerId, setDeletingBuyerId] = useState<string | null>(null)
   const [buyerSuccessMsg, setBuyerSuccessMsg] = useState<string | null>(null)
 
-  const fetchBuyerUsers = async () => {
-    setBuyerUsersLoading(true)
-    try {
-      // 1. Direct Supabase query to get the real registered buyers
-      const { data, error } = await supabase
-        .from('users')
-        .select('*')
-        .eq('role', 'buyer')
-        .order('created_at', { ascending: false })
+  // Toast & Confirm Modal states
+  const [actionToast, setActionToast] = useState<{ type: 'success' | 'info'; message: string } | null>(null)
+  const [companyToDelete, setCompanyToDelete] = useState<{ id: string; name: string } | null>(null)
+  const [postToDelete, setPostToDelete] = useState<{ id: string; title: string } | null>(null)
+  const [isActionProcessing, setIsActionProcessing] = useState(false)
 
-      if (!error && Array.isArray(data)) {
-        // Query buyer requests count
-        const { data: requests } = await supabase
-          .from('buyer_requests')
-          .select('user_id')
-
-        const countMap: Record<string, number> = {}
-        if (Array.isArray(requests)) {
-          for (const r of requests) {
-            if (r.user_id) countMap[r.user_id] = (countMap[r.user_id] || 0) + 1
-          }
-        }
-
-        const realBuyers = data.map((u: any) => ({
-          ...u,
-          requests_count: countMap[u.id] || 0,
-        }))
-
-        setBuyerUsers(realBuyers)
-        setStats(prev => ({ ...prev, totalBuyers: realBuyers.length }))
-        try { localStorage.setItem('admin_buyer_users_cache', JSON.stringify(realBuyers)) } catch (_) {}
-      } else {
-        // Fallback to API endpoint
-        const res = await fetch('/api/admin/users?role=buyer')
-        const json = await res.json().catch(() => null)
-        if (json?.success && Array.isArray(json.buyers)) {
-          setBuyerUsers(json.buyers)
-          setStats(prev => ({ ...prev, totalBuyers: json.buyers.length }))
-          try { localStorage.setItem('admin_buyer_users_cache', JSON.stringify(json.buyers)) } catch (_) {}
-        }
-      }
-    } catch (_) {
-      try {
-        const { data } = await supabase
-          .from('users')
-          .select('*')
-          .eq('role', 'buyer')
-          .order('created_at', { ascending: false })
-        if (data) {
-          setBuyerUsers(data)
-          setStats(prev => ({ ...prev, totalBuyers: data.length }))
-        }
-      } catch (_) {}
-    } finally {
-      setBuyerUsersLoading(false)
-    }
-  }
-
-  const handleDeleteBuyer = async (id: string, name: string) => {
-    if (!confirm(`Are you sure you want to permanently delete buyer account "${name}"? This action cannot be undone.`)) return
-    setDeletingBuyerId(id)
-    try {
-      const res = await fetch(`/api/admin/users?id=${id}`, { method: 'DELETE' })
-      const json = await res.json().catch(() => null)
-      if (json?.success) {
-        setBuyerUsers(prev => prev.filter(b => b.id !== id))
-        setBuyerSuccessMsg(`Buyer "${name}" was successfully deleted.`)
-        setStats(prev => ({
-          ...prev,
-          totalBuyers: Math.max(0, prev.totalBuyers - 1),
-          totalUsers: Math.max(0, prev.totalUsers - 1),
-        }))
-        setTimeout(() => setBuyerSuccessMsg(null), 4000)
-      } else {
-        await supabase.from('users').delete().eq('id', id)
-        setBuyerUsers(prev => prev.filter(b => b.id !== id))
-        setBuyerSuccessMsg(`Buyer "${name}" was deleted.`)
-        setStats(prev => ({
-          ...prev,
-          totalBuyers: Math.max(0, prev.totalBuyers - 1),
-          totalUsers: Math.max(0, prev.totalUsers - 1),
-        }))
-        setTimeout(() => setBuyerSuccessMsg(null), 4000)
-      }
-    } catch (err: any) {
-      alert(`Error deleting buyer: ${err?.message || 'Network error'}`)
-    } finally {
-      setDeletingBuyerId(null)
-    }
-  }
-
-  // Partner Buyer Modal & Form states
+  // Partner Buyer Modal states
   const [showPartnerModal, setShowPartnerModal] = useState(false)
   const [editingPartner, setEditingPartner] = useState<PartnerBuyer | null>(null)
   const [partnerName, setPartnerName] = useState('')
@@ -386,7 +206,7 @@ export default function AdminDashboardPage() {
   const [partnerSuccessMsg, setPartnerSuccessMsg] = useState<string | null>(null)
   const [partnerFormError, setPartnerFormError] = useState<string | null>(null)
 
-  // Publish News Modal states
+  // News Modal states
   const [showAddNewsModal, setShowAddNewsModal] = useState(false)
   const [newsTitle, setNewsTitle] = useState('')
   const [newsCategory, setNewsCategory] = useState<'Market Update' | 'Trade' | 'Regulation' | 'Sustainability'>('Market Update')
@@ -396,127 +216,118 @@ export default function AdminDashboardPage() {
   const [newsAuthor, setNewsAuthor] = useState('Bokhol Research')
   const [newsFormError, setNewsFormError] = useState<string | null>(null)
   const [newsSuccessMsg, setNewsSuccessMsg] = useState<string | null>(null)
-  const [newsDeleting, setNewsDeleting] = useState<string | null>(null)
 
-  const handleNewsImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (!file) return
-    if (file.size > 5 * 1024 * 1024) {
-      setNewsFormError('Image file is too large (max 5MB)')
-      return
-    }
-    setNewsFormError(null)
-    const reader = new FileReader()
-    reader.onload = (event) => {
-      if (event.target?.result) {
-        setNewsImageUrl(event.target.result as string)
-      }
-    }
-    reader.readAsDataURL(file)
-  }
-
-  const [updatingPostModal, setUpdatingPostModal] = useState<SupplierPost | null>(null)
-  const [updatePriceInput, setUpdatePriceInput] = useState<string>('')
-  const [updateMaxPriceInput, setUpdateMaxPriceInput] = useState<string>('')
-  const [updateCurrencyInput, setUpdateCurrencyInput] = useState<string>('EUR')
-  const [updateAvailInput, setUpdateAvailInput] = useState<string>('In Stock — Ready to Ship')
-  const [updateDateInput, setUpdateDateInput] = useState<string>('')
-  const [priceUpdateMsg, setPriceUpdateMsg] = useState<string | null>(null)
-
-  const [searchQuery, setSearchQuery] = useState('')
-  const [claimFilter, setClaimFilter] = useState<'all' | 'pending' | 'claimed' | 'rejected'>('pending')
-
-  const [selectedCompanyModal, setSelectedCompanyModal] = useState<CompanyProfile | null>(null)
-  const [rejectionReasonInput, setRejectionReasonInput] = useState('')
-
-  const reloadCompanies = async () => {
+  // ── Reload Suppliers from Database ──
+  const reloadSuppliers = async () => {
+    setSuppliersLoading(true)
     try {
-      const synced = await syncWithServerClaims()
-      setCompanies([...synced])
-      try { localStorage.setItem('admin_companies_cache', JSON.stringify(synced)) } catch (_) {}
-    } catch (_) {
-      const stored = getStoredCompanies()
-      setCompanies(stored)
-      try { localStorage.setItem('admin_companies_cache', JSON.stringify(stored)) } catch (_) {}
+      const res = await fetch('/api/admin/add-supplier', { cache: 'no-store' })
+      const json = await res.json()
+      if (json.success && Array.isArray(json.suppliers)) {
+        setSuppliers(json.suppliers)
+        setStats((prev) => ({ ...prev, totalSuppliers: json.suppliers.length }))
+        try {
+          localStorage.setItem('admin_suppliers_cache', JSON.stringify(json.suppliers))
+        } catch (_) {}
+      }
+    } catch (err) {
+      console.warn('Failed to load suppliers:', err)
+    } finally {
+      setSuppliersLoading(false)
     }
-    await fetchProfileClaims()
   }
 
-  // Load live supplier posts from Supabase immediately on mount
-  useEffect(() => {
-    let active = true
-    async function loadLiveSupplierPosts() {
-      try {
-        const { data, error } = await supabase
-          .from('supplier_posts')
-          .select('id, title, content, created_at, updated_at, is_published, company_id, companies(id, name, logo_url, city, is_verified, countries(name, flag_emoji))')
-          .eq('is_published', true)
-          .order('created_at', { ascending: false })
-          .limit(50)
+  // ── Reload Supplier Posts (All Products) ──
+  const reloadPosts = async () => {
+    setPostsLoading(true)
+    try {
+      const { data, error } = await supabase
+        .from('supplier_posts')
+        .select('id, title, content, created_at, updated_at, is_published, company_id, companies(id, name, logo_url, city, is_verified, countries(name, flag_emoji))')
+        .order('created_at', { ascending: false })
 
-        if (!active || error || !data) return
-
+      if (!error && Array.isArray(data)) {
         const mapped = data.map((row: any) => {
           let details: any = {}
-          try { details = JSON.parse(row.content || '{}') } catch (_) {}
+          try {
+            details = JSON.parse(row.content || '{}')
+          } catch (_) {}
+
           const minPrice = parseFloat(details.minPricePerKg || details.pricePerKg || 0)
           const maxPrice = parseFloat(details.maxPricePerKg || 0)
           const compRel: any = Array.isArray(row.companies) ? row.companies[0] : row.companies
           const countryRel = Array.isArray(compRel?.countries) ? compRel.countries[0] : compRel?.countries
-          const sup = getSupplierForPost({
-            company_id: row.company_id || compRel?.id,
-            company_name: compRel?.name || details.companyName,
-            company_logo: compRel?.logo_url || details.companyLogo,
-            company_country: countryRel?.name || compRel?.city || details.country,
-            product_name: details.productName || row.title?.split(' —')[0],
-          })
+          const compCountry = countryRel?.name || compRel?.city || details.companyCountry || details.country || ''
+
           return {
             id: row.id,
             company_id: row.company_id || compRel?.id,
-            company_name: sup.name,
-            company_logo: sup.logoUrl || null,
-            company_country: sup.country,
-            product_name: details.productName || row.title?.split(' —')[0] || 'Seafood Product',
+            company_name: compRel?.name || details.companyName || 'Verified Supplier',
+            company_logo: compRel?.logo_url || details.companyLogo || null,
+            company_country: compCountry,
+            product_name: details.productName || row.title?.split(' —')[0]?.split(' -')[0] || 'Seafood Product',
             price_per_kg: minPrice,
             max_price_per_kg: maxPrice > minPrice ? maxPrice : 0,
             currency: details.currency || 'EUR',
             country_of_origin: details.countryOfOrigin || '',
             fresh_frozen: details.freshFrozen || 'Frozen',
             size_weight: details.sizeWeight || '',
-            packaging: details.packagingFillet || '',
-            availability: details.availability || 'In Stock',
+            packaging: details.packagingFillet || details.packaging || '',
+            availability: details.availability || 'In Stock — Ready to Ship',
             location: details.location || '',
             supplier_info_extra: details.supplierInfoExtra || '',
             custom_image: details.customImage || null,
             created_at: row.created_at,
-            // Prefer admin-chosen date (stored in JSON content) over DB updated_at
-            // because the DB trigger auto-overwrites updated_at with NOW() on every update
-            updated_at: details.lastAdminUpdate || details.lastUpdated || row.updated_at,
-            status: 'active',
+            updated_at: details.lastAdminUpdate || row.updated_at,
+            is_published: row.is_published !== false,
+            status: row.is_published !== false ? 'Published' : 'Draft',
           }
         })
         setSupplierPosts(mapped)
-        try { localStorage.setItem('admin_supplier_posts_cache', JSON.stringify(mapped)) } catch (_) {}
-      } catch (_) {}
+        setStats((prev) => ({ ...prev, totalProducts: mapped.length }))
+        try {
+          localStorage.setItem('admin_supplier_posts_cache', JSON.stringify(mapped))
+        } catch (_) {}
+      }
+    } catch (err) {
+      console.warn('Failed to load posts:', err)
+    } finally {
+      setPostsLoading(false)
     }
-    loadLiveSupplierPosts()
-    return () => { active = false }
-  }, [supabase])
+  }
 
+  // ── Reload Buyer Users ──
+  const fetchBuyerUsers = async () => {
+    setBuyerUsersLoading(true)
+    try {
+      const { data, error } = await supabase
+        .from('users')
+        .select('*')
+        .eq('role', 'buyer')
+        .order('created_at', { ascending: false })
 
+      if (!error && Array.isArray(data)) {
+        setBuyerUsers(data)
+        setStats((prev) => ({ ...prev, totalBuyers: data.length }))
+      }
+    } catch (_) {
+    } finally {
+      setBuyerUsersLoading(false)
+    }
+  }
+
+  // ── Init Admin Auth & Load Data ──
   useEffect(() => {
     let isMounted = true
 
-    // Safety timeout: guarantee loading screen never hangs more than 6s
-    const timer = setTimeout(() => {
+    const safetyTimer = setTimeout(() => {
       if (isMounted) {
         setAuthorized(true)
-        setIsDataLoaded(true)
         setLoading(false)
       }
-    }, 6000)
+    }, 5000)
 
-    async function initAdminAuthAndData() {
+    async function init() {
       try {
         const { data: sessionData } = await supabase.auth.getSession()
         let user = sessionData?.session?.user
@@ -535,8 +346,8 @@ export default function AdminDashboardPage() {
         }
 
         const isAdminEmail = user.email?.toLowerCase() === 'superadminbkhol@gmail.com'
-
         let userRole = user.user_metadata?.role
+
         try {
           const { data: profile } = await supabase
             .from('users')
@@ -556,495 +367,205 @@ export default function AdminDashboardPage() {
 
         if (isMounted) {
           setAuthorized(true)
-
-          // Fetch all data in parallel and await completion
           await Promise.allSettled([
-            reloadCompanies(),
+            reloadSuppliers(),
+            reloadPosts(),
             fetchBuyerUsers(),
-            (async () => {
-              try {
-                const [postsRes, articlesRes, partnersRes] = await Promise.allSettled([
-                  supabase
-                    .from('supplier_posts')
-                    .select('id, title, content, created_at, updated_at, is_published, company_id, companies(id, name, logo_url, city, is_verified, countries(name, flag_emoji))')
-                    .eq('is_published', true)
-                    .order('created_at', { ascending: false })
-                    .limit(50),
-                  fetchNewsArticles(),
-                  fetchPartnerBuyers(),
-                ])
-
-                if (!isMounted) return
-
-                if (postsRes.status === 'fulfilled' && postsRes.value?.data) {
-                  const mappedPosts = postsRes.value.data.map((row: any) => {
-                    let details: any = {}
-                    try { details = JSON.parse(row.content || '{}') } catch (_) {}
-                    // Support both legacy pricePerKg and new minPricePerKg/maxPricePerKg format
-                    const minPrice = parseFloat(details.minPricePerKg || details.pricePerKg || 0)
-                    const maxPrice = parseFloat(details.maxPricePerKg || 0)
-                    const compRel: any = Array.isArray(row.companies) ? row.companies[0] : row.companies
-                    const countryRel = Array.isArray(compRel?.countries) ? compRel.countries[0] : compRel?.countries
-                    const companyCountry = countryRel?.name || compRel?.city || details.country || ''
-                    return {
-                      id: row.id,
-                      company_id: row.company_id || compRel?.id,
-                      company_name: compRel?.name || details.companyName || '',
-                      company_logo: compRel?.logo_url || details.companyLogo || null,
-                      company_country: companyCountry,
-                      product_name: details.productName || row.title?.split(' —')[0] || 'Seafood Product',
-                      price_per_kg: minPrice,
-                      max_price_per_kg: maxPrice > minPrice ? maxPrice : 0,
-                      currency: details.currency || 'EUR',
-                      country_of_origin: details.countryOfOrigin || '',
-                      fresh_frozen: details.freshFrozen || 'Frozen',
-                      size_weight: details.sizeWeight || '',
-                      packaging: details.packagingFillet || '',
-                      availability: details.availability || 'In Stock',
-                      location: details.location || '',
-                      supplier_info_extra: details.supplierInfoExtra || '',
-                      custom_image: details.customImage || null,
-                      created_at: row.created_at,
-                      // Prefer admin-chosen date (stored in JSON content) over DB updated_at
-                      // because the DB trigger auto-overwrites updated_at with NOW() on every update
-                      updated_at: details.lastAdminUpdate || details.lastUpdated || row.updated_at,
-                      status: 'active',
-                    }
-                  })
-                  setSupplierPosts(mappedPosts)
-                  try { localStorage.setItem('admin_supplier_posts_cache', JSON.stringify(mappedPosts)) } catch (_) {}
-                }
-
-                if (articlesRes.status === 'fulfilled' && articlesRes.value) {
-                  setNewsArticles(articlesRes.value)
-                  try { localStorage.setItem('admin_news_articles_cache', JSON.stringify(articlesRes.value)) } catch (_) {}
-                }
-
-                if (partnersRes.status === 'fulfilled' && partnersRes.value) {
-                  setPartnerBuyers(partnersRes.value)
-                  try { localStorage.setItem('admin_partner_buyers_cache', JSON.stringify(partnersRes.value)) } catch (_) {}
-                }
-              } catch (_) {}
-            })(),
+            fetchNewsArticles().then((articles) => {
+              if (isMounted && articles) setNewsArticles(articles)
+            }),
+            fetchPartnerBuyers().then((partners) => {
+              if (isMounted && partners) setPartnerBuyers(partners)
+            }),
           ])
 
-          if (isMounted) {
-            setIsDataLoaded(true)
-            setLoading(false)
-            clearTimeout(timer)
-          }
+          // Count users
+          try {
+            const { count: usersCount } = await supabase.from('users').select('id', { count: 'exact', head: true })
+            if (isMounted && usersCount !== null) {
+              setStats((prev) => ({ ...prev, totalUsers: usersCount }))
+            }
+          } catch (_) {}
+
+          setLoading(false)
+          clearTimeout(safetyTimer)
         }
-
-        // Fetch stats in non-blocking background
-        try {
-          const [usersRes, requestsRes] = await Promise.all([
-            supabase.from('users').select('id, role', { count: 'exact' }),
-            supabase.from('buyer_requests').select('id', { count: 'exact' }),
-          ])
-
-          if (isMounted) {
-            const usersList: any[] = usersRes.data || []
-            const totalU = usersRes.count ?? usersList.length ?? 0
-            const totalB = usersList.filter((u: any) => u.role === 'buyer').length
-            const totalS = usersList.filter((u: any) => u.role === 'supplier').length
-            const totalReq = requestsRes.count ?? 0
-
-            setStats({
-              totalUsers: totalU,
-              totalBuyers: totalB,
-              totalSuppliers: totalS,
-              totalBuyerRequests: totalReq,
-            })
-          }
-        } catch (_) {}
       } catch (err) {
-        console.error('Admin initialization error:', err)
+        console.error('Admin init error:', err)
         if (isMounted) {
           setAuthorized(true)
-          setIsDataLoaded(true)
-        }
-      } finally {
-        if (isMounted) {
-          setIsDataLoaded(true)
           setLoading(false)
         }
-        clearTimeout(timer)
       }
     }
 
-    initAdminAuthAndData()
-
+    init()
     return () => {
       isMounted = false
-      clearTimeout(timer)
-    }
-  }, [router, supabase])
-
-  // ── Ref to pause polling while a confirmation modal is open ──
-  const isConfirmModalOpen = React.useRef(false)
-
-  // ── Live claim sync: reload companies whenever a claim is submitted ──
-  useEffect(() => {
-    // fires on same tab (dispatched manually by ClaimProfileModal)
-    const onClaimsChange = () => {
-      if (!isConfirmModalOpen.current) reloadCompanies()
-    }
-    // fires on OTHER tabs via native browser storage event
-    const onStorage = (e: StorageEvent) => {
-      if (!isConfirmModalOpen.current && (!e.key || e.key.includes('bokhol'))) reloadCompanies()
-    }
-
-    window.addEventListener('bokhol-claims-change', onClaimsChange)
-    window.addEventListener('storage', onStorage)
-
-    // Poll every 3 seconds as a reliable fallback — skip when modal is open
-    const poll = setInterval(() => {
-      if (!isConfirmModalOpen.current) reloadCompanies()
-    }, 3000)
-
-    return () => {
-      window.removeEventListener('bokhol-claims-change', onClaimsChange)
-      window.removeEventListener('storage', onStorage)
-      clearInterval(poll)
+      clearTimeout(safetyTimer)
     }
   }, [])
 
-  const handleApproveClaim = async (companyId: string) => {
-    approveProfileClaim(companyId)
-    const targetComp = companies.find((c) => c.id === companyId)
-    const compName = targetComp?.name || ''
-    const claimId = (targetComp?.claimRequest as any)?.id
+  // ── Map product counts per supplier ──
+  const postsCountMap = React.useMemo(() => {
+    const map: Record<string, number> = {}
+    for (const post of supplierPosts) {
+      if (post.company_id) {
+        map[post.company_id] = (map[post.company_id] || 0) + 1
+      }
+      if (post.company_name) {
+        const key = post.company_name.toLowerCase()
+        map[key] = (map[key] || 0) + 1
+      }
+    }
+    return map
+  }, [supplierPosts])
 
-    // 1. Optimistic UI update: immediately move to claimed/approved
-    setCompanies((prev) => {
-      const updated = prev.map((c) => {
-        if (c.id === companyId || (compName && c.name.toLowerCase() === compName.toLowerCase())) {
-          return {
-            ...c,
-            status: 'claimed' as const,
-            isVerified: true,
-          }
-        }
-        return c
-      })
-      try { localStorage.setItem('admin_companies_cache', JSON.stringify(updated)) } catch (_) {}
-      return updated
-    })
-
-    setProfileClaims((prev) => {
-      const updated = prev.map((cl: any) => {
-        if (
-          (claimId && cl.id === claimId) ||
-          cl.company_id === companyId ||
-          (compName && cl.company_name?.toLowerCase() === compName.toLowerCase())
-        ) {
-          return { ...cl, status: 'approved', updated_at: new Date().toISOString() }
-        }
-        return cl
-      })
-      try { localStorage.setItem('admin_profile_claims_cache', JSON.stringify(updated)) } catch (_) {}
-      return updated
-    })
-
-    if (selectedCompanyModal?.id === companyId) setSelectedCompanyModal(null)
-    setActionToast({ type: 'success', message: `Claim for "${compName || 'Supplier'}" approved successfully!` })
-
-    // 2. Persist to server API
-    try {
-      await fetch('/api/profile-claims', {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          id: claimId,
-          company_id: companyId,
-          company_name: compName,
-          action: 'approve',
-        }),
-      })
-    } catch (_) {}
-
-    // 3. Sync
-    await reloadCompanies()
+  // ── Handlers for Supplier Management ──
+  const handleOpenAddProductForSupplier = (supplier: any) => {
+    setEditingPost(null)
+    setDefaultSupplierIdForModal(supplier.id)
+    setIsProductModalOpen(true)
   }
 
-  const handleRejectClaim = async (companyId: string) => {
-    const reason = rejectionReasonInput || 'Business verification could not be completed.'
-    rejectProfileClaim(companyId, reason)
-    const targetComp = companies.find((c) => c.id === companyId)
-    const compName = targetComp?.name || ''
-    const claimId = (targetComp?.claimRequest as any)?.id
-
-    // 1. Optimistic UI update: immediately mark rejected
-    setCompanies((prev) => {
-      const updated = prev.map((c) => {
-        if (c.id === companyId || (compName && c.name.toLowerCase() === compName.toLowerCase())) {
-          return {
-            ...c,
-            status: 'rejected' as const,
-            claimRequest: c.claimRequest ? { ...c.claimRequest, rejectionReason: reason } : undefined,
-          }
-        }
-        return c
-      })
-      try { localStorage.setItem('admin_companies_cache', JSON.stringify(updated)) } catch (_) {}
-      return updated
-    })
-
-    setProfileClaims((prev) => {
-      const updated = prev.map((cl: any) => {
-        if (
-          (claimId && cl.id === claimId) ||
-          cl.company_id === companyId ||
-          (compName && cl.company_name?.toLowerCase() === compName.toLowerCase())
-        ) {
-          return { ...cl, status: 'rejected', rejection_reason: reason, updated_at: new Date().toISOString() }
-        }
-        return cl
-      })
-      try { localStorage.setItem('admin_profile_claims_cache', JSON.stringify(updated)) } catch (_) {}
-      return updated
-    })
-
-    setRejectionReasonInput('')
-    if (selectedCompanyModal?.id === companyId) setSelectedCompanyModal(null)
-    setActionToast({ type: 'info', message: `Claim for "${compName || 'Supplier'}" rejected.` })
-
-    // 2. Persist to server API
-    try {
-      await fetch('/api/profile-claims', {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          id: claimId,
-          company_id: companyId,
-          company_name: compName,
-          action: 'reject',
-          rejection_reason: reason,
-        }),
-      })
-    } catch (_) {}
-
-    // 3. Sync
-    await reloadCompanies()
+  const handleManageProductsForSupplier = (supplier: any) => {
+    setPostSupplierFilter(supplier.id)
+    setActiveNav('posts')
   }
 
-  // ── Confirmation Modal States ──
-  const [companyToDelete, setCompanyToDelete] = useState<{ id: string; name: string } | null>(null)
-  const [companyToRevoke, setCompanyToRevoke] = useState<{ id: string; name: string } | null>(null)
-  const [actionToast, setActionToast] = useState<{ type: 'success' | 'info'; message: string } | null>(null)
-  const [isActionProcessing, setIsActionProcessing] = useState(false)
-
-  const requestDeleteCompany = (companyId: string, companyName: string) => {
-    isConfirmModalOpen.current = true
-    setCompanyToDelete({ id: companyId, name: companyName })
+  const handleDeleteSupplier = (id: string, name: string) => {
+    setCompanyToDelete({ id, name })
   }
 
-  const confirmDeleteCompany = async () => {
+  const confirmDeleteSupplier = async () => {
     if (!companyToDelete) return
     const { id, name } = companyToDelete
     setIsActionProcessing(true)
 
-    // 1. Delete from local storage
-    deleteCompany(id)
-
-    // 2. Delete server claim
     try {
-      await fetch(`/api/profile-claims?company_id=${encodeURIComponent(id)}`, {
+      const res = await fetch(`/api/admin/add-supplier?id=${encodeURIComponent(id)}`, {
         method: 'DELETE',
       })
-    } catch (_) {}
-
-    // 3. Delete from Supabase
-    try {
-      await supabase.from('companies').delete().eq('id', id)
-    } catch (_) {}
-    try {
-      await supabase.from('profile_claims').delete().eq('company_id', id)
-    } catch (_) {}
-
-    await reloadCompanies()
-    if (selectedCompanyModal?.id === id) setSelectedCompanyModal(null)
-    isConfirmModalOpen.current = false
-    setCompanyToDelete(null)
-    setIsActionProcessing(false)
-
-    setActionToast({ type: 'success', message: `Supplier "${name}" was permanently deleted.` })
-    setTimeout(() => setActionToast(null), 4000)
+      const json = await res.json()
+      if (json.success) {
+        setSuppliers((prev) => prev.filter((s) => s.id !== id && s.slug !== id))
+        setActionToast({ type: 'success', message: `Supplier "${name}" was permanently deleted.` })
+      } else {
+        throw new Error(json.error || 'Failed to delete')
+      }
+    } catch (err: any) {
+      setActionToast({ type: 'info', message: `Error: ${err?.message || 'Could not delete supplier'}` })
+    } finally {
+      setIsActionProcessing(false)
+      setCompanyToDelete(null)
+      setTimeout(() => setActionToast(null), 4000)
+    }
   }
 
-  const requestRevokeCompany = (companyId: string, companyName: string) => {
-    isConfirmModalOpen.current = true
-    setCompanyToRevoke({ id: companyId, name: companyName })
-  }
+  // ── Handlers for Product Management ──
+  const handleTogglePublishPost = async (post: any) => {
+    const nextState = !post.is_published
+    // Optimistic UI update
+    setSupplierPosts((prev) =>
+      prev.map((p) =>
+        p.id === post.id
+          ? { ...p, is_published: nextState, status: nextState ? 'Published' : 'Draft' }
+          : p
+      )
+    )
 
-  const confirmRevokeCompany = async () => {
-    if (!companyToRevoke) return
-    const { id, name } = companyToRevoke
-    setIsActionProcessing(true)
-
-    // 1. Reset status in companies data to 'unclaimed'
-    revokeProfileClaim(id)
-
-    // 2. Revoke claim record on server
     try {
-      await fetch('/api/profile-claims', {
+      const res = await fetch('/api/supplier/posts', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ company_id: id, action: 'revoke' }),
+        body: JSON.stringify({
+          postId: post.id,
+          is_published: nextState,
+          updated_at: new Date().toISOString(),
+        }),
       })
-    } catch (_) {}
-
-    try {
-      await supabase.from('profile_claims').delete().eq('company_id', id)
-    } catch (_) {}
-
-    await reloadCompanies()
-    if (selectedCompanyModal?.id === id) setSelectedCompanyModal(null)
-    isConfirmModalOpen.current = false
-    setCompanyToRevoke(null)
-    setIsActionProcessing(false)
-
-    setActionToast({ type: 'info', message: `Claim ownership for "${name}" was revoked. Profile is now unclaimed.` })
+      const json = await res.json()
+      if (res.ok) {
+        setActionToast({
+          type: 'success',
+          message: nextState
+            ? `"${post.product_name}" is now Published on the Products page!`
+            : `"${post.product_name}" saved as Draft (hidden from public).`,
+        })
+      }
+    } catch (_) {
+      reloadPosts()
+    }
     setTimeout(() => setActionToast(null), 4000)
   }
 
-  // ── Partner Buyer Handlers ──
-  const openAddPartnerModal = () => {
-    setEditingPartner(null)
-    setPartnerName('')
-    setPartnerLogo('')
-    setPartnerCountry('')
-    setPartnerWebsite('')
-    setPartnerFormError(null)
-    setShowPartnerModal(true)
+  const handleDeletePost = (id: string, title: string) => {
+    setPostToDelete({ id, title })
   }
 
-  const openEditPartnerModal = (partner: PartnerBuyer) => {
-    setEditingPartner(partner)
-    setPartnerName(partner.name)
-    setPartnerLogo(partner.logo)
-    setPartnerCountry(partner.country || '')
-    setPartnerWebsite(partner.website || '')
-    setPartnerFormError(null)
-    setShowPartnerModal(true)
-  }
+  const confirmDeletePost = async () => {
+    if (!postToDelete) return
+    const { id, title } = postToDelete
+    setIsActionProcessing(true)
 
-  const handleLogoFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (!file) return
-    if (file.size > 5 * 1024 * 1024) {
-      setPartnerFormError('Logo image file is too large (max 5MB)')
-      return
-    }
-    setPartnerFormError(null)
-    const reader = new FileReader()
-    reader.onload = (event) => {
-      if (event.target?.result) {
-        setPartnerLogo(event.target.result as string)
+    try {
+      const res = await fetch(`/api/supplier/posts?id=${encodeURIComponent(id)}`, {
+        method: 'DELETE',
+      })
+      if (res.ok) {
+        setSupplierPosts((prev) => prev.filter((p) => p.id !== id))
+        setActionToast({ type: 'success', message: `Product offer "${title}" deleted successfully.` })
       }
-    }
-    reader.readAsDataURL(file)
-  }
-
-  const handleSavePartner = async (e: React.FormEvent) => {
-    e.preventDefault()
-    if (!partnerName.trim()) {
-      setPartnerFormError('Buyer Name is required.')
-      return
-    }
-    if (!partnerLogo.trim()) {
-      setPartnerFormError('Buyer Logo is required. Please upload a file or provide an image path.')
-      return
-    }
-
-    if (editingPartner) {
-      try {
-        const updated = await updatePartnerBuyer(editingPartner.id, {
-          name: partnerName.trim(),
-          logo: partnerLogo.trim(),
-          country: partnerCountry.trim() || undefined,
-          website: partnerWebsite.trim() || undefined,
-        })
-        setPartnerBuyers(prev => prev.map(p => p.id === editingPartner.id ? updated : p))
-        setPartnerSuccessMsg(`Partner Buyer "${partnerName}" updated successfully!`)
-      } catch (err: any) {
-        setPartnerFormError(err?.message || 'Failed to update partner buyer.')
-        return
-      }
-    } else {
-      try {
-        const newBuyer = await addPartnerBuyer({
-          name: partnerName.trim(),
-          logo: partnerLogo.trim(),
-          country: partnerCountry.trim() || undefined,
-          website: partnerWebsite.trim() || undefined,
-        })
-        setPartnerBuyers(prev => [newBuyer, ...prev])
-        setPartnerSuccessMsg(`New Partner Buyer "${partnerName}" added to the Home Screen ticker!`)
-      } catch (err: any) {
-        setPartnerFormError(err?.message || 'Failed to add partner buyer.')
-        return
-      }
-    }
-
-    setShowPartnerModal(false)
-    setTimeout(() => setPartnerSuccessMsg(null), 5000)
-  }
-
-  const handleDeletePartner = async (id: string, name: string) => {
-    if (confirm(`Are you sure you want to remove "${name}" from the Partner Buyers list?`)) {
-      try {
-        await deletePartnerBuyer(id)
-        setPartnerBuyers(prev => prev.filter(p => p.id !== id))
-        setPartnerSuccessMsg(`Partner Buyer "${name}" was removed.`)
-        setTimeout(() => setPartnerSuccessMsg(null), 4000)
-      } catch (err: any) {
-        setPartnerSuccessMsg(`Error: ${err?.message || 'Failed to delete.'}`)
-      }
+    } catch (err: any) {
+      setActionToast({ type: 'info', message: `Failed to delete product: ${err?.message}` })
+    } finally {
+      setIsActionProcessing(false)
+      setPostToDelete(null)
+      setTimeout(() => setActionToast(null), 4000)
     }
   }
 
-  const allClaimRequests = companies.filter((c) => !!c.claimRequest || c.status === 'claim_requested')
-  const pendingClaims = companies.filter((c) => c.status === 'claim_requested')
-  const approvedClaims = companies.filter((c) => c.status === 'claimed' && !!c.claimRequest)
-  const rejectedClaims = companies.filter((c) => c.status === 'rejected' && !!c.claimRequest)
-  const claimedCompanies = companies.filter((c) => c.status === 'claimed')
+  const handleProductSaved = (savedPost: any) => {
+    setActionToast({
+      type: 'success',
+      message: savedPost.is_published !== false
+        ? `Product "${savedPost.product_name || 'Seafood'}" published successfully!`
+        : `Product saved as Draft.`,
+    })
+    reloadPosts()
+    setTimeout(() => setActionToast(null), 4000)
+  }
 
-  const filteredClaims = allClaimRequests.filter((c) => {
-    if (claimFilter === 'pending' && c.status !== 'claim_requested') return false
-    if (claimFilter === 'claimed' && (c.status !== 'claimed' || !c.claimRequest)) return false
-    if (claimFilter === 'rejected' && (c.status !== 'rejected' || !c.claimRequest)) return false
-    if (searchQuery.trim()) {
-      const q = searchQuery.toLowerCase()
-      return (
-        c.name.toLowerCase().includes(q) ||
-        c.country.toLowerCase().includes(q) ||
-        (c.claimRequest?.fullName?.toLowerCase().includes(q) ?? false) ||
-        (c.claimRequest?.businessEmail?.toLowerCase().includes(q) ?? false)
-      )
+  // Filtered product offers for the Product Offers tab
+  const filteredProductOffers = supplierPosts.filter((p) => {
+    // Status filter
+    if (postStatusFilter === 'published' && p.is_published === false) return false
+    if (postStatusFilter === 'draft' && p.is_published !== false) return false
+
+    // Supplier filter
+    if (postSupplierFilter !== 'all' && p.company_id !== postSupplierFilter) return false
+
+    // Search query
+    if (postSearchQuery.trim()) {
+      const q = postSearchQuery.toLowerCase()
+      const match =
+        p.product_name?.toLowerCase().includes(q) ||
+        p.company_name?.toLowerCase().includes(q) ||
+        p.country_of_origin?.toLowerCase().includes(q)
+      if (!match) return false
     }
+
     return true
   })
 
-  const filteredPartnerBuyers = partnerBuyers.filter((p) => {
-    if (!partnerSearchQuery.trim()) return true
-    const q = partnerSearchQuery.toLowerCase()
-    return (
-      p.name.toLowerCase().includes(q) ||
-      (p.country?.toLowerCase().includes(q) ?? false) ||
-      (p.website?.toLowerCase().includes(q) ?? false)
-    )
-  })
-
+  // Buyer Users filtered list
   const filteredBuyerUsers = buyerUsers.filter((b) => {
     if (!buyerSearchQuery.trim()) return true
     const q = buyerSearchQuery.toLowerCase()
     return (
       (b.full_name?.toLowerCase().includes(q) ?? false) ||
       (b.email?.toLowerCase().includes(q) ?? false) ||
-      (b.phone?.toLowerCase().includes(q) ?? false) ||
-      (b.id?.toLowerCase().includes(q) ?? false) ||
-      (b.country?.toLowerCase().includes(q) ?? false)
+      (b.phone?.toLowerCase().includes(q) ?? false)
     )
   })
 
@@ -1053,42 +574,40 @@ export default function AdminDashboardPage() {
       <div className="min-h-[75vh] flex items-center justify-center bg-slate-50">
         <div className="flex flex-col items-center gap-3 text-slate-500">
           <Loader2 className="h-8 w-8 animate-spin text-[#022B96]" />
-          <span className="text-xs font-bold uppercase tracking-wider">Loading Admin Panel...</span>
+          <span className="text-xs font-bold uppercase tracking-wider">Loading Admin Center...</span>
         </div>
       </div>
     )
   }
 
+  // ── Clean Sidebar Items Matching System Requirements ──
   const SIDEBAR_ITEMS = [
     { key: 'overview', label: 'Dashboard', icon: LayoutDashboard },
-    { key: 'verification', label: 'Verification', icon: ShieldCheck, badge: pendingClaims.length },
-    { key: 'claimed-profiles', label: 'Claimed Profiles', icon: BadgeCheck, badge: claimedCompanies.length },
-    { key: 'unclaimed-profiles', label: 'Unclaimed Profiles', icon: BadgeX, badge: companies.filter(c => c.status !== 'claimed').length },
     { key: 'add-supplier', label: 'Add Supplier', icon: UserPlus },
+    { key: 'view-suppliers', label: 'View Suppliers', icon: Building2, badge: suppliers.length },
+    { key: 'posts', label: 'Product Offers', icon: Fish, badge: supplierPosts.length },
     { key: 'buyer-users', label: 'Buyer Users', icon: Users, badge: buyerUsers.length },
     { key: 'partners', label: 'Partner Buyers', icon: Handshake, badge: partnerBuyers.length },
-    { key: 'posts', label: 'Product Offers', icon: Fish, badge: supplierPosts.length },
     { key: 'news', label: 'News & Articles', icon: Newspaper, badge: newsArticles.length },
   ]
 
   return (
     <div className="min-h-screen bg-slate-100/70 py-6 px-4 sm:px-6 lg:px-8 font-sans">
-
-      {/* ── Main Dashboard Container ── */}
       <div className="max-w-7xl mx-auto bg-white rounded-3xl shadow-xl border border-slate-200/80 overflow-hidden flex flex-col lg:flex-row min-h-[780px]">
-
         {/* ── Left Sidebar ── */}
         <aside className="w-full lg:w-64 bg-[#022B96] text-white p-6 flex flex-col justify-between shrink-0">
           <div>
-            <div className="flex items-center gap-3 mb-10">
-              <div className="w-10 h-10 rounded-2xl bg-white text-[#022B96] font-black text-lg flex items-center justify-center shadow-md">B</div>
+            <div className="flex items-center gap-3 mb-8">
+              <div className="w-10 h-10 rounded-2xl bg-white text-[#022B96] font-black text-lg flex items-center justify-center shadow-md">
+                B
+              </div>
               <div>
                 <h2 className="text-base font-black text-white tracking-tight leading-none">Bokhol</h2>
                 <span className="text-[10px] text-blue-200 font-bold uppercase tracking-widest">Admin Center</span>
               </div>
             </div>
 
-            <nav className="space-y-2">
+            <nav className="space-y-1.5">
               {SIDEBAR_ITEMS.map((item) => {
                 const Icon = item.icon
                 const isActive = activeNav === item.key
@@ -1096,8 +615,10 @@ export default function AdminDashboardPage() {
                   <button
                     key={item.key}
                     onClick={() => setActiveNav(item.key as any)}
-                    className={`w-full flex items-center justify-between px-4 py-3.5 rounded-2xl text-xs font-bold transition-all duration-200 cursor-pointer ${
-                      isActive ? 'bg-white text-[#022B96] shadow-lg translate-x-1' : 'text-blue-100 hover:bg-white/10 hover:text-white'
+                    className={`w-full flex items-center justify-between px-4 py-3 rounded-2xl text-xs font-bold transition-all duration-200 cursor-pointer ${
+                      isActive
+                        ? 'bg-white text-[#022B96] shadow-md translate-x-1'
+                        : 'text-blue-100 hover:bg-white/10 hover:text-white'
                     }`}
                   >
                     <div className="flex items-center gap-3">
@@ -1105,7 +626,11 @@ export default function AdminDashboardPage() {
                       <span>{item.label}</span>
                     </div>
                     {item.badge !== undefined && item.badge > 0 && (
-                      <span className={`text-[10px] font-black px-2 py-0.5 rounded-full ${isActive ? 'bg-[#022B96] text-white' : 'bg-white/20 text-white'}`}>
+                      <span
+                        className={`text-[10px] font-black px-2 py-0.5 rounded-full ${
+                          isActive ? 'bg-[#022B96] text-white' : 'bg-white/20 text-white'
+                        }`}
+                      >
                         {item.badge}
                       </span>
                     )}
@@ -1126,654 +651,30 @@ export default function AdminDashboardPage() {
 
             <div className="text-[11px] text-blue-200 font-medium">
               <p className="font-bold text-white">Bokhol Fish Market</p>
-              <p className="text-[10px] opacity-75 mt-0.5">Admin Security Console v2.4</p>
+              <p className="text-[10px] opacity-75 mt-0.5">Admin Security Console v3.0</p>
             </div>
           </div>
         </aside>
 
-        {/* ── Right Content Area ── */}
-        <main className="flex-1 p-6 sm:p-10 bg-slate-50/50 flex flex-col justify-between">
+        {/* ── Main Content Area ── */}
+        <main className="flex-1 p-6 sm:p-10 bg-slate-50/50 flex flex-col justify-between overflow-x-hidden">
           <div>
-
-            {/* VIEW: CLAIMED PROFILES */}
-            {activeNav === 'claimed-profiles' && (
-              <div className="space-y-6">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <h1 className="text-2xl font-black text-slate-900 tracking-tight">Claimed Profiles</h1>
-                    <p className="text-xs text-slate-500 mt-1 font-medium">
-                      Verified suppliers with active company profiles on Bokhol
-                    </p>
-                  </div>
-                  <span className="text-xs font-bold bg-emerald-50 text-emerald-700 px-3 py-1 rounded-full border border-emerald-200/60">
-                    {claimedCompanies.length} Active
-                  </span>
-                </div>
-
-                {!isDataLoaded && claimedCompanies.length === 0 ? (
-                  <div className="bg-white border border-slate-200 rounded-2xl p-16 flex flex-col items-center justify-center gap-3 text-center">
-                    <Loader2 className="w-8 h-8 animate-spin text-[#022B96]" />
-                    <p className="text-sm font-bold text-slate-700">Loading Claimed Profiles...</p>
-                    <p className="text-xs text-slate-400">Fetching verified supplier records</p>
-                  </div>
-                ) : claimedCompanies.length === 0 ? (
-                  <div className="bg-white border border-slate-200 rounded-2xl p-16 text-center">
-                    <BadgeCheck className="w-12 h-12 text-slate-200 mx-auto mb-4" />
-                    <h3 className="text-sm font-bold text-slate-800">No Claimed Profiles Yet</h3>
-                    <p className="text-xs text-slate-400 mt-1">No supplier has claimed their profile yet. Claims appear here once approved.</p>
-                  </div>
-                ) : (
-                  <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden">
-                    {claimedCompanies.map((company, idx) => (
-                      <div
-                        key={company.id}
-                        className={`flex items-center gap-4 px-5 py-3.5 hover:bg-slate-50 transition-colors ${idx !== claimedCompanies.length - 1 ? 'border-b border-slate-100' : ''}`}
-                      >
-                        {/* Logo / Avatar */}
-                        {company.logoUrl ? (
-                          <div className="w-9 h-9 rounded-full bg-white border border-slate-200 p-0.5 flex items-center justify-center shrink-0 overflow-hidden">
-                            <img src={company.logoUrl} alt={company.name} className="w-full h-full object-contain" />
-                          </div>
-                        ) : (
-                          <div
-                            className="w-9 h-9 rounded-full text-white font-black text-xs flex items-center justify-center shrink-0"
-                            style={{
-                              background: company.bannerColor
-                                ? `linear-gradient(135deg, ${company.bannerColor}, #022B96)`
-                                : 'linear-gradient(135deg, #022B96, #1e3a8a)',
-                            }}
-                          >
-                            {company.name.slice(0, 2).toUpperCase()}
-                          </div>
-                        )}
-
-                        {/* Name, Category & Claimant */}
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2 min-w-0">
-                            <p className="text-sm font-semibold text-slate-900 truncate">{company.name}</p>
-                            {company.countryCode && (
-                              <ReactCountryFlag
-                                countryCode={company.countryCode}
-                                svg
-                                style={{ width: '14px', height: '11px', flexShrink: 0 }}
-                              />
-                            )}
-                          </div>
-                          <p className="text-xs text-slate-400 truncate">
-                            {company.category}
-                            {company.claimRequest && (
-                              <span className="text-emerald-600 font-medium"> · {company.claimRequest.fullName || company.claimRequest.username}</span>
-                            )}
-                          </p>
-                        </div>
-
-                        {/* Actions */}
-                        <div className="flex items-center gap-1.5 shrink-0">
-                          <Link
-                            href={`/suppliers/${company.slug}`}
-                            target="_blank"
-                            className="text-xs font-bold px-3 py-1.5 rounded-lg bg-slate-50 hover:bg-slate-100 text-slate-700 border border-slate-200 transition"
-                          >
-                            View
-                          </Link>
-                          <button
-                            onClick={() => requestRevokeCompany(company.id, company.name)}
-                            className="text-xs font-bold px-3 py-1.5 rounded-lg border border-amber-200 text-amber-700 bg-amber-50 hover:bg-amber-100 transition cursor-pointer"
-                            title="Revoke Claim"
-                          >
-                            Revoke
-                          </button>
-                          <button
-                            onClick={() => requestDeleteCompany(company.id, company.name)}
-                            className="p-1.5 rounded-lg text-slate-400 hover:text-rose-500 hover:bg-rose-50 transition cursor-pointer"
-                            title="Delete Supplier"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* VIEW: UNCLAIMED PROFILES */}
-            {activeNav === 'unclaimed-profiles' && (
-              <div className="space-y-6">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <h1 className="text-2xl font-black text-slate-900 tracking-tight">Unclaimed Profiles</h1>
-                    <p className="text-xs text-slate-500 mt-1 font-medium">
-                      Supplier directory listings awaiting ownership claim by verified business owners
-                    </p>
-                  </div>
-                  <span className="text-xs font-bold bg-slate-100 text-slate-700 px-3 py-1 rounded-full border border-slate-200/60">
-                    {companies.filter(c => c.status !== 'claimed').length} Profiles
-                  </span>
-                </div>
-
-                {!isDataLoaded && companies.filter(c => c.status !== 'claimed').length === 0 ? (
-                  <div className="bg-white border border-slate-200 rounded-2xl p-16 flex flex-col items-center justify-center gap-3 text-center">
-                    <Loader2 className="w-8 h-8 animate-spin text-[#022B96]" />
-                    <p className="text-sm font-bold text-slate-700">Loading Unclaimed Directory...</p>
-                    <p className="text-xs text-slate-400">Synchronizing supplier profiles</p>
-                  </div>
-                ) : companies.filter(c => c.status !== 'claimed').length === 0 ? (
-                  <div className="bg-white border border-slate-200 rounded-2xl p-16 text-center">
-                    <CheckCircle2 className="w-12 h-12 text-emerald-300 mx-auto mb-4" />
-                    <h3 className="text-sm font-bold text-slate-800">All Profiles Are Claimed</h3>
-                    <p className="text-xs text-slate-400 mt-1">Every supplier profile on Bokhol has been claimed by a verified company.</p>
-                  </div>
-                ) : (
-                  <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden">
-                    {companies.filter(c => c.status !== 'claimed').map((company, idx) => {
-                      const isPending = company.status === 'claim_requested'
-                      const unclaimedList = companies.filter(c => c.status !== 'claimed')
-                      return (
-                        <div
-                          key={company.id}
-                          className={`flex items-center gap-4 px-5 py-3.5 hover:bg-slate-50 transition-colors ${idx !== unclaimedList.length - 1 ? 'border-b border-slate-100' : ''}`}
-                        >
-                          {/* Logo / Avatar */}
-                          {company.logoUrl ? (
-                            <div className="w-9 h-9 rounded-full bg-white border border-slate-200 p-0.5 flex items-center justify-center shrink-0 overflow-hidden">
-                              <img src={company.logoUrl} alt={company.name} className="w-full h-full object-contain" />
-                            </div>
-                          ) : (
-                            <div
-                              className="w-9 h-9 rounded-full text-white font-black text-xs flex items-center justify-center shrink-0"
-                              style={{
-                                background: company.bannerColor
-                                  ? `linear-gradient(135deg, ${company.bannerColor}, #022B96)`
-                                  : 'linear-gradient(135deg, #022B96, #1e3a8a)',
-                              }}
-                            >
-                              {company.name.slice(0, 2).toUpperCase()}
-                            </div>
-                          )}
-
-                          {/* Name & Category */}
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-center gap-2 min-w-0">
-                              <p className="text-sm font-semibold text-slate-900 truncate">{company.name}</p>
-                              {company.countryCode && (
-                                <ReactCountryFlag
-                                  countryCode={company.countryCode}
-                                  svg
-                                  style={{ width: '14px', height: '11px', flexShrink: 0 }}
-                                />
-                              )}
-                              {isPending && (
-                                <span className="text-[10px] font-bold text-amber-700 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-full shrink-0">
-                                  Pending
-                                </span>
-                              )}
-                            </div>
-                            <p className="text-xs text-slate-400 truncate">{company.category}</p>
-                          </div>
-
-                          {/* Actions */}
-                          <div className="flex items-center gap-1.5 shrink-0">
-                            <Link
-                              href={`/suppliers/${company.slug}`}
-                              target="_blank"
-                              className="text-xs font-bold px-3 py-1.5 rounded-lg bg-slate-50 hover:bg-slate-100 text-slate-700 border border-slate-200 transition"
-                            >
-                              View
-                            </Link>
-                            <button
-                              onClick={() => requestDeleteCompany(company.id, company.name)}
-                              className="p-1.5 rounded-lg text-slate-400 hover:text-rose-500 hover:bg-rose-50 transition cursor-pointer"
-                              title="Delete Supplier"
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </button>
-                          </div>
-                        </div>
-                      )
-                    })}
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* VIEW: ADD SUPPLIER */}
-            {activeNav === 'add-supplier' && (
-              <div className="space-y-6 max-w-2xl">
-                <div>
-                  <h1 className="text-2xl font-black text-slate-900 tracking-tight">Add New Supplier</h1>
-                  <p className="text-xs text-slate-500 mt-1 font-medium">
-                    Manually register a new verified supplier company to the Bokhol platform
-                  </p>
-                </div>
-
-                {addSupplierMsg && (
-                  <div className={`p-4 rounded-2xl border text-sm font-semibold flex items-center gap-3 ${
-                    addSupplierMsg.type === 'success'
-                      ? 'bg-emerald-50 border-emerald-200 text-emerald-800'
-                      : 'bg-rose-50 border-rose-200 text-rose-700'
-                  }`}>
-                    {addSupplierMsg.type === 'success' ? <CheckCircle2 className="w-4 h-4 shrink-0" /> : <AlertCircle className="w-4 h-4 shrink-0" />}
-                    {addSupplierMsg.text}
-                  </div>
-                )}
-
-                <form
-                  className="bg-white border border-slate-200 rounded-3xl p-8 space-y-6 shadow-sm"
-                  onSubmit={async (e) => {
-                    e.preventDefault()
-                    if (!newSupplierEmail || !newSupplierCompany) {
-                      setAddSupplierMsg({ type: 'error', text: 'Company name and business email are required.' })
-                      return
-                    }
-                    setAddSupplierLoading(true)
-                    try {
-                      // 1. Save company via server-side API (bypasses RLS)
-                      const res = await fetch('/api/admin/add-supplier', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                          name: newSupplierCompany.trim(),
-                          email: newSupplierEmail.trim(),
-                          phone: newSupplierPhone.trim() || null,
-                          country: newSupplierCountry || null,
-                          logoUrl: newSupplierLogo || null,
-                          species: newSupplierSpecialty,
-                          category: 'SEAFOOD SUPPLIER',
-                        }),
-                      })
-                      const json = await res.json()
-
-                      if (!json.success) {
-                        console.error('[AddSupplier] API error:', json.error)
-                      }
-
-                      // 2. Send magic link invite email
-                      const { error: authError } = await supabase.auth.signInWithOtp({
-                        email: newSupplierEmail,
-                        options: {
-                          data: {
-                            role: 'supplier',
-                            company: newSupplierCompany,
-                            country: newSupplierCountry,
-                            phone: newSupplierPhone,
-                          }
-                        }
-                      })
-
-                      // 3. Update local addedSuppliers list
-                      const newEntry = {
-                        id: json.company?.id || 'sup-' + Date.now(),
-                        logo: newSupplierLogo,
-                        email: newSupplierEmail,
-                        company: newSupplierCompany,
-                        country: newSupplierCountry,
-                        phone: newSupplierPhone,
-                        specialty: newSupplierSpecialty,
-                        addedAt: new Date().toLocaleDateString()
-                      }
-                      setAddedSuppliers(prev => [newEntry, ...prev])
-
-                      // 4. Reload companies so Unclaimed Profiles updates immediately
-                      await reloadCompanies()
-
-                      const savedMsg = json.success
-                        ? `✅ "${newSupplierCompany}" added to Unclaimed Profiles!`
-                        : `⚠️ DB write failed: ${json.error}`
-                      const inviteMsg = authError ? '' : ` Invite sent to ${newSupplierEmail}.`
-                      setAddSupplierMsg({ type: json.success ? 'success' : 'error', text: savedMsg + inviteMsg })
-                      setNewSupplierLogo(''); setNewSupplierEmail(''); setNewSupplierCompany('')
-                      setNewSupplierCountry(''); setNewSupplierPhone(''); setNewSupplierSpecialty('')
-                    } catch (err: any) {
-                      console.error('[AddSupplier] Unexpected error:', err)
-                      setAddSupplierMsg({ type: 'error', text: 'Something went wrong. Please try again.' })
-                    }
-                    setAddSupplierLoading(false)
-                  }}
-
-                >
-                  {/* Logo / Image Upload */}
-                  <div>
-                    <label className="block text-xs font-extrabold uppercase tracking-wider text-slate-700 mb-2">Company Logo / Image</label>
-                    <div className="flex items-center gap-4">
-                      <div className="w-16 h-16 rounded-2xl border-2 border-dashed border-slate-200 bg-slate-50 flex items-center justify-center overflow-hidden shrink-0">
-                        {newSupplierLogo
-                          ? <img src={newSupplierLogo} alt="logo" className="w-full h-full object-contain" />
-                          : <ImageIcon className="w-6 h-6 text-slate-300" />
-                        }
-                      </div>
-                      <label className="cursor-pointer inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-xs font-bold text-slate-700 transition">
-                        <Upload className="w-3.5 h-3.5" />
-                        Upload Logo
-                        <input type="file" accept="image/*" className="hidden" onChange={handleSupplierLogoUpload} />
-                      </label>
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
-                    <div className="sm:col-span-2">
-                      <label className="block text-xs font-extrabold uppercase tracking-wider text-slate-700 mb-1.5">Company Name *</label>
-                      <div className="relative">
-                        <Building2 className="absolute left-3 top-3 w-4 h-4 text-slate-400" />
-                        <input type="text" required value={newSupplierCompany} onChange={e => setNewSupplierCompany(e.target.value)} placeholder="e.g. NordSea Seafood B.V." className="w-full pl-9 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:border-[#022B96] transition" />
-                      </div>
-                    </div>
-                    <div>
-                      <label className="block text-xs font-extrabold uppercase tracking-wider text-slate-700 mb-1.5">Business Email *</label>
-                      <div className="relative">
-                        <Mail className="absolute left-3 top-3 w-4 h-4 text-slate-400" />
-                        <input type="email" required value={newSupplierEmail} onChange={e => setNewSupplierEmail(e.target.value)} placeholder="info@company.com" className="w-full pl-9 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:border-[#022B96] transition" />
-                      </div>
-                    </div>
-                    <div>
-                      <label className="block text-xs font-extrabold uppercase tracking-wider text-slate-700 mb-1.5">Country</label>
-                      <div className="relative">
-                        <MapPin className="absolute left-3 top-3 w-4 h-4 text-slate-400 pointer-events-none" />
-                        <select
-                          value={newSupplierCountry}
-                          onChange={e => setNewSupplierCountry(e.target.value)}
-                          className="w-full pl-9 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:border-[#022B96] transition cursor-pointer appearance-none"
-                        >
-                          <option value="">-- Select Country --</option>
-                          <option value="Germany">🇩🇪 Germany</option>
-                          <option value="Norway">🇳🇴 Norway</option>
-                          <option value="Netherlands">🇳🇱 Netherlands</option>
-                          <option value="Belgium">🇧🇪 Belgium</option>
-                        </select>
-                      </div>
-                    </div>
-
-                    <div>
-                      <label className="block text-xs font-extrabold uppercase tracking-wider text-slate-700 mb-1.5">Phone Number</label>
-                      <div className="relative">
-                        <Phone className="absolute left-3 top-3 w-4 h-4 text-slate-400" />
-                        <input type="text" value={newSupplierPhone} onChange={e => setNewSupplierPhone(e.target.value)} placeholder="+31 6 1234 5678" className="w-full pl-9 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:border-[#022B96] transition" />
-                      </div>
-                    </div>
-                    <div>
-                      <label className="block text-xs font-extrabold uppercase tracking-wider text-slate-700 mb-1.5">Specialty</label>
-                      <div className="relative">
-                        <Fish className="absolute left-3 top-3 w-4 h-4 text-slate-400" />
-                        <input type="text" value={newSupplierSpecialty} onChange={e => setNewSupplierSpecialty(e.target.value)} placeholder="e.g. Atlantic Salmon, Cod, Tuna" className="w-full pl-9 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:border-[#022B96] transition" />
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="pt-2 flex justify-end">
-                    <button
-                      type="submit"
-                      disabled={addSupplierLoading}
-                      className="inline-flex items-center gap-2 px-8 py-3 bg-[#022B96] hover:bg-[#011a5e] disabled:opacity-60 text-white text-sm font-extrabold rounded-2xl shadow-md transition cursor-pointer"
-                    >
-                      {addSupplierLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <UserPlus className="w-4 h-4" />}
-                      {addSupplierLoading ? 'Adding...' : 'Add Supplier'}
-                    </button>
-                  </div>
-                </form>
-
-                {/* Previously Added Suppliers */}
-                {addedSuppliers.length > 0 && (
-                  <div>
-                    <h2 className="text-sm font-extrabold text-slate-700 mb-3 flex items-center gap-2">
-                      <Users className="w-4 h-4 text-[#022B96]" />
-                      Added Suppliers ({addedSuppliers.length})
-                    </h2>
-                    <div className="space-y-2">
-                      {addedSuppliers.map((s) => (
-                        <div key={s.id} className="bg-white border border-slate-200 rounded-2xl px-5 py-3.5 flex items-center justify-between gap-3">
-                          <div className="flex items-center gap-3">
-                            <div className="w-9 h-9 rounded-xl bg-slate-100 border border-slate-200 flex items-center justify-center shrink-0 overflow-hidden">
-                              {s.logo
-                                ? <img src={s.logo} alt="" className="w-full h-full object-contain" />
-                                : <Building2 className="w-4 h-4 text-slate-400" />
-                              }
-                            </div>
-                            <div>
-                              <p className="font-bold text-slate-900 text-sm">{s.company}</p>
-                              <p className="text-[11px] text-slate-500">{s.email} {s.country ? `· ${s.country}` : ''}</p>
-                            </div>
-                          </div>
-                          <div className="flex items-center gap-2">
-                            {s.specialty && <span className="text-[10px] font-bold px-2 py-1 bg-blue-50 text-blue-700 rounded-lg border border-blue-100">{s.specialty}</span>}
-                            <span className="text-[10px] text-slate-400 font-medium">{s.addedAt}</span>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* VIEW 1: VERIFICATION */}
-            {activeNav === 'verification' && (
-              <div className="space-y-6">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                  <div>
-                    <h1 className="text-2xl font-black text-slate-900 tracking-tight">Supplier Profile Claims</h1>
-                    <p className="text-xs text-slate-500 mt-1 font-medium">
-                      {filteredClaims.length} verification requests found
-                    </p>
-                  </div>
-                  <div className="relative w-full sm:w-64">
-                    <Search className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
-                    <input
-                      type="text"
-                      placeholder="Search company or email..."
-                      value={searchQuery}
-                      onChange={(e) => setSearchQuery(e.target.value)}
-                      className="w-full pl-9 pr-4 py-2 border border-slate-200 rounded-xl text-xs bg-white focus:outline-none focus:ring-2 focus:ring-[#022B96]/20 focus:border-[#022B96] transition"
-                    />
-                  </div>
-                </div>
-
-                <div className="flex items-center justify-between border-b border-slate-200/80 pb-3">
-                  <div className="flex items-center gap-6">
-                    {[
-                      { key: 'pending', label: 'Pending', count: pendingClaims.length },
-                      { key: 'claimed', label: 'Approved', count: approvedClaims.length },
-                      { key: 'rejected', label: 'Rejected', count: rejectedClaims.length },
-                      { key: 'all', label: 'All', count: allClaimRequests.length },
-                    ].map(({ key, label, count }) => (
-                      <button
-                        key={key}
-                        onClick={() => setClaimFilter(key as any)}
-                        className={`relative text-xs font-extrabold pb-3 transition cursor-pointer ${
-                          claimFilter === key
-                            ? 'text-[#022B96] after:content-[""] after:absolute after:bottom-0 after:left-0 after:w-full after:h-0.5 after:bg-[#022B96]'
-                            : 'text-slate-400 hover:text-slate-700'
-                        }`}
-                      >
-                        {label} <span className="ml-1 opacity-70">({count})</span>
-                      </button>
-                    ))}
-                  </div>
-                  <div className="hidden sm:flex items-center gap-2 text-xs font-semibold text-slate-400">
-                    <Calendar className="w-3.5 h-3.5" />
-                    <span>Updated Live</span>
-                  </div>
-                </div>
-
-
-                {filteredClaims.length === 0 ? (
-                  <div className="bg-white border border-slate-200/90 rounded-2xl p-14 text-center space-y-3 shadow-xs">
-                    <div className="w-12 h-12 rounded-2xl bg-blue-50 text-[#022B96] flex items-center justify-center mx-auto">
-                      <ShieldCheck className="w-6 h-6" />
-                    </div>
-                    <h3 className="text-base font-bold text-slate-900">No Verification Requests</h3>
-                    <p className="text-xs text-slate-500 max-w-md mx-auto leading-relaxed">
-                      No claims are currently pending in this filter. When a supplier submits a claim, their application will appear here for your review and approval.
-                    </p>
-                  </div>
-                ) : (
-                  <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden">
-                    {filteredClaims.map((company, idx) => {
-                      const req = company.claimRequest
-                      const companyDomain = company.domain || company.email?.split('@')[1] || ''
-                      const applicantDomain = req?.businessEmail ? req.businessEmail.split('@')[1] : ''
-                      const domainMatches = Boolean(companyDomain && applicantDomain && companyDomain.toLowerCase() === applicantDomain.toLowerCase())
-                      const isPending = company.status === 'claim_requested'
-                      const isClaimed = company.status === 'claimed'
-                      const isRejected = company.status === 'rejected'
-
-                      return (
-                        <div
-                          key={company.id}
-                          className={`flex items-center gap-4 px-5 py-3.5 hover:bg-slate-50 transition-colors ${idx !== filteredClaims.length - 1 ? 'border-b border-slate-100' : ''}`}
-                        >
-                          {/* Circular Logo / Avatar */}
-                          {company.logoUrl ? (
-                            <div className="w-9 h-9 rounded-full bg-white border border-slate-200 p-0.5 flex items-center justify-center shrink-0 overflow-hidden">
-                              <img src={company.logoUrl} alt={company.name} className="w-full h-full object-contain" />
-                            </div>
-                          ) : (
-                            <div
-                              className="w-9 h-9 rounded-full text-white font-black text-xs flex items-center justify-center shrink-0"
-                              style={{
-                                background: company.bannerColor
-                                  ? `linear-gradient(135deg, ${company.bannerColor}, #022B96)`
-                                  : 'linear-gradient(135deg, #022B96, #1e3a8a)',
-                              }}
-                            >
-                              {company.name.slice(0, 2).toUpperCase()}
-                            </div>
-                          )}
-
-                          {/* Company & Applicant Info */}
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-center gap-2 min-w-0">
-                              <p className="text-sm font-semibold text-slate-900 truncate">{company.name}</p>
-                              {company.countryCode && (
-                                <ReactCountryFlag
-                                  countryCode={company.countryCode}
-                                  svg
-                                  style={{ width: '14px', height: '11px', flexShrink: 0 }}
-                                />
-                              )}
-                              {company.country && !company.countryCode && (
-                                <span className="text-[10px] font-bold bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded shrink-0">
-                                  {company.country}
-                                </span>
-                              )}
-                              {isPending && (
-                                <span className="inline-flex items-center gap-1 text-[10px] font-bold text-blue-700 bg-blue-50 border border-blue-200/80 px-2 py-0.5 rounded-full shrink-0">
-                                  <span className="h-1.5 w-1.5 rounded-full bg-blue-500 animate-pulse" />
-                                  Pending
-                                </span>
-                              )}
-                              {isClaimed && (
-                                <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200/80 px-2 py-0.5 rounded-full shrink-0">
-                                  <CheckCircle2 className="w-3 h-3 text-emerald-600" />
-                                  Approved
-                                </span>
-                              )}
-                              {isRejected && (
-                                <span className="inline-flex items-center gap-1 text-[10px] font-bold text-rose-700 bg-rose-50 border border-rose-200/80 px-2 py-0.5 rounded-full shrink-0">
-                                  <AlertCircle className="w-3 h-3 text-rose-600" />
-                                  Rejected
-                                </span>
-                              )}
-                            </div>
-                            <div className="flex items-center gap-2 text-xs text-slate-400 truncate mt-0.5">
-                              <span className="text-slate-600 font-medium truncate">
-                                {req?.fullName || 'Anonymous'}
-                                {req?.jobTitle ? ` (${req.jobTitle})` : ''}
-                              </span>
-                              <span>·</span>
-                              <span className="truncate">{req?.businessEmail || company.email || '—'}</span>
-                              {req?.businessEmail && (
-                                <>
-                                  <span>·</span>
-                                  {domainMatches ? (
-                                    <span className="text-[10px] font-semibold text-emerald-600 shrink-0" title={`Domain matches: ${applicantDomain}`}>
-                                      Domain Match
-                                    </span>
-                                  ) : (
-                                    <span className="text-[10px] font-semibold text-amber-600 shrink-0" title={`Different domain: @${applicantDomain || 'unknown'}`}>
-                                      @{applicantDomain || 'diff'}
-                                    </span>
-                                  )}
-                                </>
-                              )}
-                            </div>
-                          </div>
-
-                          {/* Actions */}
-                          <div className="flex items-center gap-1.5 shrink-0">
-                            {isPending && (
-                              <>
-                                <button
-                                  onClick={() => handleApproveClaim(company.id)}
-                                  className="flex items-center gap-1 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-lg transition cursor-pointer"
-                                  title="Approve Claim"
-                                >
-                                  <Check className="w-3.5 h-3.5" />
-                                  <span>Approve</span>
-                                </button>
-                                <button
-                                  onClick={() => handleRejectClaim(company.id)}
-                                  className="flex items-center gap-1 px-3 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-600 font-bold text-xs rounded-lg border border-rose-200 transition cursor-pointer"
-                                  title="Reject Claim"
-                                >
-                                  <X className="w-3.5 h-3.5" />
-                                  <span>Reject</span>
-                                </button>
-                              </>
-                            )}
-                            {isClaimed && (
-                              <button
-                                onClick={() => requestRevokeCompany(company.id, company.name)}
-                                className="px-3 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-700 font-bold text-xs rounded-lg border border-amber-200 transition cursor-pointer"
-                              >
-                                Revoke
-                              </button>
-                            )}
-                            {!isPending && !isClaimed && (
-                              <button
-                                onClick={() => handleApproveClaim(company.id)}
-                                className="px-3 py-1.5 bg-[#022B96] hover:bg-[#011a5e] text-white font-bold text-xs rounded-lg transition cursor-pointer"
-                              >
-                                Approve
-                              </button>
-                            )}
-                            <button
-                              onClick={() => setSelectedCompanyModal(company)}
-                              className="flex items-center gap-1 px-3 py-1.5 text-slate-700 hover:text-slate-900 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-lg text-xs font-bold transition cursor-pointer"
-                              title="View Full Details"
-                            >
-                              <Eye className="w-3.5 h-3.5" />
-                              <span>Details</span>
-                            </button>
-                            <button
-                              onClick={() => requestDeleteCompany(company.id, company.name)}
-                              className="p-1.5 rounded-lg text-slate-400 hover:text-rose-500 hover:bg-rose-50 transition cursor-pointer"
-                              title="Delete Supplier"
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </button>
-                          </div>
-                        </div>
-                      )
-                    })}
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* VIEW 2: OVERVIEW */}
+            {/* VIEW 1: SYSTEM OVERVIEW (DASHBOARD) */}
             {activeNav === 'overview' && (
               <div className="space-y-6">
                 <div>
                   <h1 className="text-2xl font-black text-slate-900 tracking-tight">System Overview</h1>
-                  <p className="text-xs text-slate-500 mt-1 font-medium">Platform performance &amp; database activity metrics</p>
+                  <p className="text-xs text-slate-500 mt-1 font-medium">
+                    Platform metrics &amp; verified seafood catalog data
+                  </p>
                 </div>
+
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
                   {[
-                    { label: 'Total Users', value: stats.totalUsers, sub: 'Registered Accounts', icon: Users, color: 'text-[#022B96]' },
-                    { label: 'Buyers', value: stats.totalBuyers, sub: 'Active Buyer Accounts', icon: User, color: 'text-blue-600' },
-                    { label: 'Suppliers', value: stats.totalSuppliers, sub: 'Verified Businesses', icon: Building2, color: 'text-emerald-600' },
-                    { label: 'Pending Claims', value: pendingClaims.length, sub: 'Awaiting Verification', icon: ShieldCheck, color: 'text-amber-600' },
+                    { label: 'Total Users', value: stats.totalUsers || buyerUsers.length + 1, sub: 'Registered Accounts', icon: Users, color: 'text-[#022B96]' },
+                    { label: 'Buyers', value: stats.totalBuyers || buyerUsers.length, sub: 'Active Buyer Accounts', icon: User, color: 'text-blue-600' },
+                    { label: 'Suppliers', value: suppliers.length, sub: 'Admin-Created Profiles', icon: Building2, color: 'text-emerald-600' },
+                    { label: 'Product Offers', value: supplierPosts.length, sub: `${supplierPosts.filter(p => p.is_published !== false).length} Published`, icon: Fish, color: 'text-indigo-600' },
                   ].map((card) => {
                     const CardIcon = card.icon
                     return (
@@ -1788,163 +689,549 @@ export default function AdminDashboardPage() {
                     )
                   })}
                 </div>
+
+                {/* Quick Shortcuts */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2">
+                  <div className="bg-[#F0F5FD] border border-blue-200/90 rounded-2xl p-6 space-y-3.5 shadow-xs hover:border-blue-300 transition-all">
+                    <div>
+                      <h3 className="text-base font-black text-slate-900 leading-tight">Create &amp; Manage Supplier Profiles</h3>
+                      <p className="text-xs text-slate-600 leading-relaxed mt-1 font-medium">
+                        Enter company contact details and seafood specialties directly from supplier data sheets.
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2 pt-1">
+                      <button
+                        onClick={() => setActiveNav('add-supplier')}
+                        className="px-4 py-2 bg-[#022B96] hover:bg-[#011a5e] text-white font-bold text-xs rounded-xl shadow-xs transition cursor-pointer"
+                      >
+                        + Add Supplier
+                      </button>
+                      <button
+                        onClick={() => setActiveNav('view-suppliers')}
+                        className="px-4 py-2 bg-white hover:bg-blue-50 text-[#022B96] border border-blue-200 font-bold text-xs rounded-xl shadow-2xs transition cursor-pointer"
+                      >
+                        View Suppliers ({suppliers.length})
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="bg-[#F0F5FD] border border-blue-200/90 rounded-2xl p-6 space-y-3.5 shadow-xs hover:border-blue-300 transition-all">
+                    <div>
+                      <h3 className="text-base font-black text-slate-900 leading-tight">Publish Seafood Spot Prices &amp; Stock</h3>
+                      <p className="text-xs text-slate-600 leading-relaxed mt-1 font-medium">
+                        Manually enter product prices, origins, packaging, and availability from PDFs to display on the live site.
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2 pt-1">
+                      <button
+                        onClick={() => {
+                          setEditingPost(null)
+                          setDefaultSupplierIdForModal(suppliers[0]?.id || null)
+                          setIsProductModalOpen(true)
+                        }}
+                        className="px-4 py-2 bg-[#022B96] hover:bg-[#011a5e] text-white font-bold text-xs rounded-xl shadow-xs transition cursor-pointer"
+                      >
+                        + Add New Product
+                      </button>
+                      <button
+                        onClick={() => setActiveNav('posts')}
+                        className="px-4 py-2 bg-white hover:bg-blue-50 text-[#022B96] border border-blue-200 font-bold text-xs rounded-xl shadow-2xs transition cursor-pointer"
+                      >
+                        Manage Offers ({supplierPosts.length})
+                      </button>
+                    </div>
+                  </div>
+                </div>
               </div>
             )}
 
-            {/* VIEW 3: PRODUCT OFFERS */}
-            {activeNav === 'posts' && (
-              <div className="space-y-6">
+            {/* VIEW 2: ADD SUPPLIER */}
+            {activeNav === 'add-supplier' && (
+              <div className="space-y-6 max-w-2xl">
                 <div className="flex items-center justify-between">
                   <div>
-                    <h1 className="text-2xl font-black text-slate-900 tracking-tight">Supplier Product Offers</h1>
-                    <p className="text-xs text-slate-500 mt-1 font-medium">{supplierPosts.length} published product listings</p>
+                    <h1 className="text-2xl font-black text-slate-900 tracking-tight">Add Supplier</h1>
+                    <p className="text-xs text-slate-500 mt-1 font-medium">
+                      Manually create a seafood supplier profile using information from supplier PDFs
+                    </p>
                   </div>
-                  {priceUpdateMsg && (
-                    <div className="flex items-center gap-2 text-xs font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-4 py-2 rounded-xl">
-                      <CheckCircle2 className="w-4 h-4" />
-                      {priceUpdateMsg}
-                    </div>
-                  )}
+                  <button
+                    type="button"
+                    onClick={() => setActiveNav('view-suppliers')}
+                    className="text-xs font-bold text-[#022B96] hover:underline"
+                  >
+                    View All Suppliers →
+                  </button>
                 </div>
 
-                {!isDataLoaded && supplierPosts.length === 0 ? (
-                  <div className="bg-white rounded-2xl border border-slate-200 p-16 flex flex-col items-center justify-center gap-3 text-center">
-                    <Loader2 className="w-8 h-8 animate-spin text-[#022B96]" />
-                    <p className="text-sm font-bold text-slate-700">Loading Product Offers...</p>
-                    <p className="text-xs text-slate-400">Fetching live supplier catalog</p>
+                {addSupplierMsg && (
+                  <div
+                    className={`p-4 rounded-2xl border text-sm font-semibold flex items-center gap-3 ${
+                      addSupplierMsg.type === 'success'
+                        ? 'bg-emerald-50 border-emerald-200 text-emerald-800'
+                        : 'bg-rose-50 border-rose-200 text-rose-700'
+                    }`}
+                  >
+                    {addSupplierMsg.type === 'success' ? (
+                      <CheckCircle2 className="w-5 h-5 shrink-0 text-emerald-600" />
+                    ) : (
+                      <AlertCircle className="w-5 h-5 shrink-0 text-rose-600" />
+                    )}
+                    <span className="flex-1">{addSupplierMsg.text}</span>
+                    {addSupplierMsg.type === 'success' && (
+                      <button
+                        onClick={() => setActiveNav('view-suppliers')}
+                        className="px-3 py-1 bg-emerald-600 text-white text-xs font-bold rounded-lg hover:bg-emerald-700 transition"
+                      >
+                        View Profile
+                      </button>
+                    )}
                   </div>
-                ) : supplierPosts.length === 0 ? (
-                  <div className="bg-white rounded-2xl border border-slate-200 p-12 text-center">
-                    <Fish className="w-10 h-10 mx-auto mb-2 text-slate-300" />
-                    <p className="text-xs font-bold text-slate-400">No supplier product posts yet</p>
-                  </div>
-                ) : (
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    {supplierPosts.map((p) => {
-                      const img = getFishImageForProduct(p.product_name, p.custom_image)
-                      const symbol = p.currency === 'USD' ? '$' : p.currency === 'GBP' ? '£' : '€'
-                      const maxPrice = (p as any).max_price_per_kg
-                      const priceDisplay = p.price_per_kg > 0
-                        ? maxPrice > 0
-                          ? `${symbol}${p.price_per_kg.toFixed(2)} – ${symbol}${maxPrice.toFixed(2)}/kg`
-                          : `${symbol}${p.price_per_kg.toFixed(2)}/kg`
-                        : 'Price on request'
+                )}
 
-                      // Resolve verified supplier
-                      const supplier = getSupplierForPost(p, companies)
+                <form
+                  className="bg-white border border-slate-200 rounded-3xl p-8 space-y-6 shadow-xs"
+                  onSubmit={async (e) => {
+                    e.preventDefault()
+                    if (!newSupplierCompany.trim() || !newSupplierEmail.trim()) {
+                      setAddSupplierMsg({ type: 'error', text: 'Company name and business email are required.' })
+                      return
+                    }
+                    setAddSupplierLoading(true)
+                    setAddSupplierMsg(null)
 
-                      const lastUpdatedDateRaw = p.updated_at || p.created_at || Date.now()
-                      const formattedLastDate = new Date(lastUpdatedDateRaw).toLocaleDateString('en-GB', {
-                        day: 'numeric',
-                        month: 'short',
-                        year: 'numeric',
+                    try {
+                      const res = await fetch('/api/admin/add-supplier', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                          name: newSupplierCompany.trim(),
+                          email: newSupplierEmail.trim(),
+                          phone: newSupplierPhone.trim() || null,
+                          country: newSupplierCountry || 'Netherlands',
+                          logoUrl: newSupplierLogo || null,
+                          species: newSupplierSpecialty,
+                          category: 'SEAFOOD SUPPLIER',
+                          address: newSupplierAddress.trim() || null,
+                        }),
+                      })
+                      const json = await res.json()
+
+                      if (!json.success) {
+                        throw new Error(json.error || 'Server error creating supplier')
+                      }
+
+                      // Reload suppliers so View Suppliers updates automatically
+                      await reloadSuppliers()
+
+                      setAddSupplierMsg({
+                        type: 'success',
+                        text: `Supplier "${newSupplierCompany}" profile created successfully!`,
                       })
 
+                      // Reset form
+                      setNewSupplierLogo('')
+                      setNewSupplierEmail('')
+                      setNewSupplierCompany('')
+                      setNewSupplierCountry('')
+                      setNewSupplierPhone('')
+                      setNewSupplierSpecialty('')
+                      setNewSupplierAddress('')
+                    } catch (err: any) {
+                      console.error('[AddSupplier] Error:', err)
+                      setAddSupplierMsg({
+                        type: 'error',
+                        text: err?.message || 'Failed to create supplier profile. Please try again.',
+                      })
+                    } finally {
+                      setAddSupplierLoading(false)
+                    }
+                  }}
+                >
+                  {/* Logo Upload */}
+                  <div>
+                    <label className="block text-xs font-black uppercase tracking-wider text-slate-700 mb-2">
+                      Company Logo / Photo
+                    </label>
+                    <div className="flex items-center gap-4">
+                      <div className="w-16 h-16 rounded-2xl border-2 border-dashed border-slate-200 bg-slate-50 flex items-center justify-center overflow-hidden shrink-0">
+                        {newSupplierLogo ? (
+                          <img src={newSupplierLogo} alt="logo" className="w-full h-full object-contain" />
+                        ) : (
+                          <ImageIcon className="w-6 h-6 text-slate-300" />
+                        )}
+                      </div>
+                      <label className="cursor-pointer inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-xs font-bold text-slate-700 transition">
+                        <Upload className="w-3.5 h-3.5" />
+                        Upload Logo
+                        <input type="file" accept="image/*" className="hidden" onChange={handleSupplierLogoUpload} />
+                      </label>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+                    <div className="sm:col-span-2">
+                      <label className="block text-xs font-black uppercase tracking-wider text-slate-700 mb-1.5">
+                        Company Name *
+                      </label>
+                      <div className="relative">
+                        <Building2 className="absolute left-3 top-3 w-4 h-4 text-slate-400" />
+                        <input
+                          type="text"
+                          required
+                          value={newSupplierCompany}
+                          onChange={(e) => setNewSupplierCompany(e.target.value)}
+                          placeholder="e.g. NordSea Seafood B.V."
+                          className="w-full pl-9 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold text-slate-800 focus:outline-none focus:border-[#022B96] transition"
+                        />
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-black uppercase tracking-wider text-slate-700 mb-1.5">
+                        Business Email *
+                      </label>
+                      <div className="relative">
+                        <Mail className="absolute left-3 top-3 w-4 h-4 text-slate-400" />
+                        <input
+                          type="email"
+                          required
+                          value={newSupplierEmail}
+                          onChange={(e) => setNewSupplierEmail(e.target.value)}
+                          placeholder="info@company.com"
+                          className="w-full pl-9 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium text-slate-800 focus:outline-none focus:border-[#022B96] transition"
+                        />
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-black uppercase tracking-wider text-slate-700 mb-1.5">
+                        Country
+                      </label>
+                      <div className="relative">
+                        <MapPin className="absolute left-3 top-3 w-4 h-4 text-slate-400 pointer-events-none" />
+                        <select
+                          value={newSupplierCountry}
+                          onChange={(e) => setNewSupplierCountry(e.target.value)}
+                          className="w-full pl-9 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold text-slate-800 focus:outline-none focus:border-[#022B96] transition cursor-pointer"
+                        >
+                          <option value="">-- Select Country --</option>
+                          <option value="Germany">🇩🇪 Germany</option>
+                          <option value="Norway">🇳🇴 Norway</option>
+                          <option value="Netherlands">🇳🇱 Netherlands</option>
+                          <option value="Belgium">🇧🇪 Belgium</option>
+                          <option value="Spain">🇪🇸 Spain</option>
+                          <option value="France">🇫🇷 France</option>
+                          <option value="Denmark">🇩🇰 Denmark</option>
+                          <option value="Iceland">🇮🇸 Iceland</option>
+                          <option value="United Kingdom">🇬🇧 United Kingdom</option>
+                        </select>
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-black uppercase tracking-wider text-slate-700 mb-1.5">
+                        Phone Number
+                      </label>
+                      <div className="relative">
+                        <Phone className="absolute left-3 top-3 w-4 h-4 text-slate-400" />
+                        <input
+                          type="text"
+                          value={newSupplierPhone}
+                          onChange={(e) => setNewSupplierPhone(e.target.value)}
+                          placeholder="+31 6 1234 5678"
+                          className="w-full pl-9 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium text-slate-800 focus:outline-none focus:border-[#022B96] transition"
+                        />
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-black uppercase tracking-wider text-slate-700 mb-1.5">
+                        City / Port / Facility
+                      </label>
+                      <div className="relative">
+                        <MapPin className="absolute left-3 top-3 w-4 h-4 text-slate-400" />
+                        <input
+                          type="text"
+                          value={newSupplierAddress}
+                          onChange={(e) => setNewSupplierAddress(e.target.value)}
+                          placeholder="e.g. Urk, Rotterdam, Bremerhaven"
+                          className="w-full pl-9 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium text-slate-800 focus:outline-none focus:border-[#022B96] transition"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="sm:col-span-2">
+                      <label className="block text-xs font-black uppercase tracking-wider text-slate-700 mb-1.5">
+                        Specialty Species (comma separated)
+                      </label>
+                      <div className="relative">
+                        <Fish className="absolute left-3 top-3 w-4 h-4 text-slate-400" />
+                        <input
+                          type="text"
+                          value={newSupplierSpecialty}
+                          onChange={(e) => setNewSupplierSpecialty(e.target.value)}
+                          placeholder="e.g. Atlantic Salmon, Cod, Yellowfin Tuna, Shrimp"
+                          className="w-full pl-9 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium text-slate-800 focus:outline-none focus:border-[#022B96] transition"
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="pt-2 flex justify-end">
+                    <button
+                      type="submit"
+                      disabled={addSupplierLoading}
+                      className="inline-flex items-center gap-2 px-8 py-3 bg-[#022B96] hover:bg-[#011a5e] disabled:opacity-60 text-white text-sm font-extrabold rounded-2xl shadow-md transition cursor-pointer"
+                    >
+                      {addSupplierLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <UserPlus className="w-4 h-4" />}
+                      {addSupplierLoading ? 'Creating Profile...' : 'Save Supplier Profile'}
+                    </button>
+                  </div>
+                </form>
+              </div>
+            )}
+
+            {/* VIEW 3: VIEW SUPPLIERS (NEW TAB!) */}
+            {activeNav === 'view-suppliers' && (
+              <ViewSuppliersTab
+                suppliers={suppliers}
+                loading={suppliersLoading}
+                postsCountMap={postsCountMap}
+                onAddProduct={handleOpenAddProductForSupplier}
+                onManageProducts={handleManageProductsForSupplier}
+                onDeleteSupplier={handleDeleteSupplier}
+                onNavigateToAddSupplier={() => setActiveNav('add-supplier')}
+              />
+            )}
+
+            {/* VIEW 4: PRODUCT OFFERS (SEAFOOD PRODUCT MANAGEMENT) */}
+            {activeNav === 'posts' && (
+              <div className="space-y-6">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                  <div>
+                    <h1 className="text-2xl font-black text-slate-900 tracking-tight">Product Offers</h1>
+                    <p className="text-xs text-slate-500 mt-1 font-medium">
+                      Publish and manage seafood products entered from supplier PDF documents
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => {
+                      setEditingPost(null)
+                      setDefaultSupplierIdForModal(suppliers[0]?.id || null)
+                      setIsProductModalOpen(true)
+                    }}
+                    className="inline-flex items-center gap-2 px-5 py-2.5 bg-[#022B96] hover:bg-[#011a5e] text-white text-xs font-bold rounded-2xl shadow-sm transition cursor-pointer self-start sm:self-auto"
+                  >
+                    <Plus className="w-4 h-4" />
+                    Add Product
+                  </button>
+                </div>
+
+                {/* Filters and Status Tabs Bar */}
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-200/80 pb-3">
+                  {/* Status Pills */}
+                  <div className="flex items-center gap-2">
+                    {[
+                      { key: 'all', label: 'All Products', count: supplierPosts.length },
+                      { key: 'published', label: 'Published', count: supplierPosts.filter((p) => p.is_published !== false).length },
+                      { key: 'draft', label: 'Drafts', count: supplierPosts.filter((p) => p.is_published === false).length },
+                    ].map((tab) => (
+                      <button
+                        key={tab.key}
+                        onClick={() => setPostStatusFilter(tab.key as any)}
+                        className={`text-xs font-bold px-3 py-1.5 rounded-xl transition cursor-pointer ${
+                          postStatusFilter === tab.key
+                            ? 'bg-[#022B96] text-white shadow-xs'
+                            : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-100'
+                        }`}
+                      >
+                        {tab.label} <span className="opacity-75 ml-1">({tab.count})</span>
+                      </button>
+                    ))}
+                  </div>
+
+                  {/* Supplier & Search Filters */}
+                  <div className="flex items-center gap-2.5">
+                    <select
+                      value={postSupplierFilter}
+                      onChange={(e) => setPostSupplierFilter(e.target.value)}
+                      className="px-3 py-1.5 border border-slate-200 rounded-xl text-xs bg-white font-medium text-slate-700 focus:outline-none focus:border-[#022B96]"
+                    >
+                      <option value="all">All Suppliers</option>
+                      {suppliers.map((s) => (
+                        <option key={s.id} value={s.id}>
+                          {s.name}
+                        </option>
+                      ))}
+                    </select>
+
+                    <div className="relative w-48">
+                      <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-2.5" />
+                      <input
+                        type="text"
+                        placeholder="Search product..."
+                        value={postSearchQuery}
+                        onChange={(e) => setPostSearchQuery(e.target.value)}
+                        className="w-full pl-8 pr-3 py-1.5 border border-slate-200 rounded-xl text-xs bg-white focus:outline-none focus:border-[#022B96]"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Products Grid */}
+                {postsLoading && supplierPosts.length === 0 ? (
+                  <div className="bg-white rounded-3xl border border-slate-200 p-16 flex flex-col items-center justify-center gap-3 text-center">
+                    <Loader2 className="w-8 h-8 animate-spin text-[#022B96]" />
+                    <p className="text-sm font-bold text-slate-700">Loading Product Offers...</p>
+                  </div>
+                ) : filteredProductOffers.length === 0 ? (
+                  <div className="bg-white rounded-3xl border border-slate-200 p-16 text-center space-y-3">
+                    <Fish className="w-12 h-12 mx-auto text-slate-300" />
+                    <h3 className="text-base font-extrabold text-slate-800">No Product Offers Found</h3>
+                    <p className="text-xs text-slate-400 max-w-sm mx-auto">
+                      {postSearchQuery || postSupplierFilter !== 'all' || postStatusFilter !== 'all'
+                        ? 'No products matched your current filters.'
+                        : 'No seafood product offers have been published yet.'}
+                    </p>
+                    <button
+                      onClick={() => {
+                        setEditingPost(null)
+                        setDefaultSupplierIdForModal(suppliers[0]?.id || null)
+                        setIsProductModalOpen(true)
+                      }}
+                      className="inline-flex items-center gap-1.5 px-4 py-2 bg-[#022B96] hover:bg-[#011a5e] text-white text-xs font-bold rounded-xl shadow-xs transition cursor-pointer"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                      Add First Product
+                    </button>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {filteredProductOffers.map((p) => {
+                      const img = getFishImageForProduct(p.product_name, p.custom_image)
+                      const symbol = p.currency === 'USD' ? '$' : p.currency === 'GBP' ? '£' : '€'
+                      const maxPrice = p.max_price_per_kg
+                      const priceDisplay =
+                        p.price_per_kg > 0
+                          ? maxPrice > 0
+                            ? `${symbol}${p.price_per_kg.toFixed(2)} – ${symbol}${maxPrice.toFixed(2)}/kg`
+                            : `${symbol}${p.price_per_kg.toFixed(2)}/kg`
+                          : 'Price on request'
+
+                      const isPublished = p.is_published !== false
+
                       return (
-                        <div key={p.id} className="bg-white rounded-2xl border border-slate-200/90 hover:border-blue-300 p-5 hover:shadow-lg transition-all duration-200 flex flex-col justify-between group space-y-4">
-                          <div className="space-y-4">
-                            {/* Supplier Header — Clean, Bold, Authentic */}
+                        <div
+                          key={p.id}
+                          className={`bg-white rounded-3xl border p-5 hover:shadow-lg transition-all duration-200 flex flex-col justify-between group space-y-4 ${
+                            isPublished ? 'border-slate-200/90 hover:border-blue-300' : 'border-amber-200/80 bg-amber-50/20'
+                          }`}
+                        >
+                          <div className="space-y-3.5">
+                            {/* Supplier Header */}
                             <div className="flex items-center justify-between gap-3 pb-3 border-b border-slate-100">
                               <div className="flex items-center gap-3 min-w-0">
-                                <div className="w-10 h-10 rounded-xl bg-slate-50 border border-slate-200/80 p-1 flex items-center justify-center shrink-0 shadow-2xs overflow-hidden">
-                                  {supplier.logoUrl ? (
-                                    <img
-                                      src={supplier.logoUrl}
-                                      alt={supplier.name}
-                                      className="w-full h-full object-contain"
-                                    />
+                                <div className="w-9 h-9 rounded-xl bg-slate-50 border border-slate-200 p-0.5 flex items-center justify-center shrink-0 overflow-hidden">
+                                  {p.company_logo ? (
+                                    <img src={p.company_logo} alt={p.company_name} className="w-full h-full object-contain" />
                                   ) : (
-                                    <div className="w-full h-full rounded-lg bg-[#022B96] text-white flex items-center justify-center font-black text-sm">
-                                      {supplier.name.charAt(0).toUpperCase()}
+                                    <div className="w-full h-full rounded-lg bg-[#022B96] text-white flex items-center justify-center font-black text-xs">
+                                      {p.company_name?.charAt(0).toUpperCase() || 'S'}
                                     </div>
                                   )}
                                 </div>
                                 <div className="min-w-0">
-                                  <div className="flex items-center gap-1.5">
-                                    <h4 className="font-extrabold text-slate-900 text-sm truncate group-hover:text-[#022B96] transition-colors">
-                                      {supplier.name}
-                                    </h4>
-                                    <BadgeCheck className="w-4 h-4 text-blue-600 shrink-0" />
-                                  </div>
-                                  <p className="text-[11px] text-slate-500 font-medium flex items-center gap-1.5 mt-0.5">
-                                    <span className="font-semibold text-slate-600">Supplier Profile</span>
-                                    {supplier.country && (
-                                      <>
-                                        <span className="text-slate-300">•</span>
-                                        <span className="text-slate-500">{supplier.country}</span>
-                                      </>
-                                    )}
+                                  <h4 className="font-extrabold text-slate-900 text-xs truncate">
+                                    {p.company_name}
+                                  </h4>
+                                  <p className="text-[11px] text-slate-400 font-medium">
+                                    {p.company_country || 'Europe'}
                                   </p>
                                 </div>
                               </div>
 
-                              <span className="text-[10px] font-bold tracking-wide uppercase px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200/60 shrink-0">
-                                {p.status || 'Active'}
+                              {/* Status Badge */}
+                              <span
+                                className={`text-[10px] font-extrabold tracking-wide uppercase px-2.5 py-1 rounded-full border shrink-0 ${
+                                  isPublished
+                                    ? 'bg-emerald-50 text-emerald-700 border-emerald-200/60'
+                                    : 'bg-amber-50 text-amber-700 border-amber-200'
+                                }`}
+                              >
+                                {isPublished ? 'Published' : 'Draft'}
                               </span>
                             </div>
 
                             {/* Product Info */}
                             <div className="flex items-center gap-3.5">
-                              <div className="w-16 h-16 rounded-xl bg-slate-50 border border-slate-100 p-1 flex items-center justify-center shrink-0">
-                                <img
-                                  src={img}
-                                  alt={p.product_name}
-                                  className="w-full h-full object-contain"
-                                />
+                              <div className="w-16 h-16 rounded-2xl bg-slate-50 border border-slate-100 p-1 flex items-center justify-center shrink-0 overflow-hidden">
+                                <img src={img} alt={p.product_name} className="w-full h-full object-contain" />
                               </div>
                               <div className="flex-1 min-w-0">
                                 <h3 className="font-black text-slate-900 text-base leading-tight truncate">
                                   {p.product_name}
                                 </h3>
-                                <p className="text-base font-black text-[#022B96] mt-0.5">
-                                  {priceDisplay}
-                                </p>
+                                <p className="text-base font-black text-[#022B96] mt-0.5">{priceDisplay}</p>
                                 <p className="text-xs text-slate-400 font-medium mt-0.5">
-                                  {p.fresh_frozen} · {p.country_of_origin}
+                                  {p.fresh_frozen} · Origin: {p.country_of_origin || 'Europe'}
                                 </p>
                               </div>
                             </div>
 
-                            {/* Packaging & Availability Badges */}
+                            {/* Badges Grid */}
                             <div className="grid grid-cols-2 gap-2 text-xs">
-                              <div className="bg-slate-50/80 rounded-xl px-3 py-2 border border-slate-100">
-                                <p className="text-[10px] font-bold uppercase text-slate-400 tracking-wider">Packaging</p>
-                                <p className="font-bold text-slate-700 mt-0.5 truncate">{p.packaging || '—'}</p>
+                              <div className="bg-slate-50 rounded-xl px-3 py-1.5 border border-slate-100">
+                                <p className="text-[9px] font-bold uppercase text-slate-400 tracking-wider">Packaging</p>
+                                <p className="font-bold text-slate-700 mt-0.5 truncate text-[11px]">{p.packaging || '—'}</p>
                               </div>
-                              <div className="bg-slate-50/80 rounded-xl px-3 py-2 border border-slate-100">
-                                <p className="text-[10px] font-bold uppercase text-slate-400 tracking-wider">Availability</p>
-                                <p className="font-bold text-slate-700 mt-0.5 truncate">{p.availability || '—'}</p>
+                              <div className="bg-slate-50 rounded-xl px-3 py-1.5 border border-slate-100">
+                                <p className="text-[9px] font-bold uppercase text-slate-400 tracking-wider">Availability</p>
+                                <p className="font-bold text-slate-700 mt-0.5 truncate text-[11px]">{p.availability || 'In Stock'}</p>
                               </div>
                             </div>
                           </div>
 
-                          {/* Footer */}
+                          {/* Footer Actions */}
                           <div className="flex items-center justify-between pt-3 border-t border-slate-100">
-                            <span className="flex items-center gap-1.5 text-[11px] text-slate-400 font-medium">
-                              <Clock className="w-3.5 h-3.5 text-slate-400" />
-                              <span>Last updated: <strong className="text-slate-600 font-semibold">{formattedLastDate}</strong></span>
-                            </span>
+                            {/* Toggle Publish button */}
                             <button
-                              onClick={() => {
-                                setUpdatingPostModal({
-                                  ...p,
-                                  company_name: supplier.name,
-                                  company_logo: supplier.logoUrl || undefined,
-                                  company_country: supplier.country,
-                                })
-                                setUpdatePriceInput(String(p.price_per_kg || ''))
-                                setUpdateMaxPriceInput((p as any).max_price_per_kg ? String((p as any).max_price_per_kg) : '')
-                                setUpdateCurrencyInput(p.currency || 'EUR')
-                                setUpdateAvailInput(p.availability || 'In Stock — Ready to Ship')
-                                const todayStr = new Date().toISOString().split('T')[0]
-                                setUpdateDateInput(todayStr)
-                                setPriceUpdateMsg(null)
-                              }}
-                              className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-[#022B96] hover:bg-[#011a5e] text-white text-xs font-bold rounded-xl transition cursor-pointer shadow-xs active:scale-95"
+                              type="button"
+                              onClick={() => handleTogglePublishPost(p)}
+                              className={`text-xs font-bold px-3 py-1.5 rounded-xl border transition cursor-pointer ${
+                                isPublished
+                                  ? 'bg-amber-50 hover:bg-amber-100 text-amber-800 border-amber-200'
+                                  : 'bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border-emerald-200'
+                              }`}
                             >
-                              <DollarSign className="w-3.5 h-3.5" />
-                              Update Price
+                              {isPublished ? 'Unpublish (Draft)' : 'Publish to Live'}
                             </button>
+
+                            <div className="flex items-center gap-1.5">
+                              {/* Edit Button */}
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setEditingPost(p)
+                                  setDefaultSupplierIdForModal(p.company_id || null)
+                                  setIsProductModalOpen(true)
+                                }}
+                                className="inline-flex items-center gap-1 px-3 py-1.5 bg-[#022B96] hover:bg-[#011a5e] text-white text-xs font-bold rounded-xl transition cursor-pointer shadow-2xs"
+                              >
+                                <Edit3 className="w-3.5 h-3.5" />
+                                Edit
+                              </button>
+
+                              {/* Delete Button */}
+                              <button
+                                type="button"
+                                onClick={() => handleDeletePost(p.id, p.product_name)}
+                                className="p-1.5 rounded-xl text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition cursor-pointer"
+                                title="Delete Product"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            </div>
                           </div>
                         </div>
                       )
@@ -1954,1110 +1241,264 @@ export default function AdminDashboardPage() {
               </div>
             )}
 
+            {/* VIEW 5: BUYER USERS */}
+            {activeNav === 'buyer-users' && (
+              <div className="space-y-6">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                  <div>
+                    <h1 className="text-2xl font-black text-slate-900 tracking-tight">Registered Buyer Users</h1>
+                    <p className="text-xs text-slate-500 mt-1 font-medium">
+                      Commercial seafood buyers registered on the Bokhol platform
+                    </p>
+                  </div>
+                  <div className="relative w-full sm:w-64">
+                    <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
+                    <input
+                      type="text"
+                      placeholder="Search buyer name or email..."
+                      value={buyerSearchQuery}
+                      onChange={(e) => setBuyerSearchQuery(e.target.value)}
+                      className="w-full pl-9 pr-4 py-2 border border-slate-200 rounded-xl text-xs bg-white focus:outline-none focus:ring-2 focus:ring-[#022B96]/20 focus:border-[#022B96]"
+                    />
+                  </div>
+                </div>
 
+                {buyerSuccessMsg && (
+                  <div className="p-3 bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-xl text-xs font-bold flex items-center gap-2">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                    {buyerSuccessMsg}
+                  </div>
+                )}
 
-            {/* VIEW 6: NEWS MANAGEMENT */}
+                {buyerUsersLoading ? (
+                  <div className="bg-white rounded-3xl border border-slate-200 p-16 flex flex-col items-center justify-center gap-3">
+                    <Loader2 className="w-8 h-8 animate-spin text-[#022B96]" />
+                    <p className="text-sm font-bold text-slate-700">Loading Buyer Users...</p>
+                  </div>
+                ) : filteredBuyerUsers.length === 0 ? (
+                  <div className="bg-white rounded-3xl border border-slate-200 p-16 text-center space-y-2">
+                    <Users className="w-10 h-10 mx-auto text-slate-300" />
+                    <p className="text-sm font-bold text-slate-700">No buyer accounts found</p>
+                  </div>
+                ) : (
+                  <div className="bg-white border border-slate-200 rounded-3xl overflow-hidden shadow-xs">
+                    <div className="divide-y divide-slate-100">
+                      {filteredBuyerUsers.map((buyer) => (
+                        <div key={buyer.id} className="p-4 sm:px-6 flex items-center justify-between hover:bg-slate-50 transition">
+                          <div className="flex items-center gap-3 min-w-0">
+                            <div className="w-9 h-9 rounded-full bg-blue-100 text-[#022B96] font-bold text-xs flex items-center justify-center shrink-0">
+                              {buyer.full_name?.charAt(0).toUpperCase() || 'B'}
+                            </div>
+                            <div className="min-w-0">
+                              <p className="text-sm font-bold text-slate-900 truncate">{buyer.full_name || 'Buyer'}</p>
+                              <p className="text-xs text-slate-500 truncate">{buyer.email}</p>
+                            </div>
+                          </div>
+                          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-200">
+                            Buyer
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* VIEW 6: PARTNER BUYERS */}
+            {activeNav === 'partners' && (
+              <div className="space-y-6">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                  <div>
+                    <h1 className="text-2xl font-black text-slate-900 tracking-tight">Partner Buyers</h1>
+                    <p className="text-xs text-slate-500 mt-1 font-medium">Commercial partner logos displayed on the home page</p>
+                  </div>
+                  <button
+                    onClick={() => {
+                      setEditingPartner(null)
+                      setPartnerName('')
+                      setPartnerLogo('')
+                      setPartnerCountry('')
+                      setPartnerWebsite('')
+                      setShowPartnerModal(true)
+                    }}
+                    className="inline-flex items-center gap-2 px-5 py-2.5 bg-[#022B96] hover:bg-[#011a5e] text-white text-xs font-bold rounded-2xl shadow-sm transition cursor-pointer self-start sm:self-auto"
+                  >
+                    <Plus className="w-4 h-4" />
+                    Add Partner
+                  </button>
+                </div>
+
+                {partnerSuccessMsg && (
+                  <div className="p-3 bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-xl text-xs font-bold flex items-center gap-2">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                    {partnerSuccessMsg}
+                  </div>
+                )}
+
+                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
+                  {partnerBuyers.map((partner) => (
+                    <div key={partner.id} className="bg-white border border-slate-200 rounded-2xl p-4 flex flex-col items-center justify-between gap-3 text-center shadow-xs">
+                      <div className="h-16 w-full flex items-center justify-center p-2">
+                        {partner.logo ? (
+                          <img src={partner.logo} alt={partner.name} className="max-h-full max-w-full object-contain" />
+                        ) : (
+                          <Building2 className="w-8 h-8 text-slate-300" />
+                        )}
+                      </div>
+                      <div className="min-w-0 w-full">
+                        <p className="font-bold text-slate-900 text-xs truncate">{partner.name}</p>
+                        <p className="text-[10px] text-slate-400 mt-0.5">{partner.country || 'Europe'}</p>
+                      </div>
+                      <button
+                        onClick={async () => {
+                          if (!confirm(`Remove partner "${partner.name}"?`)) return
+                          await deletePartnerBuyer(partner.id)
+                          setPartnerBuyers((prev) => prev.filter((p) => p.id !== partner.id))
+                        }}
+                        className="text-[10px] font-bold text-rose-600 hover:text-rose-800 transition cursor-pointer"
+                      >
+                        Delete
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* VIEW 7: NEWS ARTICLES */}
             {activeNav === 'news' && (
               <div className="space-y-6">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                   <div>
-                    <h1 className="text-2xl font-black text-slate-900 tracking-tight">Seafood Market News &amp; Articles</h1>
-                    <p className="text-xs text-slate-500 mt-1 font-medium">Publish, compose, and manage market insights broadcasted across the site.</p>
+                    <h1 className="text-2xl font-black text-slate-900 tracking-tight">Market News &amp; Articles</h1>
+                    <p className="text-xs text-slate-500 mt-1 font-medium">Publish, compose, and manage seafood market insights</p>
                   </div>
                   <button
                     onClick={() => setShowAddNewsModal(true)}
                     className="inline-flex items-center gap-2 px-5 py-2.5 bg-[#022B96] hover:bg-[#011a5e] text-white text-xs font-bold rounded-2xl shadow-sm transition cursor-pointer self-start sm:self-auto"
                   >
                     <Plus className="w-4 h-4" />
-                    Publish New Article
+                    Publish Article
                   </button>
                 </div>
 
-                {/* Delete success toast */}
-                {newsSuccessMsg && (
-                  <div className="flex items-center justify-between p-4 bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-2xl text-xs font-bold animate-in fade-in">
-                    <div className="flex items-center gap-2">
-                      <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
-                      <span>{newsSuccessMsg}</span>
-                    </div>
-                    <button onClick={() => setNewsSuccessMsg(null)} className="text-emerald-500 hover:text-emerald-800 p-1">
-                      <X className="w-3.5 h-3.5" />
-                    </button>
-                  </div>
-                )}
-
-                {!isDataLoaded && newsArticles.length === 0 ? (
-                  <div className="bg-white border border-slate-200 rounded-2xl p-16 flex flex-col items-center justify-center gap-3 text-center">
-                    <Loader2 className="w-8 h-8 animate-spin text-[#022B96]" />
-                    <p className="text-sm font-bold text-slate-700">Loading Seafood News &amp; Articles...</p>
-                    <p className="text-xs text-slate-400">Synchronizing live market database</p>
-                  </div>
-                ) : newsArticles.length > 0 ? (
-                  <div className="grid grid-cols-1 gap-4">
-                    {newsArticles.map((article) => (
-                      <div key={article.id} className="bg-white border border-slate-200 rounded-2xl p-5 shadow-xs hover:border-[#022B96]/30 transition flex flex-col sm:flex-row gap-5 items-start sm:items-center justify-between overflow-hidden">
-                        <div className="flex items-start gap-4 flex-1 min-w-0 overflow-hidden">
-                          {article.image ? (
-                            <img src={article.image} alt={article.title} className="w-20 h-20 rounded-xl object-cover border border-slate-200 flex-shrink-0" />
-                          ) : (
-                            <div className="w-20 h-20 rounded-xl bg-blue-50 text-[#022B96] font-bold text-xs flex items-center justify-center flex-shrink-0">News</div>
-                          )}
-                          <div className="space-y-1 min-w-0 overflow-hidden flex-1">
-                            <div className="flex items-center gap-2 flex-wrap">
-                              <span className="text-[10px] font-extrabold uppercase tracking-wider bg-blue-50 text-[#022B96] px-2.5 py-0.5 rounded-full border border-blue-100 shrink-0">
-                                {article.category}
-                              </span>
-                              <span className="text-[11px] text-slate-400 font-medium shrink-0">{article.readTime}</span>
-                            </div>
-                            <h3 className="font-extrabold text-slate-900 text-sm line-clamp-1 break-words">{article.title}</h3>
-                            <p className="text-xs text-slate-500 line-clamp-2 leading-relaxed break-words">{article.excerpt}</p>
-                            <p className="text-[10px] text-slate-400 font-medium truncate">By {article.author} · {article.date}</p>
-                          </div>
-                        </div>
-
-                        <div className="flex items-center gap-2 shrink-0 self-end sm:self-center">
-                          <Link href={`/news/${article.slug}`} target="_blank">
-                            <button className="px-3.5 py-1.5 border border-slate-200 hover:bg-slate-50 text-slate-700 text-xs font-bold rounded-xl transition cursor-pointer">
-                              Preview
-                            </button>
-                          </Link>
-                          <button
-                            onClick={() => {
-                              if (!confirm(`Delete "${article.title}"? This cannot be undone.`)) return
-                              setNewsDeleting(article.id)
-                              deleteNewsArticle(article.id).then(() =>
-                                fetchNewsArticles()
-                              ).then((articles) => {
-                                setNewsArticles(articles)
-                                try { localStorage.setItem('admin_news_articles_cache', JSON.stringify(articles)) } catch (_) {}
-                                setNewsSuccessMsg(`Article "${article.title.slice(0, 40)}${article.title.length > 40 ? '…' : ''}" was deleted.`)
-                                setTimeout(() => setNewsSuccessMsg(null), 4000)
-                              }).finally(() => setNewsDeleting(null))
-                            }}
-                            disabled={newsDeleting === article.id}
-                            className="inline-flex items-center gap-1.5 px-3.5 py-1.5 border border-rose-200 text-rose-600 hover:bg-rose-50 text-xs font-bold rounded-xl transition cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
-                          >
-                            {newsDeleting === article.id ? (
-                              <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                            ) : (
-                              <Trash2 className="w-3.5 h-3.5" />
-                            )}
-                            Delete
-                          </button>
-                        </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  {newsArticles.map((article) => (
+                    <div key={article.id} className="bg-white border border-slate-200 rounded-3xl p-5 flex flex-col justify-between space-y-3 shadow-xs">
+                      <div className="space-y-2">
+                        <span className="text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-blue-50 text-[#022B96] border border-blue-100">
+                          {article.category}
+                        </span>
+                        <h3 className="font-extrabold text-slate-900 text-sm leading-snug">{article.title}</h3>
+                        <p className="text-xs text-slate-500 line-clamp-2">{article.excerpt}</p>
                       </div>
-                    ))}
-                  </div>
-                ) : (
-                  <div className="text-center py-16 bg-white border border-slate-200 rounded-2xl space-y-2">
-                    <Newspaper className="h-10 w-10 text-slate-300 mx-auto" />
-                    <h3 className="text-base font-bold text-slate-800">No News Articles Published Yet</h3>
-                    <p className="text-xs text-slate-500 max-w-sm mx-auto">Publish market updates, trade reports, and regulatory news to inform global seafood buyers.</p>
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* VIEW 7: PARTNER BUYERS MANAGEMENT */}
-            {activeNav === 'partners' && (
-              <div className="space-y-6">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                  <div>
-                    <h1 className="text-2xl font-black text-slate-900 tracking-tight">EU Partner Buyers</h1>
-                    <p className="text-xs text-slate-500 mt-1 font-medium">
-                      Manage buyer partners &amp; brand logos displayed in the Home Screen ticker.
-                    </p>
-                  </div>
-                  <button
-                    onClick={openAddPartnerModal}
-                    className="inline-flex items-center gap-2 px-5 py-2.5 bg-[#022B96] hover:bg-[#011a5e] text-white text-xs font-bold rounded-2xl shadow-sm transition cursor-pointer self-start sm:self-auto"
-                  >
-                    <Plus className="w-4 h-4" />
-                    Add Partner Buyer
-                  </button>
-                </div>
-
-                {/* Success Banner */}
-                {partnerSuccessMsg && (
-                  <div className="flex items-center justify-between p-4 bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-2xl text-xs font-bold animate-in fade-in">
-                    <div className="flex items-center gap-2">
-                      <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
-                      <span>{partnerSuccessMsg}</span>
-                    </div>
-                    <button
-                      onClick={() => setPartnerSuccessMsg(null)}
-                      className="text-emerald-500 hover:text-emerald-800 p-1"
-                    >
-                      <X className="w-3.5 h-3.5" />
-                    </button>
-                  </div>
-                )}
-
-                {/* Info & Search Bar */}
-                <div className="flex flex-col sm:flex-row gap-3 items-stretch sm:items-center justify-between">
-                  <div className="relative flex-1 max-w-md">
-                    <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
-                    <input
-                      type="text"
-                      placeholder="Search partner buyers by name, country..."
-                      value={partnerSearchQuery}
-                      onChange={(e) => setPartnerSearchQuery(e.target.value)}
-                      className="w-full pl-9 pr-4 py-2 bg-white border border-slate-200 rounded-xl text-xs text-slate-900 placeholder:text-slate-400 outline-none focus:border-[#022B96] focus:ring-2 focus:ring-[#022B96]/10 transition"
-                    />
-                  </div>
-                  <div className="flex items-center gap-2 text-xs font-semibold text-slate-500">
-                    <span className="inline-block h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
-                    <span>Live on Home Screen ({partnerBuyers.length} partners)</span>
-                  </div>
-                </div>
-
-                {/* Partner Buyers Grid */}
-                {!isDataLoaded && filteredPartnerBuyers.length === 0 ? (
-                  <div className="bg-white border border-slate-200 rounded-2xl p-16 flex flex-col items-center justify-center gap-3 text-center">
-                    <Loader2 className="w-8 h-8 animate-spin text-[#022B96]" />
-                    <p className="text-sm font-bold text-slate-700">Loading Partner Buyers...</p>
-                    <p className="text-xs text-slate-400">Fetching brand partners for Home Screen</p>
-                  </div>
-                ) : filteredPartnerBuyers.length > 0 ? (
-                  <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden">
-                    {filteredPartnerBuyers.map((partner, idx) => (
-                      <div
-                        key={partner.id}
-                        className={`flex items-center gap-4 px-5 py-3.5 hover:bg-slate-50 transition-colors ${idx !== filteredPartnerBuyers.length - 1 ? 'border-b border-slate-100' : ''}`}
-                      >
-                        {/* Logo */}
-                        <div className="w-9 h-9 rounded-full bg-slate-50 border border-slate-200 flex items-center justify-center shrink-0 overflow-hidden p-1">
-                          <img
-                            src={partner.logo}
-                            alt={partner.name}
-                            className="max-h-full max-w-full object-contain mix-blend-multiply"
-                          />
-                        </div>
-
-                        {/* Name & Country */}
-                        <div className="flex-1 min-w-0">
-                          <p className="text-sm font-semibold text-slate-900 truncate">{partner.name}</p>
-                          <div className="flex items-center gap-2 text-xs text-slate-400">
-                            {partner.country && <span>{partner.country}</span>}
-                            {partner.website && (
-                              <a
-                                href={partner.website.startsWith('http') ? partner.website : `https://${partner.website}`}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="text-[#022B96] hover:underline inline-flex items-center gap-1"
-                              >
-                                <Globe className="w-3 h-3" />
-                                Website
-                              </a>
-                            )}
-                          </div>
-                        </div>
-
-                        {/* Actions */}
-                        <div className="flex items-center gap-1.5 shrink-0">
-                          <button
-                            onClick={() => openEditPartnerModal(partner)}
-                            className="text-xs font-bold px-3 py-1.5 rounded-lg border border-slate-200 hover:bg-slate-50 text-slate-700 transition cursor-pointer inline-flex items-center gap-1"
-                          >
-                            <Edit3 className="w-3.5 h-3.5" />
-                            Edit
-                          </button>
-                          <button
-                            onClick={() => handleDeletePartner(partner.id, partner.name)}
-                            className="p-1.5 rounded-lg text-slate-400 hover:text-rose-500 hover:bg-rose-50 transition cursor-pointer"
-                            title="Delete"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <div className="text-center py-16 bg-white border border-slate-200 rounded-2xl space-y-3">
-                    <Handshake className="h-10 w-10 text-slate-300 mx-auto" />
-                    <h3 className="text-base font-bold text-slate-800">No Partner Buyers Found</h3>
-                    <p className="text-xs text-slate-500 max-w-sm mx-auto">
-                      Add seafood buyers, restaurant chains, and European hospitality partners to showcase them on the Bokhol homepage.
-                    </p>
-                    <button
-                      onClick={openAddPartnerModal}
-                      className="inline-flex items-center gap-1.5 px-4 py-2 bg-[#022B96] text-white text-xs font-bold rounded-xl shadow-sm transition hover:bg-[#011a5e]"
-                    >
-                      <Plus className="w-4 h-4" />
-                      Add First Partner Buyer
-                    </button>
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* VIEW: REGISTERED BUYER USERS */}
-            {activeNav === 'buyer-users' && (
-              <div className="space-y-6">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                  <div>
-                    <h1 className="text-2xl font-black text-slate-900 tracking-tight">Buyer Users</h1>
-                    <p className="text-xs text-slate-500 mt-1 font-medium">
-                      All registered buyers and procurement accounts on Bokhol. View details and manage accounts.
-                    </p>
-                  </div>
-                  <span className="text-xs font-bold bg-blue-50 text-[#022B96] px-3.5 py-1.5 rounded-full border border-blue-200/60 shrink-0 self-start sm:self-center">
-                    {buyerUsers.length} Active {buyerUsers.length === 1 ? 'Buyer' : 'Buyers'}
-                  </span>
-                </div>
-
-                {buyerSuccessMsg && (
-                  <div className="bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-bold px-4 py-3 rounded-xl flex items-center gap-2">
-                    <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
-                    <span>{buyerSuccessMsg}</span>
-                  </div>
-                )}
-
-                {/* Search Bar */}
-                <div className="relative max-w-md">
-                  <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
-                  <input
-                    type="text"
-                    value={buyerSearchQuery}
-                    onChange={(e) => setBuyerSearchQuery(e.target.value)}
-                    placeholder="Search buyers by name, email, phone, ID..."
-                    className="w-full pl-10 pr-4 py-2.5 bg-white border border-slate-200 rounded-xl text-xs font-medium text-slate-800 placeholder-slate-400 outline-none focus:border-[#022B96] focus:ring-1 focus:ring-[#022B96] transition"
-                  />
-                  {buyerSearchQuery && (
-                    <button
-                      onClick={() => setBuyerSearchQuery('')}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
-                    >
-                      <X className="w-3.5 h-3.5" />
-                    </button>
-                  )}
-                </div>
-
-                {/* Buyer Users List */}
-                {buyerUsersLoading && buyerUsers.length === 0 ? (
-                  <div className="bg-white border border-slate-200 rounded-2xl p-16 flex flex-col items-center justify-center gap-3 text-center">
-                    <Loader2 className="w-8 h-8 animate-spin text-[#022B96]" />
-                    <p className="text-sm font-bold text-slate-700">Loading Buyer Accounts...</p>
-                    <p className="text-xs text-slate-400">Fetching registered buyers from database</p>
-                  </div>
-                ) : filteredBuyerUsers.length === 0 ? (
-                  <div className="bg-white border border-slate-200 rounded-2xl p-16 text-center space-y-2">
-                    <Users className="w-12 h-12 text-slate-200 mx-auto mb-2" />
-                    <h3 className="text-sm font-bold text-slate-800">
-                      {buyerSearchQuery ? 'No Matching Buyers Found' : 'No Buyer Users Registered Yet'}
-                    </h3>
-                    <p className="text-xs text-slate-400">
-                      {buyerSearchQuery
-                        ? `No buyers match "${buyerSearchQuery}"`
-                        : 'When buyers register accounts on Bokhol, their detailed profiles appear here.'}
-                    </p>
-                  </div>
-                ) : (
-                  <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden">
-                    {filteredBuyerUsers.map((buyer, idx) => {
-                      const initials = (buyer.full_name || 'B')
-                        .split(' ')
-                        .filter(Boolean)
-                        .map((w: string) => w.charAt(0))
-                        .slice(0, 2)
-                        .join('')
-                        .toUpperCase() || 'B'
-
-                      return (
-                        <div
-                          key={buyer.id}
-                          className={`flex items-center gap-4 px-5 py-3.5 hover:bg-slate-50 transition-colors ${idx !== filteredBuyerUsers.length - 1 ? 'border-b border-slate-100' : ''}`}
+                      <div className="flex items-center justify-between pt-2 border-t border-slate-100 text-[11px] text-slate-400">
+                        <span>{article.date}</span>
+                        <button
+                          onClick={async () => {
+                            if (!confirm(`Delete article "${article.title}"?`)) return
+                            await deleteNewsArticle(article.id)
+                            setNewsArticles((prev) => prev.filter((a) => a.id !== article.id))
+                          }}
+                          className="text-rose-600 font-bold hover:underline cursor-pointer"
                         >
-                          {/* Circular Avatar */}
-                          <div className="w-9 h-9 rounded-full bg-gradient-to-br from-[#022B96] to-blue-600 text-white font-bold text-xs flex items-center justify-center shrink-0">
-                            {initials}
-                          </div>
-
-                          {/* Name & Email */}
-                          <div className="flex-1 min-w-0">
-                            <p className="text-sm font-semibold text-slate-900 truncate">{buyer.full_name || 'Buyer User'}</p>
-                            <p className="text-xs text-slate-400 truncate">{buyer.email || '—'}</p>
-                          </div>
-
-                          {/* Delete */}
-                          <button
-                            onClick={() => handleDeleteBuyer(buyer.id, buyer.full_name || 'Buyer')}
-                            disabled={deletingBuyerId === buyer.id}
-                            className="shrink-0 p-2 rounded-lg text-slate-400 hover:text-rose-500 hover:bg-rose-50 transition disabled:opacity-40 cursor-pointer"
-                            title="Delete Account"
-                          >
-                            {deletingBuyerId === buyer.id ? (
-                              <Loader2 className="w-4 h-4 animate-spin" />
-                            ) : (
-                              <Trash2 className="w-4 h-4" />
-                            )}
-                          </button>
-                        </div>
-                      )
-                    })}
-                  </div>
-                )}
+                          Delete
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
               </div>
             )}
-
-
-          </div>
-
-          {/* Footer */}
-          <div className="pt-8 border-t border-slate-200/80 flex items-center justify-between text-[11px] text-slate-400 font-semibold">
-            <span>Bokhol Administration Platform</span>
-            <span>All System Data Synchronized</span>
           </div>
         </main>
       </div>
 
-      {/* ── Company Detail Modal ── */}
-      {selectedCompanyModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4 overflow-y-auto">
-          <div className="bg-white rounded-3xl border border-slate-200 max-w-md w-full shadow-2xl overflow-hidden">
-            <div className="bg-[#022B96] text-white p-6 relative">
-              <button
-                onClick={() => setSelectedCompanyModal(null)}
-                className="absolute top-4 right-4 text-white/80 hover:text-white p-1 rounded-full hover:bg-white/10 transition cursor-pointer"
-              >
-                <X className="w-5 h-5" />
-              </button>
-              <span className="text-[10px] font-extrabold uppercase tracking-widest text-blue-200 bg-white/15 px-2.5 py-0.5 rounded-full mb-2 inline-block">
-                Claim Verification Details
-              </span>
-              <h3 className="text-xl font-black text-white">{selectedCompanyModal.name}</h3>
-              <p className="text-xs text-blue-100 mt-0.5">{selectedCompanyModal.category} · {selectedCompanyModal.country}</p>
+      {/* ══ PRODUCT PUBLISH MODAL ══════════════════════════════════════════ */}
+      <ProductPublishModal
+        isOpen={isProductModalOpen}
+        onClose={() => setIsProductModalOpen(false)}
+        onSaved={handleProductSaved}
+        initialPost={editingPost}
+        defaultSupplierId={defaultSupplierIdForModal}
+        suppliers={suppliers}
+      />
+
+      {/* ══ DELETE SUPPLIER CONFIRM MODAL ═════════════════════════════════ */}
+      {companyToDelete && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-150">
+          <div className="bg-white rounded-3xl p-6 sm:p-7 max-w-sm w-full shadow-2xl border border-slate-100 text-center space-y-4">
+            <div className="w-12 h-12 rounded-2xl bg-rose-50 text-rose-600 flex items-center justify-center mx-auto border border-rose-100">
+              <Trash2 className="w-6 h-6" />
             </div>
-
-            <div className="p-6 space-y-4 text-xs text-slate-700">
-              {selectedCompanyModal.claimRequest && (
-                <>
-                  <div className="bg-slate-50 border border-slate-200/80 p-4 rounded-2xl space-y-1.5">
-                    <p className="font-bold text-slate-900 text-xs mb-2 border-b border-slate-200 pb-1">Applicant Details</p>
-                    <p><strong className="text-slate-900">Name:</strong> {selectedCompanyModal.claimRequest.fullName}</p>
-                    {selectedCompanyModal.claimRequest.username && (
-                      <p><strong className="text-slate-900">Username:</strong> @{selectedCompanyModal.claimRequest.username}</p>
-                    )}
-                    <p><strong className="text-slate-900">Job Title:</strong> {selectedCompanyModal.claimRequest.jobTitle}</p>
-                    <p><strong className="text-slate-900">Business Email:</strong> {selectedCompanyModal.claimRequest.businessEmail}</p>
-                    {selectedCompanyModal.claimRequest.phone && (
-                      <p><strong className="text-slate-900">Phone:</strong> {selectedCompanyModal.claimRequest.phone}</p>
-                    )}
-                  </div>
-
-                  {/* Domain Comparison in Modal */}
-                  {(() => {
-                    const cDomain = selectedCompanyModal.domain || selectedCompanyModal.email?.split('@')[1] || selectedCompanyModal.website?.replace(/https?:\/\/(www\.)?/, '').split('/')[0] || ''
-                    const aDomain = selectedCompanyModal.claimRequest.businessEmail?.split('@')[1] || ''
-                    const isMatch = Boolean(cDomain && aDomain && cDomain.toLowerCase() === aDomain.toLowerCase())
-
-                    return (
-                      <div className="bg-slate-50 border border-slate-200/80 p-4 rounded-2xl space-y-2">
-                        <div className="flex items-center justify-between border-b border-slate-200 pb-1.5">
-                          <span className="font-bold text-slate-900">Domain Verification Check</span>
-                          {isMatch ? (
-                            <span className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-700 bg-emerald-100/80 px-2 py-0.5 rounded-full">
-                              <Check className="w-3 h-3 text-emerald-600" />
-                              Corporate Email Match
-                            </span>
-                          ) : (
-                            <span className="inline-flex items-center gap-1 text-[11px] font-bold text-amber-800 bg-amber-100/80 px-2 py-0.5 rounded-full">
-                              <Info className="w-3 h-3 text-amber-600" />
-                              Different Email Domain
-                            </span>
-                          )}
-                        </div>
-                        <div className="grid grid-cols-2 gap-2 pt-1 text-slate-600">
-                          <div>
-                            <span className="text-[10px] uppercase font-bold text-slate-400 block">Website Domain</span>
-                            <span className="font-semibold text-slate-800 font-mono text-[11px]">@{cDomain || 'N/A'}</span>
-                          </div>
-                          <div>
-                            <span className="text-[10px] uppercase font-bold text-slate-400 block">Applicant Domain</span>
-                            <span className="font-semibold text-slate-800 font-mono text-[11px]">@{aDomain || 'N/A'}</span>
-                          </div>
-                        </div>
-                        {!isMatch && (
-                          <p className="text-[11px] text-amber-900 bg-amber-50/90 border border-amber-200/70 p-2.5 rounded-xl leading-relaxed mt-1.5">
-                            <strong>What this means:</strong> The applicant used <code>@{aDomain}</code> instead of the website domain <code>@{cDomain}</code>. This is common when suppliers apply with personal emails (Gmail) or agency accounts. As admin, you can approve if you know the applicant.
-                          </p>
-                        )}
-                      </div>
-                    )
-                  })()}
-                </>
-              )}
-              <div className="space-y-1 text-slate-600">
-                <p><strong className="text-slate-900">Official Website:</strong> {selectedCompanyModal.website}</p>
-                <p><strong className="text-slate-900">Official Address:</strong> {selectedCompanyModal.address}</p>
-              </div>
-              {selectedCompanyModal.status === 'claim_requested' && (
-                <div className="pt-2">
-                  <label className="block font-bold text-slate-900 text-xs mb-1">Rejection Reason (Optional):</label>
-                  <input
-                    type="text"
-                    placeholder="e.g. Email domain mismatch"
-                    value={rejectionReasonInput}
-                    onChange={(e) => setRejectionReasonInput(e.target.value)}
-                    className="w-full px-3 py-2 border border-slate-200 rounded-xl text-xs outline-none focus:border-[#022B96]"
-                  />
-                </div>
-              )}
+            <div className="space-y-1.5">
+              <h3 className="text-base font-black text-slate-900">Delete Supplier Profile?</h3>
+              <p className="text-xs text-slate-500 leading-relaxed">
+                Are you sure you want to permanently delete <strong className="text-slate-800">&quot;{companyToDelete.name}&quot;</strong>?
+                This will also delete associated products.
+              </p>
             </div>
-
-            <div className="bg-slate-50 border-t border-slate-200 px-6 py-4 flex items-center justify-end gap-2">
+            <div className="grid grid-cols-2 gap-2.5 pt-2">
               <button
-                onClick={() => setSelectedCompanyModal(null)}
-                className="px-4 py-2 border border-slate-200 bg-white text-slate-700 font-bold rounded-xl text-xs cursor-pointer"
+                type="button"
+                disabled={isActionProcessing}
+                onClick={() => setCompanyToDelete(null)}
+                className="w-full py-2.5 px-4 rounded-xl border border-slate-200 text-slate-700 font-bold text-xs hover:bg-slate-50 transition cursor-pointer"
               >
-                Close
+                Cancel
               </button>
-              {selectedCompanyModal.status === 'claim_requested' && (
-                <>
-                  <button
-                    onClick={() => handleRejectClaim(selectedCompanyModal.id)}
-                    className="px-4 py-2 border border-rose-200 bg-white text-rose-600 font-bold rounded-xl text-xs cursor-pointer"
-                  >
-                    Reject
-                  </button>
-                  <button
-                    onClick={() => handleApproveClaim(selectedCompanyModal.id)}
-                    className="px-4 py-2 bg-[#022B96] text-white font-bold rounded-xl text-xs shadow-xs cursor-pointer"
-                  >
-                    Approve &amp; Verify
-                  </button>
-                </>
-              )}
+              <button
+                type="button"
+                disabled={isActionProcessing}
+                onClick={confirmDeleteSupplier}
+                className="w-full py-2.5 px-4 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs shadow-sm transition cursor-pointer flex items-center justify-center gap-1.5"
+              >
+                {isActionProcessing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
+                <span>Yes, Delete</span>
+              </button>
             </div>
           </div>
         </div>
       )}
 
-      {/* ══ UPDATE PRICE MODAL ══════════════════════════════════════════ */}
-      {updatingPostModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-xs p-4">
-          <div className="bg-white rounded-2xl border border-slate-200/90 max-w-md w-full shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-150">
-            {/* Clean Header */}
-            <div className="px-6 pt-5 pb-4 border-b border-slate-100 flex items-start justify-between bg-white">
-              <div className="space-y-1 min-w-0 pr-3">
-                <span className="text-[10px] font-extrabold uppercase tracking-wider text-[#022B96] bg-blue-50 border border-blue-200/60 px-2.5 py-0.5 rounded-full inline-block">
-                  Admin Price Control
-                </span>
-                <h3 className="text-base font-extrabold text-slate-900 tracking-tight truncate">
-                  {updatingPostModal.product_name}
-                </h3>
-                {(() => {
-                  const modalCompany = companies.find((c) => c.id === updatingPostModal.company_id)
-                  const modalName = updatingPostModal.company_name || modalCompany?.name || 'Verified Supplier'
-                  const modalLogo = updatingPostModal.company_logo || modalCompany?.logoUrl || (modalCompany as any)?.logo_url || null
-                  return (
-                    <div className="flex items-center gap-2 text-xs text-slate-500 font-medium">
-                      {modalLogo ? (
-                        <img
-                          src={modalLogo}
-                          alt={modalName}
-                          className="w-4 h-4 rounded object-contain border border-slate-200 bg-white shrink-0"
-                        />
-                      ) : (
-                        <div className="w-4 h-4 rounded bg-slate-100 text-slate-700 flex items-center justify-center font-bold text-[9px] shrink-0">
-                          {modalName !== 'Verified Supplier' ? modalName.charAt(0).toUpperCase() : <Building2 className="w-2.5 h-2.5" />}
-                        </div>
-                      )}
-                      <span className="truncate">
-                        Supplier: <strong className="text-slate-800 font-bold">{modalName}</strong>
-                      </span>
-                    </div>
-                  )
-                })()}
-              </div>
+      {/* ══ DELETE PRODUCT CONFIRM MODAL ══════════════════════════════════ */}
+      {postToDelete && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-150">
+          <div className="bg-white rounded-3xl p-6 sm:p-7 max-w-sm w-full shadow-2xl border border-slate-100 text-center space-y-4">
+            <div className="w-12 h-12 rounded-2xl bg-rose-50 text-rose-600 flex items-center justify-center mx-auto border border-rose-100">
+              <Trash2 className="w-6 h-6" />
+            </div>
+            <div className="space-y-1.5">
+              <h3 className="text-base font-black text-slate-900">Delete Product Offer?</h3>
+              <p className="text-xs text-slate-500 leading-relaxed">
+                Are you sure you want to permanently delete <strong className="text-slate-800">&quot;{postToDelete.title}&quot;</strong>?
+              </p>
+            </div>
+            <div className="grid grid-cols-2 gap-2.5 pt-2">
               <button
-                onClick={() => setUpdatingPostModal(null)}
-                className="text-slate-400 hover:text-slate-600 hover:bg-slate-100 p-1.5 rounded-lg transition cursor-pointer shrink-0 -mr-1"
-                title="Close"
+                type="button"
+                disabled={isActionProcessing}
+                onClick={() => setPostToDelete(null)}
+                className="w-full py-2.5 px-4 rounded-xl border border-slate-200 text-slate-700 font-bold text-xs hover:bg-slate-50 transition cursor-pointer"
               >
-                <X className="w-4 h-4" />
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={isActionProcessing}
+                onClick={confirmDeletePost}
+                className="w-full py-2.5 px-4 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs shadow-sm transition cursor-pointer flex items-center justify-center gap-1.5"
+              >
+                {isActionProcessing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
+                <span>Yes, Delete</span>
               </button>
             </div>
-
-            {/* Clean Form */}
-            <form
-              onSubmit={async (e) => {
-                e.preventDefault()
-                const post = updatingPostModal
-                const numMinPrice = parseFloat(updatePriceInput)
-                const numMaxPrice = parseFloat(updateMaxPriceInput) || 0
-                if (!post || isNaN(numMinPrice) || numMinPrice < 0) return
-
-                const validMaxPrice = numMaxPrice > numMinPrice ? numMaxPrice : 0
-                
-                // Formulate admin update timestamp
-                const chosenDate = updateDateInput
-                  ? new Date(updateDateInput + 'T12:00:00Z').toISOString()
-                  : new Date().toISOString()
-
-                // Update via server API (bypasses RLS — admin can update any post)
-                try {
-                  // Read existing content from DB; fall back to local post state if read fails
-                  let details: any = {}
-                  try {
-                    const { data: existingPost } = await supabase
-                      .from('supplier_posts')
-                      .select('content')
-                      .eq('id', post.id)
-                      .maybeSingle()
-                    if (existingPost?.content) {
-                      details = JSON.parse(existingPost.content)
-                    }
-                  } catch (_) {
-                    // If read fails, we still proceed with a fresh details object
-                    // built from the known fields on the post
-                    details = {
-                      productName: post.product_name,
-                      countryOfOrigin: post.country_of_origin,
-                      freshFrozen: post.fresh_frozen,
-                      sizeWeight: post.size_weight,
-                      packagingFillet: post.packaging,
-                      location: post.location,
-                      companyName: post.company_name,
-                    }
-                  }
-
-                  // Merge in the new price / availability fields
-                  details.pricePerKg = numMinPrice
-                  details.minPricePerKg = numMinPrice
-                  details.maxPricePerKg = validMaxPrice > 0 ? validMaxPrice : undefined
-                  details.currency = updateCurrencyInput
-                  details.availability = updateAvailInput
-                  details.lastUpdated = chosenDate
-                  details.lastAdminUpdate = chosenDate
-
-                  const res = await fetch('/api/supplier/posts', {
-                    method: 'PATCH',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                      postId: post.id,
-                      content: JSON.stringify(details),
-                      updated_at: chosenDate,
-                    }),
-                  })
-                  if (!res.ok) {
-                    const errData = await res.json().catch(() => ({}))
-                    console.error('Admin price update failed:', errData)
-                  }
-                } catch (err) {
-                  console.error('Failed to update price:', err)
-                }
-
-                setSupplierPosts(prev => {
-                  const updated = prev.map(p => p.id === post.id ? {
-                    ...p,
-                    price_per_kg: numMinPrice,
-                    max_price_per_kg: validMaxPrice,
-                    currency: updateCurrencyInput,
-                    availability: updateAvailInput,
-                    updated_at: chosenDate,
-                  } : p)
-                  try { localStorage.setItem('admin_supplier_posts_cache', JSON.stringify(updated)) } catch (_) {}
-                  return updated
-                })
-                const priceSummary = validMaxPrice > 0
-                  ? `${updateCurrencyInput} ${numMinPrice.toFixed(2)} – ${validMaxPrice.toFixed(2)}/kg`
-                  : `${updateCurrencyInput} ${numMinPrice.toFixed(2)}/kg`
-                setPriceUpdateMsg(`"${post.product_name}" updated → ${priceSummary}`)
-                setUpdatingPostModal(null)
-              }}
-              className="p-6 space-y-4 bg-white"
-            >
-              {/* Price per KG with Min and Max */}
-              <div>
-                <label className="block text-[11px] font-bold uppercase text-slate-500 tracking-wider mb-1.5">
-                  Price per KG *
-                </label>
-                <div className="flex items-center gap-2">
-                  <select
-                    value={updateCurrencyInput}
-                    onChange={(e) => setUpdateCurrencyInput(e.target.value)}
-                    className="h-[38px] bg-slate-50 border border-slate-200 text-slate-800 font-bold rounded-xl px-2.5 text-xs outline-none focus:border-[#022B96] focus:bg-white transition cursor-pointer shrink-0"
-                  >
-                    <option>EUR</option>
-                    <option>USD</option>
-                    <option>GBP</option>
-                  </select>
-
-                  <div className="relative flex-1">
-                    <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[10px] font-bold uppercase tracking-wider text-slate-400 pointer-events-none">
-                      Min
-                    </span>
-                    <input
-                      type="number"
-                      required
-                      min="0"
-                      step="0.01"
-                      placeholder="0.00"
-                      value={updatePriceInput}
-                      onChange={(e) => setUpdatePriceInput(e.target.value)}
-                      className="w-full h-[38px] bg-slate-50 border border-slate-200 text-slate-900 font-bold rounded-xl pl-10 pr-3 text-xs outline-none focus:border-[#022B96] focus:bg-white transition"
-                      autoFocus
-                    />
-                  </div>
-
-                  <span className="text-slate-300 font-bold text-sm shrink-0">—</span>
-
-                  <div className="relative flex-1">
-                    <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[10px] font-bold uppercase tracking-wider text-slate-400 pointer-events-none">
-                      Max
-                    </span>
-                    <input
-                      type="number"
-                      min="0"
-                      step="0.01"
-                      placeholder="Optional"
-                      value={updateMaxPriceInput}
-                      onChange={(e) => setUpdateMaxPriceInput(e.target.value)}
-                      className="w-full h-[38px] bg-slate-50 border border-slate-200 text-slate-900 font-bold rounded-xl pl-11 pr-3 text-xs outline-none focus:border-[#022B96] focus:bg-white transition"
-                    />
-                  </div>
-                </div>
-                <p className="text-[10px] text-slate-400 mt-1.5 font-medium">
-                  Enter Min price (required) and optional Max price for a verified range.
-                </p>
-              </div>
-
-              {/* Availability */}
-              <div>
-                <label className="block text-[11px] font-bold uppercase text-slate-500 tracking-wider mb-1.5">
-                  Availability
-                </label>
-                <select
-                  value={updateAvailInput}
-                  onChange={(e) => setUpdateAvailInput(e.target.value)}
-                  className="w-full h-[38px] bg-slate-50 border border-slate-200 text-slate-800 font-semibold rounded-xl px-3 text-xs outline-none focus:border-[#022B96] focus:bg-white transition cursor-pointer"
-                >
-                  <option>In Stock — Ready to Ship</option>
-                  <option>Available within 7 days</option>
-                  <option>Available within 2 weeks</option>
-                  <option>Available within 1 month</option>
-                  <option>Pre-order Only</option>
-                  <option>Seasonal</option>
-                </select>
-              </div>
-
-              {/* Last Update Date */}
-              <div>
-                <label className="block text-[11px] font-bold uppercase text-slate-500 tracking-wider mb-1.5">
-                  Last Update Date *
-                </label>
-                <div className="relative">
-                  <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
-                  <input
-                    type="date"
-                    required
-                    value={updateDateInput}
-                    onChange={(e) => setUpdateDateInput(e.target.value)}
-                    className="w-full h-[38px] bg-slate-50 border border-slate-200 text-slate-800 font-semibold rounded-xl pl-9 pr-3 text-xs outline-none focus:border-[#022B96] focus:bg-white transition cursor-pointer"
-                  />
-                </div>
-                <p className="text-[10px] text-slate-400 mt-1 font-medium">
-                  Sets the verified price update date for buyers and market intelligence.
-                </p>
-              </div>
-
-              {/* Actions */}
-              <div className="flex gap-2.5 pt-2">
-                <button
-                  type="button"
-                  onClick={() => setUpdatingPostModal(null)}
-                  className="flex-1 h-[38px] border border-slate-200 text-slate-600 font-bold rounded-xl text-xs hover:bg-slate-50 transition cursor-pointer"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="flex-1 h-[38px] bg-[#022B96] hover:bg-[#011a5e] text-white font-bold rounded-xl text-xs transition cursor-pointer flex items-center justify-center gap-1.5 shadow-xs active:scale-95"
-                >
-                  <DollarSign className="h-3.5 w-3.5" />
-                  Save Update
-                </button>
-              </div>
-            </form>
           </div>
         </div>
       )}
 
-      {/* ══ PUBLISH NEWS MODAL ══════════════════════════════════════════ */}
-      {showAddNewsModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4 overflow-y-auto">
-          <div className="bg-white rounded-2xl border border-slate-200 max-w-md w-full shadow-2xl overflow-hidden">
-
-            {/* Header */}
-            <div className="flex items-center justify-between px-6 pt-6 pb-4 border-b border-slate-100">
-              <div>
-                <h3 className="text-base font-extrabold text-slate-900 tracking-tight">Publish News Article</h3>
-                <p className="text-xs text-slate-400 mt-0.5 font-medium">Broadcast market updates across Bokhol</p>
-              </div>
-              <button
-                onClick={() => setShowAddNewsModal(false)}
-                className="w-8 h-8 flex items-center justify-center rounded-xl hover:bg-slate-100 text-slate-400 hover:text-slate-700 transition cursor-pointer"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-
-            {newsFormError && (
-              <div className="mx-6 mt-4 p-3 bg-rose-50 border border-rose-200 text-rose-700 rounded-xl text-xs font-semibold flex items-center gap-2">
-                <AlertCircle className="w-4 h-4 shrink-0" />
-                <span>{newsFormError}</span>
-              </div>
-            )}
-
-            <form
-              onSubmit={async (e) => {
-                e.preventDefault()
-                if (!newsTitle.trim() || !newsExcerpt.trim()) {
-                  setNewsFormError('Please provide both a Title and a Summary.')
-                  return
-                }
-
-                const slug = newsTitle
-                  .toLowerCase()
-                  .replace(/[^a-z0-9]+/g, '-')
-                  .replace(/(^-|-$)+/g, '')
-
-                const categoryColors: Record<string, string> = {
-                  'Market Update': 'bg-blue-50 text-[#022B96]',
-                  'Trade': 'bg-emerald-50 text-emerald-700',
-                  'Regulation': 'bg-orange-50 text-orange-700',
-                  'Sustainability': 'bg-teal-50 text-teal-700',
-                }
-
-                setNewsFormError(null)
-                try {
-                  await addNewsArticle({
-                    slug,
-                    title: newsTitle.trim(),
-                    category: newsCategory,
-                    categoryColor: categoryColors[newsCategory] || 'bg-blue-50 text-[#022B96]',
-                    excerpt: newsExcerpt.trim(),
-                    author: newsAuthor.trim() || 'Bokhol Research',
-                    date: new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' }),
-                    readTime: newsReadTime.trim() || '3 min read',
-                    image: newsImageUrl.trim() || 'https://images.unsplash.com/photo-1544551763-46a013bb70d5?w=800&q=80',
-                  })
-                  // Re-fetch from Supabase so the list is authoritative
-                  const articles = await fetchNewsArticles()
-                  setNewsArticles(articles)
-                  setShowAddNewsModal(false)
-                  setNewsTitle('')
-                  setNewsExcerpt('')
-                  setNewsImageUrl('https://images.unsplash.com/photo-1544551763-46a013bb70d5?w=800&q=80')
-                  setNewsSuccessMsg(`Article "${newsTitle.trim().slice(0, 50)}" published successfully.`)
-                  setTimeout(() => setNewsSuccessMsg(null), 5000)
-                } catch (err: any) {
-                  setNewsFormError(err?.message || 'Failed to publish article. Please try again.')
-                }
-              }}
-              className="px-6 py-5 space-y-4"
-
-            >
-              {/* Title */}
-              <div className="space-y-1.5">
-                <label className="block text-[11px] font-bold uppercase tracking-widest text-slate-500">
-                  Title <span className="text-rose-400">*</span>
-                </label>
-                <input
-                  type="text"
-                  required
-                  autoFocus
-                  placeholder="e.g. Global Salmon Prices Rise 12% in Q3"
-                  value={newsTitle}
-                  onChange={(e) => setNewsTitle(e.target.value)}
-                  className="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-sm text-slate-900 font-medium outline-none focus:border-[#022B96] focus:ring-2 focus:ring-[#022B96]/10 transition placeholder:text-slate-300"
-                />
-              </div>
-
-              {/* Cover Image Upload Section */}
-              <div className="space-y-2">
-                <label className="block text-[11px] font-bold uppercase tracking-widest text-slate-500">
-                  Article Cover Image
-                </label>
-
-                {newsImageUrl ? (
-                  <div className="relative border border-slate-200 rounded-xl p-3 bg-slate-50 flex items-center justify-between">
-                    <div className="flex items-center gap-3 min-w-0">
-                      <div className="h-14 w-20 rounded-lg overflow-hidden bg-slate-200 border border-slate-300 shrink-0">
-                        <img
-                          src={newsImageUrl}
-                          alt="Cover preview"
-                          className="h-full w-full object-cover"
-                        />
-                      </div>
-                      <div className="text-xs min-w-0">
-                        <p className="font-bold text-slate-800 truncate">Cover Image Selected</p>
-                        <p className="text-[10px] text-slate-400">Featured on news page &amp; feeds</p>
-                      </div>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => setNewsImageUrl('')}
-                      className="px-2.5 py-1 text-xs text-rose-600 hover:bg-rose-50 rounded-lg font-bold transition cursor-pointer shrink-0"
-                    >
-                      Change
-                    </button>
-                  </div>
-                ) : (
-                  <div className="space-y-2">
-                    <label className="flex flex-col items-center justify-center border-2 border-dashed border-slate-200 hover:border-[#022B96] rounded-2xl p-4 bg-slate-50/50 hover:bg-blue-50/20 cursor-pointer transition text-center group">
-                      <Upload className="w-6 h-6 text-slate-400 group-hover:text-[#022B96] mb-1.5 transition" />
-                      <span className="text-xs font-bold text-slate-700 group-hover:text-[#022B96]">
-                        Click to upload cover photo
-                      </span>
-                      <span className="text-[10px] text-slate-400 mt-0.5">
-                        PNG, JPG, WebP (max 5MB)
-                      </span>
-                      <input
-                        type="file"
-                        accept="image/*"
-                        onChange={handleNewsImageUpload}
-                        className="hidden"
-                      />
-                    </label>
-
-                    <div className="text-center">
-                      <span className="text-[10px] uppercase font-bold text-slate-400">or paste image URL</span>
-                    </div>
-                    <input
-                      type="text"
-                      placeholder="e.g. https://images.unsplash.com/..."
-                      value={newsImageUrl}
-                      onChange={(e) => setNewsImageUrl(e.target.value)}
-                      className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-900 outline-none focus:border-[#022B96]"
-                    />
-                  </div>
-                )}
-              </div>
-
-              {/* Category + Read Time */}
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1.5">
-                  <label className="block text-[11px] font-bold uppercase tracking-widest text-slate-500">Category</label>
-                  <select
-                    value={newsCategory}
-                    onChange={(e) => setNewsCategory(e.target.value as any)}
-                    className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm text-slate-900 font-medium outline-none focus:border-[#022B96] focus:ring-2 focus:ring-[#022B96]/10 transition cursor-pointer bg-white"
-                  >
-                    <option value="Market Update">Market Update</option>
-                    <option value="Trade">Trade</option>
-                    <option value="Regulation">Regulation</option>
-                    <option value="Sustainability">Sustainability</option>
-                  </select>
-                </div>
-                <div className="space-y-1.5">
-                  <label className="block text-[11px] font-bold uppercase tracking-widest text-slate-500">Read Time</label>
-                  <input
-                    type="text"
-                    placeholder="3 min read"
-                    value={newsReadTime}
-                    onChange={(e) => setNewsReadTime(e.target.value)}
-                    className="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-sm text-slate-900 outline-none focus:border-[#022B96] focus:ring-2 focus:ring-[#022B96]/10 transition placeholder:text-slate-300"
-                  />
-                </div>
-              </div>
-
-              {/* Summary */}
-              <div className="space-y-1.5">
-                <label className="block text-[11px] font-bold uppercase tracking-widest text-slate-500">
-                  Summary <span className="text-rose-400">*</span>
-                </label>
-                <textarea
-                  rows={3}
-                  required
-                  placeholder="A concise 2–3 sentence overview of the news update..."
-                  value={newsExcerpt}
-                  onChange={(e) => setNewsExcerpt(e.target.value)}
-                  className="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-sm text-slate-900 outline-none focus:border-[#022B96] focus:ring-2 focus:ring-[#022B96]/10 transition resize-none leading-relaxed placeholder:text-slate-300"
-                />
-              </div>
-
-              {/* Actions */}
-              <div className="flex gap-2.5 pt-1">
-                <button
-                  type="button"
-                  onClick={() => setShowAddNewsModal(false)}
-                  className="flex-1 py-2.5 border border-slate-200 text-slate-600 font-semibold rounded-xl text-xs hover:bg-slate-50 transition cursor-pointer"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="flex-1 py-2.5 bg-[#022B96] hover:bg-[#011a5e] text-white font-bold rounded-xl text-xs transition cursor-pointer flex items-center justify-center gap-1.5 shadow-sm"
-                >
-                  <Newspaper className="w-3.5 h-3.5" />
-                  Publish Article
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* ══ ADD / EDIT PARTNER BUYER MODAL ════════════════════════════════ */}
-      {showPartnerModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4 overflow-y-auto">
-          <div className="bg-white rounded-2xl border border-slate-200 max-w-md w-full shadow-2xl overflow-hidden animate-in fade-in">
-            {/* Header */}
-            <div className="flex items-center justify-between px-6 pt-6 pb-4 border-b border-slate-100">
-              <div>
-                <h3 className="text-base font-extrabold text-slate-900 tracking-tight">
-                  {editingPartner ? 'Edit Partner Buyer' : 'Add New Partner Buyer'}
-                </h3>
-                <p className="text-xs text-slate-400 mt-0.5 font-medium">
-                  Logo will automatically appear on the Home Screen ticker
-                </p>
-              </div>
-              <button
-                onClick={() => setShowPartnerModal(false)}
-                className="w-8 h-8 flex items-center justify-center rounded-xl hover:bg-slate-100 text-slate-400 hover:text-slate-700 transition cursor-pointer"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-
-            {partnerFormError && (
-              <div className="mx-6 mt-4 p-3 bg-rose-50 border border-rose-200 text-rose-700 rounded-xl text-xs font-semibold flex items-center gap-2">
-                <AlertCircle className="w-4 h-4 shrink-0" />
-                <span>{partnerFormError}</span>
-              </div>
-            )}
-
-            <form onSubmit={handleSavePartner} className="px-6 py-5 space-y-4">
-              {/* Partner Name */}
-              <div className="space-y-1.5">
-                <label className="block text-[11px] font-bold uppercase tracking-widest text-slate-500">
-                  Buyer Company Name <span className="text-rose-400">*</span>
-                </label>
-                <input
-                  type="text"
-                  required
-                  autoFocus
-                  placeholder="e.g. Van der Valk, Hilton, Tasty Food"
-                  value={partnerName}
-                  onChange={(e) => setPartnerName(e.target.value)}
-                  className="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-sm text-slate-900 font-medium outline-none focus:border-[#022B96] focus:ring-2 focus:ring-[#022B96]/10 transition placeholder:text-slate-300"
-                />
-              </div>
-
-              {/* Logo Upload Section */}
-              <div className="space-y-2">
-                <label className="block text-[11px] font-bold uppercase tracking-widest text-slate-500">
-                  Buyer Logo <span className="text-rose-400">*</span>
-                </label>
-
-                {partnerLogo ? (
-                  <div className="relative border border-slate-200 rounded-xl p-3 bg-slate-50 flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      <div className="h-14 w-24 bg-white border border-slate-200 rounded-lg p-1 flex items-center justify-center overflow-hidden">
-                        <img
-                          src={partnerLogo}
-                          alt="Logo preview"
-                          className="max-h-full max-w-full object-contain mix-blend-multiply"
-                        />
-                      </div>
-                      <span className="text-xs font-semibold text-slate-700">Logo selected</span>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => setPartnerLogo('')}
-                      className="px-2.5 py-1 text-xs text-rose-600 hover:bg-rose-50 rounded-lg font-bold transition cursor-pointer"
-                    >
-                      Change
-                    </button>
-                  </div>
-                ) : (
-                  <div className="space-y-2">
-                    {/* File Upload Box */}
-                    <label className="flex flex-col items-center justify-center border-2 border-dashed border-slate-200 hover:border-[#022B96] rounded-2xl p-4 bg-slate-50/50 hover:bg-blue-50/20 cursor-pointer transition text-center group">
-                      <Upload className="w-6 h-6 text-slate-400 group-hover:text-[#022B96] mb-1.5 transition" />
-                      <span className="text-xs font-bold text-slate-700 group-hover:text-[#022B96]">
-                        Click to upload logo image
-                      </span>
-                      <span className="text-[10px] text-slate-400 mt-0.5">
-                        PNG, JPG, SVG, WebP (max 5MB)
-                      </span>
-                      <input
-                        type="file"
-                        accept="image/*"
-                        onChange={handleLogoFileUpload}
-                        className="hidden"
-                      />
-                    </label>
-
-                    {/* Or URL fallback */}
-                    <div className="text-center">
-                      <span className="text-[10px] uppercase font-bold text-slate-400">or paste image URL / path</span>
-                    </div>
-                    <input
-                      type="text"
-                      placeholder="e.g. /partners/buyers/custom.png or https://..."
-                      value={partnerLogo}
-                      onChange={(e) => setPartnerLogo(e.target.value)}
-                      className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-900 outline-none focus:border-[#022B96]"
-                    />
-                  </div>
-                )}
-              </div>
-
-              {/* Country + Website */}
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1.5">
-                  <label className="block text-[11px] font-bold uppercase tracking-widest text-slate-500">
-                    Country (Optional)
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="e.g. Netherlands"
-                    value={partnerCountry}
-                    onChange={(e) => setPartnerCountry(e.target.value)}
-                    className="w-full border border-slate-200 rounded-xl px-3.5 py-2 text-xs text-slate-900 outline-none focus:border-[#022B96] focus:ring-2 focus:ring-[#022B96]/10 transition"
-                  />
-                </div>
-                <div className="space-y-1.5">
-                  <label className="block text-[11px] font-bold uppercase tracking-widest text-slate-500">
-                    Website (Optional)
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="e.g. https://domain.com"
-                    value={partnerWebsite}
-                    onChange={(e) => setPartnerWebsite(e.target.value)}
-                    className="w-full border border-slate-200 rounded-xl px-3.5 py-2 text-xs text-slate-900 outline-none focus:border-[#022B96] focus:ring-2 focus:ring-[#022B96]/10 transition"
-                  />
-                </div>
-              </div>
-
-              {/* Actions */}
-              <div className="flex gap-2.5 pt-2">
-                <button
-                  type="button"
-                  onClick={() => setShowPartnerModal(false)}
-                  className="flex-1 py-2.5 border border-slate-200 text-slate-600 font-semibold rounded-xl text-xs hover:bg-slate-50 transition cursor-pointer"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="flex-1 py-2.5 bg-[#022B96] hover:bg-[#011a5e] text-white font-bold rounded-xl text-xs transition cursor-pointer flex items-center justify-center gap-1.5 shadow-sm"
-                >
-                  <Handshake className="w-3.5 h-3.5" />
-                  {editingPartner ? 'Update Partner' : 'Add to Home Screen'}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* ══ ACTION TOAST NOTIFICATION ════════════════════════════════════ */}
+      {/* ══ ACTION TOAST NOTIFICATION ═════════════════════════════════════ */}
       {actionToast && (
         <div
           className={`fixed bottom-6 right-6 z-50 px-4 py-3 rounded-2xl shadow-xl border flex items-center gap-3 text-xs font-bold animate-in slide-in-from-bottom-5 duration-200 ${
@@ -3072,86 +1513,9 @@ export default function AdminDashboardPage() {
             <Info className="w-4 h-4 text-blue-600 shrink-0" />
           )}
           <span>{actionToast.message}</span>
-          <button
-            onClick={() => setActionToast(null)}
-            className="ml-2 text-slate-400 hover:text-slate-600 p-0.5"
-          >
+          <button onClick={() => setActionToast(null)} className="ml-2 text-slate-400 hover:text-slate-600 p-0.5">
             <X className="w-3.5 h-3.5" />
           </button>
-        </div>
-      )}
-
-      {/* ══ DELETE CONFIRMATION MODAL ══════════════════════════════════════ */}
-      {companyToDelete && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-150">
-          <div className="bg-white rounded-3xl p-6 sm:p-7 max-w-sm w-full shadow-2xl border border-slate-100 text-center space-y-4 animate-in zoom-in-95 duration-150">
-            <div className="w-13 h-13 rounded-2xl bg-rose-50 text-rose-600 flex items-center justify-center mx-auto border border-rose-100">
-              <Trash2 className="w-6 h-6" />
-            </div>
-            <div className="space-y-1.5">
-              <h3 className="text-base font-black text-slate-900">Delete Supplier Profile?</h3>
-              <p className="text-xs text-slate-500 leading-relaxed">
-                Are you sure you want to permanently delete <strong className="text-slate-800">&quot;{companyToDelete.name}&quot;</strong>? 
-                This will remove the company and any associated claims completely.
-              </p>
-            </div>
-            <div className="grid grid-cols-2 gap-2.5 pt-2">
-              <button
-                type="button"
-                disabled={isActionProcessing}
-                onClick={() => { isConfirmModalOpen.current = false; setCompanyToDelete(null) }}
-                className="w-full py-2.5 px-4 rounded-xl border border-slate-200 text-slate-700 font-bold text-xs hover:bg-slate-50 transition cursor-pointer"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                disabled={isActionProcessing}
-                onClick={confirmDeleteCompany}
-                className="w-full py-2.5 px-4 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs shadow-sm transition cursor-pointer flex items-center justify-center gap-1.5"
-              >
-                {isActionProcessing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
-                <span>Yes, Delete</span>
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ══ REVOKE CONFIRMATION MODAL ══════════════════════════════════════ */}
-      {companyToRevoke && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-150">
-          <div className="bg-white rounded-3xl p-6 sm:p-7 max-w-sm w-full shadow-2xl border border-slate-100 text-center space-y-4 animate-in zoom-in-95 duration-150">
-            <div className="w-13 h-13 rounded-2xl bg-amber-50 text-amber-600 flex items-center justify-center mx-auto border border-amber-100">
-              <AlertCircle className="w-6 h-6" />
-            </div>
-            <div className="space-y-1.5">
-              <h3 className="text-base font-black text-slate-900">Revoke Claim Ownership?</h3>
-              <p className="text-xs text-slate-500 leading-relaxed">
-                Are you sure you want to revoke the claim on <strong className="text-slate-800">&quot;{companyToRevoke.name}&quot;</strong>? 
-                The company will stay in the directory, but the applicant will lose access and the profile will become unclaimed again.
-              </p>
-            </div>
-            <div className="grid grid-cols-2 gap-2.5 pt-2">
-              <button
-                type="button"
-                disabled={isActionProcessing}
-                onClick={() => { isConfirmModalOpen.current = false; setCompanyToRevoke(null) }}
-                className="w-full py-2.5 px-4 rounded-xl border border-slate-200 text-slate-700 font-bold text-xs hover:bg-slate-50 transition cursor-pointer"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                disabled={isActionProcessing}
-                onClick={confirmRevokeCompany}
-                className="w-full py-2.5 px-4 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs shadow-sm transition cursor-pointer flex items-center justify-center gap-1.5"
-              >
-                {isActionProcessing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : null}
-                <span>Yes, Revoke</span>
-              </button>
-            </div>
-          </div>
         </div>
       )}
     </div>

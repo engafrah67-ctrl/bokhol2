@@ -132,6 +132,29 @@ export default function SupplierProfilePage() {
         }
 
         if (!matchedCompany) {
+          try {
+            const res = await fetch('/api/admin/add-supplier')
+            const json = await res.json()
+            if (json.success && Array.isArray(json.suppliers)) {
+              const found = json.suppliers.find(
+                (s: any) =>
+                  s.id === slug ||
+                  s.slug?.toLowerCase() === slug.toLowerCase() ||
+                  s.name?.toLowerCase() === slug.toLowerCase() ||
+                  s.name?.toLowerCase() === slug.replace(/-/g, ' ').toLowerCase()
+              )
+              if (found) {
+                matchedCompany = {
+                  ...found,
+                  logo_url: found.logoUrl || found.logo_url,
+                  country: { name: found.country, flag_emoji: '' },
+                }
+              }
+            }
+          } catch (_) {}
+        }
+
+        if (!matchedCompany) {
           setLoading(false)
           return
         }

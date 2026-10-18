@@ -135,9 +135,7 @@ export async function signIn(
         }, { onConflict: 'id' })
       }
       redirect('/dashboard/admin')
-    } else if (role === 'supplier') {
-      redirect('/dashboard/supplier')
-    } else if (role === 'buyer') {
+    } else if (role === 'buyer' || role === 'supplier') {
       redirect('/dashboard/buyer')
     }
   } catch (err: unknown) {

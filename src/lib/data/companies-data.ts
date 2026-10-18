@@ -18,7 +18,7 @@ export interface CompanyProfile {
   description: string
   logoUrl?: string
   bannerColor?: string
-  status: 'unclaimed' | 'claim_requested' | 'claimed' | 'rejected'
+  status: 'active' | 'unclaimed' | 'claim_requested' | 'claimed' | 'rejected'
   isVerified: boolean
   isFoundingMember?: boolean
   isPublicListing: boolean
@@ -128,21 +128,18 @@ export async function fetchSupabaseCompanies(): Promise<any[]> {
   }
 }
 
-// Sync company claim statuses, dynamically added suppliers, and DB registered supplier accounts
+// Sync dynamically added suppliers and DB registered supplier accounts
 export async function syncWithServerClaims(): Promise<CompanyProfile[]> {
   try {
-    const [claimsRes, addedRes, dbCompanies] = await Promise.all([
-      fetch('/api/profile-claims', { cache: 'no-store' }).catch(() => null),
+    const [addedRes, dbCompanies] = await Promise.all([
       fetch('/api/admin/add-supplier', { cache: 'no-store' }).catch(() => null),
       fetchSupabaseCompanies().catch(() => []),
     ])
 
-    const claimsJson = claimsRes ? await claimsRes.json().catch(() => null) : null
     const addedJson = addedRes ? await addedRes.json().catch(() => null) : null
-
     const companies = getStoredCompanies()
 
-    // Add any dynamically added suppliers from the server (admin-added) -> UNCLAIMED
+    // Add any dynamically added suppliers from the server (admin-added)
     if (addedJson?.success && Array.isArray(addedJson.suppliers)) {
       const existingSlugs = new Set(companies.map((c) => c.slug))
       const existingIds = new Set(companies.map((c) => c.id))
@@ -151,8 +148,8 @@ export async function syncWithServerClaims(): Promise<CompanyProfile[]> {
         if (!existingSlugs.has(sup.slug) && !existingIds.has(sup.id)) {
           companies.push({
             ...sup,
-            status: 'unclaimed',
-            isVerified: false,
+            status: 'active',
+            isVerified: true,
             claimRequest: undefined,
           })
           existingSlugs.add(sup.slug)
@@ -175,11 +172,10 @@ export async function syncWithServerClaims(): Promise<CompanyProfile[]> {
             ...companies[existingIdx],
             id: dbComp.id || companies[existingIdx].id,
             logoUrl: dbComp.logo_url || companies[existingIdx].logoUrl,
-            // Keep existing status (do NOT overwrite)
+            status: 'active',
+            isVerified: true,
           }
-        }
-        // New company added to DB: admin-created suppliers belong in UNCLAIMED profiles
-        else {
+        } else {
           const countryName = dbComp.countries?.name || dbComp.city || 'Germany'
           const countryCode = dbComp.countries?.iso_code || (countryName === 'Norway' ? 'NO' : countryName === 'Netherlands' ? 'NL' : 'DE')
           companies.push({
@@ -195,48 +191,20 @@ export async function syncWithServerClaims(): Promise<CompanyProfile[]> {
             email: dbComp.email || '',
             phone: dbComp.phone || '',
             domain: dbComp.website ? dbComp.website.replace(/^https?:\/\//, '') : '',
-            description: dbComp.description || 'Registered supplier on Bokhol platform.',
+            description: dbComp.description || 'Verified supplier on Bokhol platform.',
             logoUrl: dbComp.logo_url || undefined,
-            status: 'unclaimed',
-            isVerified: false,
+            status: 'active',
+            isVerified: true,
             isPublicListing: true,
             completenessScore: 85,
             species: ['Atlantic Cod', 'Salmon', 'Sea Bass'],
-            tags: ['SUPPLIER', 'UNCLAIMED'],
+            tags: ['SUPPLIER'],
             claimRequest: undefined,
           })
         }
       }
     }
 
-    if (claimsJson?.success && Array.isArray(claimsJson.claims)) {
-      for (const claim of claimsJson.claims) {
-        const idx = companies.findIndex(
-          (c) => c.id === claim.company_id ||
-            (claim.company_name && c.name.toLowerCase() === claim.company_name.toLowerCase())
-        )
-        if (idx !== -1) {
-          const mappedStatus =
-            claim.status === 'approved' ? 'claimed' :
-            claim.status === 'pending' ? 'claim_requested' : 'rejected'
-          companies[idx] = {
-            ...companies[idx],
-            status: mappedStatus,
-            ...(claim.status === 'approved' ? { isVerified: true } : {}),
-            claimRequest: {
-              id: claim.id,
-              username: claim.username,
-              fullName: claim.full_name,
-              businessEmail: claim.business_email,
-              jobTitle: claim.job_title,
-              phone: claim.phone,
-              requestedAt: claim.created_at,
-              rejectionReason: claim.rejection_reason,
-            },
-          }
-        }
-      }
-    }
     return companies
   } catch {
     return getStoredCompanies()

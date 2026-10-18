@@ -36,11 +36,6 @@ export function Footer() {
                 </Link>
               </li>
               <li>
-                <Link href="/countries" className="hover:text-primary transition-colors font-medium">
-                  {t('footer_top_countries', 'Top Countries')}
-                </Link>
-              </li>
-              <li>
                 <Link href="/products" className="hover:text-primary transition-colors font-medium">
                   {t('footer_product_categories', 'Product Categories')}
                 </Link>

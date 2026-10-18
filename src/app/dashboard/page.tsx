@@ -108,8 +108,6 @@ export default async function DashboardRedirectPage() {
 
   if (role === 'admin') {
     redirect('/dashboard/admin')
-  } else if (role === 'supplier') {
-    redirect('/dashboard/supplier')
   } else {
     redirect('/dashboard/buyer')
   }

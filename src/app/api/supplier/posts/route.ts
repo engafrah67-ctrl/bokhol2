@@ -4,18 +4,49 @@ import { createClient } from '@/lib/supabase/server'
 import { createPublicServerClient } from '@/lib/supabase/server'
 import { invalidateMarketCache } from '@/lib/data/market-data'
 
-export const dynamic = 'force-dynamic'
+export async function GET(req: NextRequest) {
+  try {
+    const { searchParams } = new URL(req.url)
+    const companyId = searchParams.get('company_id')
+    const publishedOnly = searchParams.get('published') === 'true'
+
+    const supabase = createPublicServerClient()
+    let query = supabase
+      .from('supplier_posts')
+      .select('id, title, content, is_published, created_at, updated_at, company_id, companies(id, name, slug, logo_url, city, country_id, countries(name, iso_code))')
+      .order('created_at', { ascending: false })
+
+    if (companyId) {
+      query = query.eq('company_id', companyId)
+    }
+    if (publishedOnly) {
+      query = query.eq('is_published', true)
+    }
+
+    const { data, error } = await query
+    if (error) {
+      return NextResponse.json({ success: false, error: error.message }, { status: 500 })
+    }
+
+    return NextResponse.json({ success: true, posts: data || [] })
+  } catch (err: any) {
+    return NextResponse.json({ success: false, error: err?.message || 'Internal error' }, { status: 500 })
+  }
+}
 
 export async function PATCH(req: NextRequest) {
   try {
     const body = await req.json()
-    const { postId, content, updated_at } = body
+    const { postId, content, title, is_published, updated_at } = body
 
     if (!postId) {
       return NextResponse.json({ error: 'postId is required' }, { status: 400 })
     }
 
-    const updatePayload: Record<string, any> = { content }
+    const updatePayload: Record<string, any> = {}
+    if (content !== undefined) updatePayload.content = content
+    if (title !== undefined) updatePayload.title = title
+    if (typeof is_published === 'boolean') updatePayload.is_published = is_published
     if (updated_at) updatePayload.updated_at = updated_at
 
     // Try with the admin's authenticated session first (satisfies RLS admin check)

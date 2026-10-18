@@ -29,8 +29,8 @@ export function SubscriptionSection() {
   ]
 
   const supplierFeatures = [
-    t('membership_supplier_feat_1', 'Claim and manage verified company profile'),
-    t('membership_supplier_feat_2', 'Publish live spot offers and stock availability'),
+    t('membership_supplier_feat_1', 'Verified company profile managed by our admin team'),
+    t('membership_supplier_feat_2', 'Publish live spot offers & stock availability via PDF submission'),
     t('membership_supplier_feat_3', 'Increase visibility to European commercial buyers'),
     t('membership_supplier_feat_4', 'Connect directly with buyer tender inquiries'),
     t('membership_supplier_feat_5', 'Receive market updates and trade alerts'),

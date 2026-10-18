@@ -1,89 +1,25 @@
 'use client'
 
 import Link from 'next/link'
-import { useActionState, useState } from 'react'
+import { useActionState } from 'react'
 import { signUp } from '@/features/auth/actions'
 import { Button } from '@/components/ui/button'
-import { Loader2, Mail, Lock, User, Building2, AlertCircle, Check } from 'lucide-react'
+import { Loader2, Mail, Lock, User, AlertCircle } from 'lucide-react'
 
 const initialState = { error: undefined, success: undefined }
 
-const SUPPLIER_COUNTRIES = [
-  {
-    id: 'netherlands',
-    name: 'Netherlands',
-    code: 'NL',
-    flag: '🇳🇱',
-    flagUrl: 'https://flagcdn.com/w40/nl.png',
-  },
-  {
-    id: 'germany',
-    name: 'Germany',
-    code: 'DE',
-    flag: '🇩🇪',
-    flagUrl: 'https://flagcdn.com/w40/de.png',
-  },
-  {
-    id: 'belgium',
-    name: 'Belgium',
-    code: 'BE',
-    flag: '🇧🇪',
-    flagUrl: 'https://flagcdn.com/w40/be.png',
-  },
-  {
-    id: 'norway',
-    name: 'Norway',
-    code: 'NO',
-    flag: '🇳🇴',
-    flagUrl: 'https://flagcdn.com/w40/no.png',
-  },
-]
-
 export default function SignupPage() {
   const [state, formAction, isPending] = useActionState(signUp, initialState)
-  const [role, setRole] = useState<'buyer' | 'supplier'>('buyer')
-  const [selectedCountry, setSelectedCountry] = useState('Netherlands')
-  const [selectedCountryCode, setSelectedCountryCode] = useState('NL')
 
   const errorMessage = typeof state?.error === 'string' && state.error.trim().length > 0 ? state.error : null
 
   return (
     <>
       <div className="mb-6 text-center">
-        <h1 className="text-2xl font-bold text-foreground">Create your account</h1>
+        <h1 className="text-2xl font-bold text-foreground">Create your Buyer account</h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          Join FishMarketCap — the seafood trade intelligence platform
+          Join FishMarketCap — connect directly with verified European seafood suppliers
         </p>
-      </div>
-
-      {/* Role Selector */}
-      <div className="mb-6 flex rounded-lg border border-border overflow-hidden">
-        <button
-          type="button"
-          id="role-buyer"
-          onClick={() => setRole('buyer')}
-          className={`flex-1 flex items-center justify-center gap-2 py-2.5 text-sm font-semibold transition cursor-pointer ${
-            role === 'buyer'
-              ? 'bg-[#022B96] text-white'
-              : 'bg-background text-muted-foreground hover:bg-muted'
-          }`}
-        >
-          <User className="h-4 w-4" />
-          I&apos;m a Buyer
-        </button>
-        <button
-          type="button"
-          id="role-supplier"
-          onClick={() => setRole('supplier')}
-          className={`flex-1 flex items-center justify-center gap-2 py-2.5 text-sm font-semibold transition cursor-pointer ${
-            role === 'supplier'
-              ? 'bg-[#022B96] text-white'
-              : 'bg-background text-muted-foreground hover:bg-muted'
-          }`}
-        >
-          <Building2 className="h-4 w-4" />
-          I&apos;m a Supplier
-        </button>
       </div>
 
       {/* Error Message */}
@@ -95,8 +31,8 @@ export default function SignupPage() {
       )}
 
       <form action={formAction} className="space-y-4">
-        {/* Hidden role input */}
-        <input type="hidden" name="role" value={role} />
+        {/* Hidden role input: Buyers only */}
+        <input type="hidden" name="role" value="buyer" />
 
         {/* Full Name */}
         <div>
@@ -111,7 +47,7 @@ export default function SignupPage() {
               type="text"
               autoComplete="name"
               required
-              placeholder="Ahmed Al-Rashidi"
+              placeholder="e.g. Jean Dupont"
               className="w-full rounded-lg border border-border bg-background pl-10 pr-4 py-2.5 text-sm text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 transition"
             />
           </div>
@@ -155,59 +91,6 @@ export default function SignupPage() {
           </div>
         </div>
 
-        {/* Supplier Country Selector */}
-        {role === 'supplier' && (
-          <div className="space-y-2 pt-1 pb-1">
-            <div className="flex items-center justify-between">
-              <label className="block text-sm font-medium text-foreground">
-                Supplier Country <span className="text-red-500">*</span>
-              </label>
-              <span className="text-xs text-muted-foreground">Select your country</span>
-            </div>
-
-            {/* Hidden inputs to pass selected country to server action */}
-            <input type="hidden" name="country" value={selectedCountry} />
-            <input type="hidden" name="country_code" value={selectedCountryCode} />
-
-            <div className="grid grid-cols-4 gap-2">
-              {SUPPLIER_COUNTRIES.map((c) => {
-                const isSelected = selectedCountryCode === c.code
-                return (
-                  <button
-                    key={c.code}
-                    type="button"
-                    onClick={() => {
-                      setSelectedCountry(c.name)
-                      setSelectedCountryCode(c.code)
-                    }}
-                    className={`group relative flex flex-col items-center justify-center py-2.5 px-1 rounded-xl border text-center transition-all cursor-pointer ${
-                      isSelected
-                        ? 'border-[#022B96] bg-blue-50/50 shadow-xs ring-2 ring-[#022B96]/20'
-                        : 'border-border bg-card hover:bg-muted/40 hover:border-muted-foreground/30'
-                    }`}
-                  >
-                    {isSelected && (
-                      <span className="absolute top-1 right-1 flex h-3.5 w-3.5 items-center justify-center rounded-full bg-[#022B96] text-white">
-                        <Check className="h-2 w-2" />
-                      </span>
-                    )}
-                    <div className="mb-1.5 flex items-center justify-center h-6 w-8 rounded overflow-hidden border border-black/10 shadow-2xs bg-white">
-                      <img
-                        src={c.flagUrl}
-                        alt={c.name}
-                        className="h-full w-full object-cover"
-                      />
-                    </div>
-                    <span className={`text-[11px] sm:text-xs font-semibold leading-tight ${isSelected ? 'text-[#022B96]' : 'text-foreground'}`}>
-                      {c.name}
-                    </span>
-                  </button>
-                )
-              })}
-            </div>
-          </div>
-        )}
-
         {/* Submit */}
         <Button
           type="submit"
@@ -217,7 +100,7 @@ export default function SignupPage() {
           {isPending ? (
             <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Creating account...</>
           ) : (
-            `Create ${role === 'buyer' ? 'Buyer' : 'Supplier'} Account`
+            'Create Buyer Account'
           )}
         </Button>
       </form>

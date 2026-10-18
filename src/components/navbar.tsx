@@ -26,13 +26,11 @@ export function Navbar() {
 
   const ROLE_BADGE: Record<string, { label: string; color: string }> = {
     buyer:    { label: t('role_buyer', 'Buyer'),       color: 'bg-sky-500/10 text-sky-600 dark:text-sky-400 border border-sky-500/20' },
-    supplier: { label: t('role_supplier', 'Supplier'), color: 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20' },
     admin:    { label: t('role_admin', 'Admin'),       color: 'bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/20' },
   }
 
-  // Build nav items from translations
+  // Build nav items from translations (Network screen removed)
   const NAV_ITEMS = [
-    { name: t('nav_countries'),      href: '/countries' },
     { name: t('nav_products'),       href: '/products' },
     { name: t('nav_news'),           href: '/news' },
     { name: t('nav_about'),          href: '/about' },
@@ -136,11 +134,6 @@ export function Navbar() {
                     }`}
                   >
                     <span>{item.name}</span>
-                    {item.href === '/requests/buyer' && (
-                      <span className="inline-flex items-center gap-1 text-[10px] font-bold text-amber-700 bg-amber-50 border border-amber-200/80 px-2 py-0.5 rounded-full">
-                        <Lock className="w-2.5 h-2.5" /> {t('nav_suppliers_only', 'Suppliers Only')}
-                      </span>
-                    )}
                   </Link>
                 ))}
               </div>
@@ -205,25 +198,18 @@ export function Navbar() {
                     {badge.label}
                   </span>
                 )}
-                {activeRole === 'buyer' ? (
+                {activeRole === 'admin' ? (
+                  <Link href="/dashboard/admin" prefetch={true}>
+                    <Button variant="ghost" size="sm" className="gap-2 cursor-pointer font-semibold rounded-lg hover:bg-muted text-slate-800">
+                      <LayoutDashboard className="h-4 w-4 text-[#022B96]" />
+                      {t('nav_admin_panel', 'Admin Panel')}
+                    </Button>
+                  </Link>
+                ) : (
                   <Link href="/dashboard/buyer" prefetch={true}>
                     <Button variant="ghost" size="sm" className="gap-2 cursor-pointer font-semibold rounded-lg hover:bg-muted text-slate-800">
                       <LayoutDashboard className="h-4 w-4 text-[#022B96]" />
                       {t('nav_buyer_dashboard', 'Buyer Dashboard')}
-                    </Button>
-                  </Link>
-                ) : activeRole === 'supplier' ? (
-                  <Link href="/dashboard/supplier" prefetch={true}>
-                    <Button variant="ghost" size="sm" className="gap-2 cursor-pointer font-semibold rounded-lg hover:bg-muted text-slate-800">
-                      <LayoutDashboard className="h-4 w-4 text-[#022B96]" />
-                      {t('nav_dashboard')}
-                    </Button>
-                  </Link>
-                ) : (
-                  <Link href={activeRole === 'admin' ? '/dashboard/admin' : '/dashboard'} prefetch={true}>
-                    <Button variant="ghost" size="sm" className="gap-2 cursor-pointer font-semibold rounded-lg hover:bg-muted">
-                      <LayoutDashboard className="h-4 w-4" />
-                      {activeRole === 'admin' ? t('nav_admin_panel', 'Admin Panel') : t('nav_dashboard')}
                     </Button>
                   </Link>
                 )}
@@ -340,7 +326,7 @@ export function Navbar() {
             {user ? (
               <>
                 <Link
-                  href={activeRole === 'buyer' ? '/dashboard/buyer' : activeRole === 'supplier' ? '/dashboard/supplier' : activeRole === 'admin' ? '/dashboard/admin' : '/dashboard'}
+                  href={activeRole === 'admin' ? '/dashboard/admin' : '/dashboard/buyer'}
                   prefetch={true}
                   onClick={() => setIsOpen(false)}
                 >
