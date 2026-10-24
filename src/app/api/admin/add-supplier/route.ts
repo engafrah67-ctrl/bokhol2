@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import fs from 'fs'
 import path from 'path'
 import { createPublicServerClient } from '@/lib/supabase/server'
+import { INITIAL_COMPANIES } from '@/lib/data/companies-data'
 
 export const dynamic = 'force-dynamic'
 
@@ -40,10 +41,14 @@ export async function GET() {
 
     let dbSuppliers: any[] = []
     try {
-      const { data, error } = await supabase
+      const queryPromise = supabase
         .from('companies')
         .select('id, name, slug, email, phone, website, logo_url, description, city, country_id, is_verified, status, created_at, countries(id, name, iso_code)')
         .order('created_at', { ascending: false })
+      const timeoutPromise = new Promise<{ data: null; error: null }>((res) =>
+        setTimeout(() => res({ data: null, error: null }), 3000)
+      )
+      const { data, error }: any = await Promise.race([queryPromise, timeoutPromise])
 
       if (!error && Array.isArray(data)) {
         dbSuppliers = data.map((co: any) => {
@@ -74,19 +79,23 @@ export async function GET() {
       console.warn('[API/add-supplier GET] Supabase fetch error:', e?.message)
     }
 
-    // Merge DB suppliers with file suppliers (DB takes precedence, file supplements)
+    // Merge: INITIAL_COMPANIES as baseline, then fileSuppliers, then dbSuppliers
     const map = new Map<string, any>()
+    for (const c of INITIAL_COMPANIES) {
+      const key = (c.id || c.slug || c.name || '').toLowerCase()
+      if (key) map.set(key, { ...c, isVerified: true })
+    }
     for (const s of fileSuppliers) {
       const key = (s.id || s.slug || s.name || '').toLowerCase()
-      if (key) map.set(key, s)
+      if (key) {
+        const existing = map.get(key) || {}
+        map.set(key, { ...existing, ...s })
+      }
     }
     for (const s of dbSuppliers) {
       const key = (s.id || s.slug || s.name || '').toLowerCase()
       if (key) {
-        // Merge with file record if present (file might have custom logo or species)
-        const fileMatch = map.get(key) || Array.from(map.values()).find(
-          (m) => (m.slug && m.slug === s.slug) || (m.name && m.name.toLowerCase() === s.name.toLowerCase())
-        )
+        const fileMatch = map.get(key)
         map.set(key, {
           ...fileMatch,
           ...s,

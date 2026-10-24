@@ -41,6 +41,7 @@ import {
   Layers,
   Scale,
   Sparkles,
+  ArrowLeft,
 } from 'lucide-react'
 import { performSignOut } from '@/lib/auth-helpers'
 import ReactCountryFlag from 'react-country-flag'
@@ -60,6 +61,7 @@ import {
 } from '@/lib/data/partner-buyers-data'
 import { ViewSuppliersTab } from '@/components/admin/view-suppliers'
 import { ProductPublishModal } from '@/components/admin/product-publish-modal'
+import { MarketIndexTab } from '@/components/admin/market-index-tab'
 
 const KNOWN_SUPPLIERS: Record<string, { name: string; logoUrl: string | null; country: string }> = {
   'd154fad9-6250-425d-95bc-d87ad8ce685f': {
@@ -132,7 +134,7 @@ export default function AdminDashboardPage() {
 
   // Clean Navigation Structure without obsolete verification/claim items
   const [activeNav, setActiveNav] = useState<
-    'overview' | 'add-supplier' | 'view-suppliers' | 'posts' | 'buyer-users' | 'partners' | 'news'
+    'overview' | 'add-supplier' | 'view-suppliers' | 'posts' | 'buyer-users' | 'partners' | 'news' | 'market-index'
   >('overview')
 
   // Suppliers state (from actual database via /api/admin/add-supplier)
@@ -580,13 +582,10 @@ export default function AdminDashboardPage() {
     )
   }
 
-  // ── Clean Sidebar Items Matching System Requirements ──
+  // ── Sidebar Items (redundant dashboard card tabs removed) ──
   const SIDEBAR_ITEMS = [
     { key: 'overview', label: 'Dashboard', icon: LayoutDashboard },
-    { key: 'add-supplier', label: 'Add Supplier', icon: UserPlus },
-    { key: 'view-suppliers', label: 'View Suppliers', icon: Building2, badge: suppliers.length },
-    { key: 'posts', label: 'Product Offers', icon: Fish, badge: supplierPosts.length },
-    { key: 'buyer-users', label: 'Buyer Users', icon: Users, badge: buyerUsers.length },
+    { key: 'market-index', label: 'Seafood Index', icon: TrendingUp },
     { key: 'partners', label: 'Partner Buyers', icon: Handshake, badge: partnerBuyers.length },
     { key: 'news', label: 'News & Articles', icon: Newspaper, badge: newsArticles.length },
   ]
@@ -610,7 +609,10 @@ export default function AdminDashboardPage() {
             <nav className="space-y-1.5">
               {SIDEBAR_ITEMS.map((item) => {
                 const Icon = item.icon
-                const isActive = activeNav === item.key
+                const isActive =
+                  item.key === 'overview'
+                    ? ['overview', 'view-suppliers', 'posts', 'buyer-users', 'add-supplier'].includes(activeNav)
+                    : activeNav === item.key
                 return (
                   <button
                     key={item.key}
@@ -671,21 +673,55 @@ export default function AdminDashboardPage() {
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
                   {[
-                    { label: 'Total Users', value: stats.totalUsers || buyerUsers.length + 1, sub: 'Registered Accounts', icon: Users, color: 'text-[#022B96]' },
-                    { label: 'Buyers', value: stats.totalBuyers || buyerUsers.length, sub: 'Active Buyer Accounts', icon: User, color: 'text-blue-600' },
-                    { label: 'Suppliers', value: suppliers.length, sub: 'Admin-Created Profiles', icon: Building2, color: 'text-emerald-600' },
-                    { label: 'Product Offers', value: supplierPosts.length, sub: `${supplierPosts.filter(p => p.is_published !== false).length} Published`, icon: Fish, color: 'text-indigo-600' },
+                    {
+                      key: 'buyer-users',
+                      label: 'Total Users',
+                      value: stats.totalUsers || buyerUsers.length + 1,
+                      icon: Users,
+                      color: 'text-[#022B96]',
+                      hoverBorder: 'hover:border-[#022B96]',
+                    },
+                    {
+                      key: 'buyer-users',
+                      label: 'Buyers',
+                      value: stats.totalBuyers || buyerUsers.length,
+                      icon: User,
+                      color: 'text-blue-600',
+                      hoverBorder: 'hover:border-blue-500',
+                    },
+                    {
+                      key: 'view-suppliers',
+                      label: 'Suppliers',
+                      value: suppliers.length,
+                      icon: Building2,
+                      color: 'text-emerald-600',
+                      hoverBorder: 'hover:border-emerald-500',
+                    },
+                    {
+                      key: 'posts',
+                      label: 'Product Offers',
+                      value: supplierPosts.length,
+                      icon: Fish,
+                      color: 'text-indigo-600',
+                      hoverBorder: 'hover:border-indigo-500',
+                    },
                   ].map((card) => {
                     const CardIcon = card.icon
                     return (
-                      <div key={card.label} className="bg-white border border-slate-200 rounded-2xl p-6 shadow-xs">
+                      <button
+                        key={card.label}
+                        type="button"
+                        onClick={() => setActiveNav(card.key as any)}
+                        className={`text-left bg-white border border-slate-200 rounded-2xl p-6 shadow-xs hover:shadow-md transition-all duration-200 cursor-pointer group ${card.hoverBorder}`}
+                      >
                         <div className="flex items-center justify-between text-slate-400 mb-3">
-                          <span className="text-xs font-bold uppercase tracking-wider">{card.label}</span>
-                          <CardIcon className={`w-5 h-5 ${card.color}`} />
+                          <span className="text-xs font-bold uppercase tracking-wider group-hover:text-slate-900 transition">
+                            {card.label}
+                          </span>
+                          <CardIcon className={`w-5 h-5 ${card.color} group-hover:scale-110 transition-transform`} />
                         </div>
                         <p className={`text-3xl font-black ${card.color}`}>{card.value}</p>
-                        <p className="text-xs text-slate-400 mt-1">{card.sub}</p>
-                      </div>
+                      </button>
                     )
                   })}
                 </div>
@@ -748,20 +784,30 @@ export default function AdminDashboardPage() {
             {/* VIEW 2: ADD SUPPLIER */}
             {activeNav === 'add-supplier' && (
               <div className="space-y-6 max-w-2xl">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <h1 className="text-2xl font-black text-slate-900 tracking-tight">Add Supplier</h1>
-                    <p className="text-xs text-slate-500 mt-1 font-medium">
-                      Manually create a seafood supplier profile using information from supplier PDFs
-                    </p>
-                  </div>
+                <div>
                   <button
                     type="button"
-                    onClick={() => setActiveNav('view-suppliers')}
-                    className="text-xs font-bold text-[#022B96] hover:underline"
+                    onClick={() => setActiveNav('overview')}
+                    className="inline-flex items-center gap-1.5 text-xs font-bold text-[#022B96] hover:text-[#011a5e] mb-3 cursor-pointer transition group"
                   >
-                    View All Suppliers →
+                    <ArrowLeft className="w-3.5 h-3.5 group-hover:-translate-x-0.5 transition-transform" />
+                    <span>Back to Dashboard</span>
                   </button>
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h1 className="text-2xl font-black text-slate-900 tracking-tight">Add Supplier</h1>
+                      <p className="text-xs text-slate-500 mt-1 font-medium">
+                        Manually create a seafood supplier profile using information from supplier PDFs
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setActiveNav('view-suppliers')}
+                      className="text-xs font-bold text-[#022B96] hover:underline cursor-pointer"
+                    >
+                      View All Suppliers →
+                    </button>
+                  </div>
                 </div>
 
                 {addSupplierMsg && (
@@ -992,22 +1038,40 @@ export default function AdminDashboardPage() {
               </div>
             )}
 
-            {/* VIEW 3: VIEW SUPPLIERS (NEW TAB!) */}
+            {/* VIEW 3: VIEW SUPPLIERS */}
             {activeNav === 'view-suppliers' && (
-              <ViewSuppliersTab
-                suppliers={suppliers}
-                loading={suppliersLoading}
-                postsCountMap={postsCountMap}
-                onAddProduct={handleOpenAddProductForSupplier}
-                onManageProducts={handleManageProductsForSupplier}
-                onDeleteSupplier={handleDeleteSupplier}
-                onNavigateToAddSupplier={() => setActiveNav('add-supplier')}
-              />
+              <div className="space-y-4">
+                <button
+                  type="button"
+                  onClick={() => setActiveNav('overview')}
+                  className="inline-flex items-center gap-1.5 text-xs font-bold text-[#022B96] hover:text-[#011a5e] cursor-pointer transition group"
+                >
+                  <ArrowLeft className="w-3.5 h-3.5 group-hover:-translate-x-0.5 transition-transform" />
+                  <span>Back to Dashboard</span>
+                </button>
+                <ViewSuppliersTab
+                  suppliers={suppliers}
+                  loading={suppliersLoading}
+                  postsCountMap={postsCountMap}
+                  onAddProduct={handleOpenAddProductForSupplier}
+                  onManageProducts={handleManageProductsForSupplier}
+                  onDeleteSupplier={handleDeleteSupplier}
+                  onNavigateToAddSupplier={() => setActiveNav('add-supplier')}
+                />
+              </div>
             )}
 
             {/* VIEW 4: PRODUCT OFFERS (SEAFOOD PRODUCT MANAGEMENT) */}
             {activeNav === 'posts' && (
               <div className="space-y-6">
+                <button
+                  type="button"
+                  onClick={() => setActiveNav('overview')}
+                  className="inline-flex items-center gap-1.5 text-xs font-bold text-[#022B96] hover:text-[#011a5e] cursor-pointer transition group"
+                >
+                  <ArrowLeft className="w-3.5 h-3.5 group-hover:-translate-x-0.5 transition-transform" />
+                  <span>Back to Dashboard</span>
+                </button>
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                   <div>
                     <h1 className="text-2xl font-black text-slate-900 tracking-tight">Product Offers</h1>
@@ -1244,6 +1308,14 @@ export default function AdminDashboardPage() {
             {/* VIEW 5: BUYER USERS */}
             {activeNav === 'buyer-users' && (
               <div className="space-y-6">
+                <button
+                  type="button"
+                  onClick={() => setActiveNav('overview')}
+                  className="inline-flex items-center gap-1.5 text-xs font-bold text-[#022B96] hover:text-[#011a5e] cursor-pointer transition group"
+                >
+                  <ArrowLeft className="w-3.5 h-3.5 group-hover:-translate-x-0.5 transition-transform" />
+                  <span>Back to Dashboard</span>
+                </button>
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                   <div>
                     <h1 className="text-2xl font-black text-slate-900 tracking-tight">Registered Buyer Users</h1>
@@ -1308,6 +1380,14 @@ export default function AdminDashboardPage() {
             {/* VIEW 6: PARTNER BUYERS */}
             {activeNav === 'partners' && (
               <div className="space-y-6">
+                <button
+                  type="button"
+                  onClick={() => setActiveNav('overview')}
+                  className="inline-flex items-center gap-1.5 text-xs font-bold text-[#022B96] hover:text-[#011a5e] cursor-pointer transition group"
+                >
+                  <ArrowLeft className="w-3.5 h-3.5 group-hover:-translate-x-0.5 transition-transform" />
+                  <span>Back to Dashboard</span>
+                </button>
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                   <div>
                     <h1 className="text-2xl font-black text-slate-900 tracking-tight">Partner Buyers</h1>
@@ -1366,9 +1446,24 @@ export default function AdminDashboardPage() {
               </div>
             )}
 
-            {/* VIEW 7: NEWS ARTICLES */}
+            {/* VIEW 7: SEAFOOD INDEX MANAGEMENT */}
+            {activeNav === 'market-index' && (
+              <div className="space-y-6">
+                <MarketIndexTab onBackToDashboard={() => setActiveNav('overview')} />
+              </div>
+            )}
+
+            {/* VIEW 8: NEWS ARTICLES */}
             {activeNav === 'news' && (
               <div className="space-y-6">
+                <button
+                  type="button"
+                  onClick={() => setActiveNav('overview')}
+                  className="inline-flex items-center gap-1.5 text-xs font-bold text-[#022B96] hover:text-[#011a5e] cursor-pointer transition group"
+                >
+                  <ArrowLeft className="w-3.5 h-3.5 group-hover:-translate-x-0.5 transition-transform" />
+                  <span>Back to Dashboard</span>
+                </button>
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                   <div>
                     <h1 className="text-2xl font-black text-slate-900 tracking-tight">Market News &amp; Articles</h1>

@@ -107,8 +107,8 @@ const FISH_IMAGE_MAP: Record<string, string> = {
   'Atlantic Salmon': '/fish-salmon.png',
   'Salmon': '/fish-salmon.png',
   'Pacific Salmon': '/fish-salmon.png',
-  'Salmon Fillet': '/fish-salmon.png',
-  'Salmon Portions': '/fish-salmon.png',
+  'Salmon Fillet': '/fish-salmonfillet.jpg',
+  'Salmon Portions': '/fish-salmonfillet.jpg',
   'Trout': '/fish-trout.jpg',
   'Rainbow Trout': '/fish-trout.jpg',
   'Sea Bass': '/fish-seabass.png',
@@ -122,6 +122,8 @@ const FISH_IMAGE_MAP: Record<string, string> = {
   'Lemon Sole': '/fish-turbot.jpg',
   'Brill': '/fish-turbot.jpg',
   'Halibut': '/fish-turbot.jpg',
+  'Red Snapper': '/fish-redsnapper.jpg',
+  'Snapper': '/fish-redsnapper.jpg',
   'Shrimp': '/shrimp.png',
   'Prawn': '/shrimp.png',
   'King Crab': '/fish-crab.jpg',
@@ -130,8 +132,9 @@ const FISH_IMAGE_MAP: Record<string, string> = {
   'Mussels': '/shrimp.png',
   'Clams': '/shrimp.png',
   'Oysters': '/shrimp.png',
-  'Octopus': '/shrimp.png',
-  'Squid': '/shrimp.png',
+  'Octopus': '/fish-octopus.jpg',
+  'Squid': '/fish-squid.jpg',
+  'Calamari': '/fish-squid.jpg',
 }
 
 export function getFishImageForProduct(name: string, customImage?: string): string {
@@ -147,6 +150,10 @@ export function getFishImageForProduct(name: string, customImage?: string): stri
   if (FISH_IMAGE_MAP[strName]) return FISH_IMAGE_MAP[strName]
 
   const lower = strName.toLowerCase()
+  if (lower.includes('octopus')) return '/fish-octopus.jpg'
+  if (lower.includes('squid') || lower.includes('calamari')) return '/fish-squid.jpg'
+  if (lower.includes('snapper')) return '/fish-redsnapper.jpg'
+  if (lower.includes('fillet') && lower.includes('salmon')) return '/fish-salmonfillet.jpg'
   if (lower.includes('trout')) return '/fish-trout.jpg'
   if (lower.includes('salmon')) return '/fish-salmon.png'
   if (lower.includes('tuna')) return '/fish-tuna.png'
@@ -158,7 +165,7 @@ export function getFishImageForProduct(name: string, customImage?: string): stri
   if (lower.includes('crab')) return '/fish-crab.jpg'
   if (lower.includes('cod') || lower.includes('pollock') || lower.includes('hake') || lower.includes('whiting')) return '/fish-cod.png'
   if (lower.includes('mackerel') || lower.includes('herring') || lower.includes('sardine') || lower.includes('anchovy')) return '/fish-mackerel.png'
-  if (lower.includes('shrimp') || lower.includes('prawn') || lower.includes('squid') || lower.includes('octopus') || lower.includes('mussel') || lower.includes('clam') || lower.includes('oyster')) return '/shrimp.png'
+  if (lower.includes('shrimp') || lower.includes('prawn') || lower.includes('mussel') || lower.includes('clam') || lower.includes('oyster')) return '/shrimp.png'
 
   return '/fish-salmon.png'
 }

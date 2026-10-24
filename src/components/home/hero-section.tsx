@@ -3,9 +3,20 @@
 import Image from "next/image"
 import { Search } from "lucide-react"
 import { useLanguage } from "@/contexts/language-context"
+import { useState, useEffect } from "react"
 
 export function HeroSection() {
   const { t } = useLanguage()
+  const [mounted, setMounted] = useState(false)
+  useEffect(() => { setMounted(true) }, [])
+
+  // Use fixed English strings for SSR to avoid hydration mismatch;
+  // swap to translated strings after client mounts.
+  const line1 = mounted ? t('hero_line1') : 'Navigate the'
+  const line2 = mounted ? t('hero_line2') : 'European Seafood Market'
+  const subtitle = mounted ? t('hero_subtitle') : 'Connect with verified European seafood suppliers. Access real-time pricing, quality specifications, and direct trade opportunities.'
+  const placeholder = mounted ? t('hero_search_placeholder') : 'Search products, suppliers, origins…'
+  const btnText = mounted ? t('hero_search_btn') : 'Search'
 
   return (
     <div className="relative w-full flex items-center justify-center min-h-[60vh] md:min-h-[540px] overflow-hidden">
@@ -26,12 +37,12 @@ export function HeroSection() {
         </div>
 
         <h1 className="text-4xl sm:text-5xl md:text-[3.5rem] font-bold text-slate-900 tracking-tight leading-[1.15] mb-4">
-          {t('hero_line1')} <br className="hidden sm:block" />
-          {t('hero_line2')}
+          {line1} <br className="hidden sm:block" />
+          {line2}
         </h1>
 
         <p className="text-sm sm:text-base text-slate-600 max-w-2xl mx-auto mb-10 leading-relaxed">
-          {t('hero_subtitle')}
+          {subtitle}
         </p>
 
         {/* Search Bar */}
@@ -41,11 +52,11 @@ export function HeroSection() {
           </div>
           <input 
             type="text" 
-            placeholder={t('hero_search_placeholder')}
+            placeholder={placeholder}
             className="flex-1 min-w-0 py-3 px-2 bg-transparent outline-none text-slate-900 placeholder:text-slate-400 text-base font-medium"
           />
           <button className="flex-none px-6 py-3 bg-[#022B96] hover:bg-[#1a47c4] text-white font-semibold rounded-xl transition-all shadow-sm whitespace-nowrap text-sm">
-            {t('hero_search_btn')}
+            {btnText}
           </button>
         </div>
         
@@ -53,3 +64,4 @@ export function HeroSection() {
     </div>
   )
 }
+

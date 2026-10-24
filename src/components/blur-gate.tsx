@@ -20,7 +20,7 @@ export function BlurGate({ children, blurPx = 4, forceBlur = false }: BlurGatePr
   const router = useRouter()
 
   if (isLoading) {
-    return <span className="inline-block rounded bg-slate-100 animate-pulse w-14 h-3.5" />
+    return <span suppressHydrationWarning className="inline-block rounded bg-slate-100 animate-pulse w-14 h-3.5" />
   }
 
   if (user && !forceBlur) {
