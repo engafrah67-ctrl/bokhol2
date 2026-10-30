@@ -57,7 +57,7 @@ export function Navbar() {
   }, [])
 
   const { user, profile, role, isLoading } = useUser()
-  const activeRole = role || (user?.email?.toLowerCase() === 'superadminbkhol@gmail.com' ? 'admin' : profile?.role)
+  const activeRole = role || profile?.role
   const badge = activeRole ? ROLE_BADGE[activeRole] : null
   const isHome = pathname === '/'
   const currentLocale = LOCALES.find(l => l.code === locale)!

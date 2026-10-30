@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useSyncExternalStore } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { usePathname } from 'next/navigation'
 import type { User, Session, AuthChangeEvent } from '@supabase/supabase-js'
@@ -38,11 +38,13 @@ export function useUser(): UseUserReturn {
   useEffect(() => {
     let isMounted = true
 
+    // Placeholder until the DB profile loads. user_metadata is user-editable,
+    // so it may only ever suggest 'buyer' or 'supplier' — never 'admin'.
     function createDefaultProfile(currentUser: User): UserProfile {
-      const role = (currentUser.user_metadata?.role as UserRole) || 'buyer'
+      const metaRole = currentUser.user_metadata?.role
       return {
         id: currentUser.id,
-        role: currentUser.email?.toLowerCase() === 'superadminbkhol@gmail.com' ? 'admin' : role,
+        role: metaRole === 'supplier' ? 'supplier' : 'buyer',
         full_name: currentUser.user_metadata?.full_name || currentUser.email || 'User',
         avatar_url: currentUser.user_metadata?.avatar_url || null,
         company_id: currentUser.user_metadata?.company_id || null,
@@ -64,8 +66,7 @@ export function useUser(): UseUserReturn {
             .maybeSingle()
 
           if (data) {
-            const isAdmin = currentUser.email?.toLowerCase() === 'superadminbkhol@gmail.com'
-            const fullProfile: UserProfile = { ...data, role: isAdmin ? 'admin' : data.role }
+            const fullProfile: UserProfile = data
             cachedProfile = fullProfile
             return fullProfile
           }
@@ -171,10 +172,16 @@ export function useUser(): UseUserReturn {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pathname])
 
-  const effectiveRole: UserRole | null =
-    user?.email?.toLowerCase() === 'superadminbkhol@gmail.com'
-      ? 'admin'
-      : (profile?.role ?? (user?.user_metadata?.role as UserRole) ?? null)
+  // While hydrating server HTML, report the same "loading" state the server rendered
+  // (the server never knows the user). Without this, a component hydrating after another
+  // one filled the module cache renders differently and React throws a hydration error.
+  const hydrated = useSyncExternalStore(subscribeNoop, () => true, () => false)
+
+  if (!hydrated) {
+    return { user: null, profile: null, role: null, isLoading: true, isAuthenticated: false }
+  }
+
+  const effectiveRole: UserRole | null = user ? (profile?.role ?? null) : null
 
   return {
     user,
@@ -184,3 +191,5 @@ export function useUser(): UseUserReturn {
     isAuthenticated: !!user,
   }
 }
+
+const subscribeNoop = () => () => {}

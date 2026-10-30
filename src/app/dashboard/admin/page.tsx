@@ -26,6 +26,7 @@ import {
   Newspaper,
   Plus,
   Handshake,
+  Inbox,
   Upload,
   Trash2,
   Edit3,
@@ -61,69 +62,9 @@ import {
 } from '@/lib/data/partner-buyers-data'
 import { ViewSuppliersTab } from '@/components/admin/view-suppliers'
 import { ProductPublishModal } from '@/components/admin/product-publish-modal'
-import { MarketIndexTab } from '@/components/admin/market-index-tab'
-
-const KNOWN_SUPPLIERS: Record<string, { name: string; logoUrl: string | null; country: string }> = {
-  'd154fad9-6250-425d-95bc-d87ad8ce685f': {
-    name: 'Blue World Seafood B.V.',
-    logoUrl: 'https://sfbixmrmdfignczavzbw.supabase.co/storage/v1/object/public/SupplyPC/logos/2198809e-0401-483a-ba3b-a6f18392c9ea-1790089815783.png',
-    country: 'Germany',
-  },
-  'c541a2ff-6603-42dd-bf90-82b4d6f4fb77': {
-    name: 'AnT Seafood B.V.',
-    logoUrl: 'https://sfbixmrmdfignczavzbw.supabase.co/storage/v1/object/public/SupplyPC/logos/94ed9521-f787-43e4-8a1f-2dba1166ede4-1790177146518.jfif',
-    country: 'Germany',
-  },
-  'eef79d74-b923-4f0e-a4d8-a56bd14ae492': {
-    name: 'bokl Seafood',
-    logoUrl: null,
-    country: 'Germany',
-  },
-}
-
-function getSupplierForPost(p: any, suppliersList: any[] = []): { name: string; logoUrl: string | null; country: string } {
-  if (p?.company_id && KNOWN_SUPPLIERS[p.company_id]) {
-    return KNOWN_SUPPLIERS[p.company_id]
-  }
-
-  if (p?.company_name && p.company_name !== 'Verified Supplier' && p.company_name !== 'Bokhol Supplier') {
-    return {
-      name: p.company_name,
-      logoUrl: p.company_logo || null,
-      country: p.company_country || '',
-    }
-  }
-
-  const matched = suppliersList.find(
-    (c: any) =>
-      c.id === p?.company_id ||
-      (p?.company_name && c.name?.toLowerCase() === p.company_name.toLowerCase())
-  )
-  if (matched && matched.name && matched.name !== 'Verified Supplier') {
-    return {
-      name: matched.name,
-      logoUrl: matched.logoUrl || matched.logo_url || null,
-      country: matched.country || '',
-    }
-  }
-
-  const pName = (p?.product_name || p?.title || '').toLowerCase()
-  if (pName.includes('brill') || pName.includes('sea bream')) {
-    return KNOWN_SUPPLIERS['d154fad9-6250-425d-95bc-d87ad8ce685f']
-  }
-  if (pName.includes('crab') || pName.includes('king crab')) {
-    return KNOWN_SUPPLIERS['c541a2ff-6603-42dd-bf90-82b4d6f4fb77']
-  }
-  if (pName.includes('tuna') || pName.includes('yellowfin')) {
-    return KNOWN_SUPPLIERS['eef79d74-b923-4f0e-a4d8-a56bd14ae492']
-  }
-
-  return {
-    name: 'Bokhol Seafood Supplier',
-    logoUrl: null,
-    country: p?.company_country || '',
-  }
-}
+import { MarketIndexTab, prefetchSeafoodIndex } from '@/components/admin/market-index-tab'
+import { BuyerRequestsTab } from '@/components/admin/buyer-requests-tab'
+import { resizeImage, uploadImage, validateImageFile } from '@/lib/media'
 
 export default function AdminDashboardPage() {
   const router = useRouter()
@@ -134,8 +75,9 @@ export default function AdminDashboardPage() {
 
   // Clean Navigation Structure without obsolete verification/claim items
   const [activeNav, setActiveNav] = useState<
-    'overview' | 'add-supplier' | 'view-suppliers' | 'posts' | 'buyer-users' | 'partners' | 'news' | 'market-index'
+    'overview' | 'add-supplier' | 'view-suppliers' | 'posts' | 'buyer-users' | 'partners' | 'news' | 'market-index' | 'buyer-requests'
   >('overview')
+  const [openRequestsCount, setOpenRequestsCount] = useState(0)
 
   // Suppliers state (from actual database via /api/admin/add-supplier)
   const [suppliers, setSuppliers] = useState<any[]>([])
@@ -152,14 +94,21 @@ export default function AdminDashboardPage() {
   const [addSupplierMsg, setAddSupplierMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
   const [addSupplierLoading, setAddSupplierLoading] = useState(false)
 
-  const handleSupplierLogoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  // Logos go to Supabase Storage (CDN); only the URL is saved on the company
+  const handleSupplierLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
+    e.target.value = ''
     if (!file) return
-    const reader = new FileReader()
-    reader.onload = (ev) => {
-      if (ev.target?.result) setNewSupplierLogo(ev.target.result as string)
+    setAddSupplierLoading(true)
+    setAddSupplierMsg(null)
+    try {
+      validateImageFile(file)
+      setNewSupplierLogo(await uploadImage(await resizeImage(file, 400), 'logos'))
+    } catch (err: any) {
+      setAddSupplierMsg({ type: 'error', text: err?.message || 'Logo upload failed.' })
+    } finally {
+      setAddSupplierLoading(false)
     }
-    reader.readAsDataURL(file)
   }
 
   // System Stats
@@ -228,9 +177,6 @@ export default function AdminDashboardPage() {
       if (json.success && Array.isArray(json.suppliers)) {
         setSuppliers(json.suppliers)
         setStats((prev) => ({ ...prev, totalSuppliers: json.suppliers.length }))
-        try {
-          localStorage.setItem('admin_suppliers_cache', JSON.stringify(json.suppliers))
-        } catch (_) {}
       }
     } catch (err) {
       console.warn('Failed to load suppliers:', err)
@@ -264,8 +210,8 @@ export default function AdminDashboardPage() {
           return {
             id: row.id,
             company_id: row.company_id || compRel?.id,
-            company_name: compRel?.name || details.companyName || 'Verified Supplier',
-            company_logo: compRel?.logo_url || details.companyLogo || null,
+            company_name: compRel?.name || '',
+            company_logo: compRel?.logo_url || null,
             company_country: compCountry,
             product_name: details.productName || row.title?.split(' —')[0]?.split(' -')[0] || 'Seafood Product',
             price_per_kg: minPrice,
@@ -287,9 +233,6 @@ export default function AdminDashboardPage() {
         })
         setSupplierPosts(mapped)
         setStats((prev) => ({ ...prev, totalProducts: mapped.length }))
-        try {
-          localStorage.setItem('admin_supplier_posts_cache', JSON.stringify(mapped))
-        } catch (_) {}
       }
     } catch (err) {
       console.warn('Failed to load posts:', err)
@@ -322,12 +265,10 @@ export default function AdminDashboardPage() {
   useEffect(() => {
     let isMounted = true
 
+    // Stop the spinner if loading hangs; never grants access by itself
     const safetyTimer = setTimeout(() => {
-      if (isMounted) {
-        setAuthorized(true)
-        setLoading(false)
-      }
-    }, 5000)
+      if (isMounted) setLoading(false)
+    }, 8000)
 
     async function init() {
       try {
@@ -347,19 +288,35 @@ export default function AdminDashboardPage() {
           return
         }
 
-        const isAdminEmail = user.email?.toLowerCase() === 'superadminbkhol@gmail.com'
-        let userRole = user.user_metadata?.role
+        // Start every data load in parallel with the role check. This is safe: the database
+        // (RLS) decides what each request may read; the role check only gates the UI.
+        const dataLoads = Promise.allSettled([
+          reloadSuppliers(),
+          reloadPosts(),
+          fetchBuyerUsers(),
+          prefetchSeafoodIndex(),
+          fetchNewsArticles().then((articles) => {
+            if (isMounted && articles) setNewsArticles(articles)
+          }),
+          fetchPartnerBuyers().then((partners) => {
+            if (isMounted && partners) setPartnerBuyers(partners)
+          }),
+          supabase.from('users').select('id', { count: 'exact', head: true }).then(({ count }: { count: number | null }) => {
+            if (isMounted && count !== null) setStats((prev) => ({ ...prev, totalUsers: count }))
+          }),
+          supabase.from('buyer_requests').select('id', { count: 'exact', head: true }).eq('status', 'open').then(({ count }: { count: number | null }) => {
+            if (isMounted && count !== null) setOpenRequestsCount(count)
+          }),
+        ])
 
-        try {
-          const { data: profile } = await supabase
-            .from('users')
-            .select('role')
-            .eq('id', user.id)
-            .maybeSingle()
-          if (profile?.role) userRole = profile.role
-        } catch (_) {}
+        // Admin access is decided by the database role only
+        const { data: profile } = await supabase
+          .from('users')
+          .select('role')
+          .eq('id', user.id)
+          .maybeSingle()
 
-        if (!isAdminEmail && userRole !== 'admin') {
+        if (profile?.role !== 'admin') {
           if (isMounted) {
             setLoading(false)
             router.replace('/dashboard')
@@ -367,37 +324,16 @@ export default function AdminDashboardPage() {
           return
         }
 
+        // Show the dashboard immediately; each section shows its own loader until its data arrives
         if (isMounted) {
           setAuthorized(true)
-          await Promise.allSettled([
-            reloadSuppliers(),
-            reloadPosts(),
-            fetchBuyerUsers(),
-            fetchNewsArticles().then((articles) => {
-              if (isMounted && articles) setNewsArticles(articles)
-            }),
-            fetchPartnerBuyers().then((partners) => {
-              if (isMounted && partners) setPartnerBuyers(partners)
-            }),
-          ])
-
-          // Count users
-          try {
-            const { count: usersCount } = await supabase.from('users').select('id', { count: 'exact', head: true })
-            if (isMounted && usersCount !== null) {
-              setStats((prev) => ({ ...prev, totalUsers: usersCount }))
-            }
-          } catch (_) {}
-
           setLoading(false)
           clearTimeout(safetyTimer)
         }
+        await dataLoads
       } catch (err) {
         console.error('Admin init error:', err)
-        if (isMounted) {
-          setAuthorized(true)
-          setLoading(false)
-        }
+        if (isMounted) setLoading(false)
       }
     }
 
@@ -586,6 +522,7 @@ export default function AdminDashboardPage() {
   const SIDEBAR_ITEMS = [
     { key: 'overview', label: 'Dashboard', icon: LayoutDashboard },
     { key: 'market-index', label: 'Seafood Index', icon: TrendingUp },
+    { key: 'buyer-requests', label: 'Buyer Requests', icon: Inbox, badge: openRequestsCount },
     { key: 'partners', label: 'Partner Buyers', icon: Handshake, badge: partnerBuyers.length },
     { key: 'news', label: 'News & Articles', icon: Newspaper, badge: newsArticles.length },
   ]
@@ -966,11 +903,6 @@ export default function AdminDashboardPage() {
                           <option value="Norway">🇳🇴 Norway</option>
                           <option value="Netherlands">🇳🇱 Netherlands</option>
                           <option value="Belgium">🇧🇪 Belgium</option>
-                          <option value="Spain">🇪🇸 Spain</option>
-                          <option value="France">🇫🇷 France</option>
-                          <option value="Denmark">🇩🇰 Denmark</option>
-                          <option value="Iceland">🇮🇸 Iceland</option>
-                          <option value="United Kingdom">🇬🇧 United Kingdom</option>
                         </select>
                       </div>
                     </div>
@@ -1447,6 +1379,8 @@ export default function AdminDashboardPage() {
             )}
 
             {/* VIEW 7: SEAFOOD INDEX MANAGEMENT */}
+            {activeNav === 'buyer-requests' && <BuyerRequestsTab onCountChange={setOpenRequestsCount} />}
+
             {activeNav === 'market-index' && (
               <div className="space-y-6">
                 <MarketIndexTab onBackToDashboard={() => setActiveNav('overview')} />

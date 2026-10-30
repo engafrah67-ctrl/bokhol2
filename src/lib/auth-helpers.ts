@@ -25,6 +25,7 @@ export async function performSignOut(redirectTo = '/login') {
         Object.keys(localStorage).forEach((key) => {
           if (
             key.startsWith('sb-') ||
+            key.startsWith('admin_') ||
             key.includes('supabase') ||
             key.includes('auth-token')
           ) {

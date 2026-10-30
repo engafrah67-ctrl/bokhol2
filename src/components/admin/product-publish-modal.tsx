@@ -1,132 +1,79 @@
 'use client'
 
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import {
   X,
-  CheckCircle2,
   Loader2,
-  Search,
-  Layers,
   Fish,
   Building2,
-  DollarSign,
-  Upload,
+  ImagePlus,
+  Trash2,
+  ChevronDown,
+  Search,
   Check,
-  Sparkles,
+  AlertCircle,
+  Snowflake,
+  Droplets,
+  Flame,
+  Waves,
 } from 'lucide-react'
 import { getFishImageForProduct } from '@/lib/data/products-data'
-
-export const READY_SEAFOOD_PRESETS = [
-  // Salmon
-  { name: 'Atlantic Salmon', image: '/fish-salmon.png', category: 'Salmon', defaultOrigin: 'Norway' },
-  { name: 'Fresh Salmon Fillet', image: '/fish-salmonfillet.jpg', category: 'Salmon', defaultOrigin: 'Norway' },
-  { name: 'Salmon Portions', image: '/fish-salmonfillet.jpg', category: 'Salmon', defaultOrigin: 'Norway' },
-  { name: 'Pacific Salmon', image: '/fish-salmon.png', category: 'Salmon', defaultOrigin: 'United States' },
-
-  // Tuna
-  { name: 'Yellowfin Tuna', image: '/fish-tuna.png', category: 'Tuna', defaultOrigin: 'Spain' },
-  { name: 'Bluefin Tuna', image: '/fish-tuna.png', category: 'Tuna', defaultOrigin: 'Spain' },
-  { name: 'Bigeye Tuna', image: '/fish-tuna.png', category: 'Tuna', defaultOrigin: 'Maldives' },
-  { name: 'Albacore Tuna', image: '/fish-tuna.png', category: 'Tuna', defaultOrigin: 'Spain' },
-  { name: 'Tuna Loin', image: '/fish-tuna.png', category: 'Tuna', defaultOrigin: 'Spain' },
-  { name: 'Skipjack Tuna', image: '/fish-tuna.png', category: 'Tuna', defaultOrigin: 'Indonesia' },
-
-  // Sea Bass & Sea Bream
-  { name: 'European Sea Bass', image: '/fish-seabass.png', category: 'Sea Bass & Bream', defaultOrigin: 'Greece' },
-  { name: 'Sea Bass', image: '/fish-seabass.png', category: 'Sea Bass & Bream', defaultOrigin: 'Greece' },
-  { name: 'Gilthead Sea Bream', image: '/fish-seabream.jpg', category: 'Sea Bass & Bream', defaultOrigin: 'Greece' },
-  { name: 'Sea Bream (Dorade)', image: '/fish-seabream.jpg', category: 'Sea Bass & Bream', defaultOrigin: 'Turkey' },
-
-  // Cod Family
-  { name: 'Atlantic Cod', image: '/fish-cod.png', category: 'Cod Family', defaultOrigin: 'Iceland' },
-  { name: 'Cod Fillet', image: '/fish-cod.png', category: 'Cod Family', defaultOrigin: 'Norway' },
-  { name: 'Pacific Cod', image: '/fish-cod.png', category: 'Cod Family', defaultOrigin: 'United States' },
-  { name: 'Haddock', image: '/fish-haddock.jpg', category: 'Cod Family', defaultOrigin: 'United Kingdom' },
-  { name: 'Alaska Pollock', image: '/fish-cod.png', category: 'Cod Family', defaultOrigin: 'United States' },
-  { name: 'Hake', image: '/fish-cod.png', category: 'Cod Family', defaultOrigin: 'Spain' },
-
-  // Pelagic
-  { name: 'Atlantic Mackerel', image: '/fish-mackerel.png', category: 'Pelagic & Small', defaultOrigin: 'Netherlands' },
-  { name: 'Herring', image: '/fish-mackerel.png', category: 'Pelagic & Small', defaultOrigin: 'Netherlands' },
-  { name: 'Sardine', image: '/fish-mackerel.png', category: 'Pelagic & Small', defaultOrigin: 'Morocco' },
-  { name: 'Anchovy', image: '/fish-mackerel.png', category: 'Pelagic & Small', defaultOrigin: 'Spain' },
-
-  // Flatfish
-  { name: 'Turbot', image: '/fish-turbot.jpg', category: 'Flatfish', defaultOrigin: 'Netherlands' },
-  { name: 'Halibut', image: '/fish-turbot.jpg', category: 'Flatfish', defaultOrigin: 'Norway' },
-  { name: 'Plaice', image: '/fish-turbot.jpg', category: 'Flatfish', defaultOrigin: 'Netherlands' },
-  { name: 'Sole', image: '/fish-turbot.jpg', category: 'Flatfish', defaultOrigin: 'France' },
-  { name: 'Brill', image: '/fish-turbot.jpg', category: 'Flatfish', defaultOrigin: 'Netherlands' },
-
-  // Shellfish & Cephalopods
-  { name: 'Squid (Calamari)', image: '/fish-squid.jpg', category: 'Crustaceans & Shellfish', defaultOrigin: 'Spain' },
-  { name: 'Whole Octopus', image: '/fish-octopus.jpg', category: 'Crustaceans & Shellfish', defaultOrigin: 'Morocco' },
-  { name: 'King Crab', image: '/fish-crab.jpg', category: 'Crustaceans & Shellfish', defaultOrigin: 'Norway' },
-  { name: 'Crab', image: '/fish-crab.jpg', category: 'Crustaceans & Shellfish', defaultOrigin: 'United Kingdom' },
-  { name: 'Shrimp / Prawn', image: '/shrimp.png', category: 'Crustaceans & Shellfish', defaultOrigin: 'Ecuador' },
-  { name: 'Lobster', image: '/fish-lobster.jpg', category: 'Crustaceans & Shellfish', defaultOrigin: 'Canada' },
-  { name: 'Mussels', image: '/shrimp.png', category: 'Crustaceans & Shellfish', defaultOrigin: 'Spain' },
-
-  // Other Finfish
-  { name: 'Red Snapper', image: '/fish-redsnapper.jpg', category: 'Other Finfish', defaultOrigin: 'Spain' },
-  { name: 'Rainbow Trout', image: '/fish-trout.jpg', category: 'Other Finfish', defaultOrigin: 'Denmark' },
-  { name: 'Trout', image: '/fish-trout.jpg', category: 'Other Finfish', defaultOrigin: 'France' },
-  { name: 'Swordfish', image: '/fish-tuna.png', category: 'Other Finfish', defaultOrigin: 'Spain' },
-]
-
-export const READY_SEAFOOD_PHOTOS = [
-  { label: 'Salmon', image: '/fish-salmon.png' },
-  { label: 'Salmon Fillet', image: '/fish-salmonfillet.jpg' },
-  { label: 'Tuna', image: '/fish-tuna.png' },
-  { label: 'Cod', image: '/fish-cod.png' },
-  { label: 'Sea Bass', image: '/fish-seabass.png' },
-  { label: 'Sea Bream', image: '/fish-seabream.jpg' },
-  { label: 'Red Snapper', image: '/fish-redsnapper.jpg' },
-  { label: 'Turbot', image: '/fish-turbot.jpg' },
-  { label: 'Mackerel', image: '/fish-mackerel.png' },
-  { label: 'Squid', image: '/fish-squid.jpg' },
-  { label: 'Octopus', image: '/fish-octopus.jpg' },
-  { label: 'Shrimp', image: '/shrimp.png' },
-  { label: 'King Crab', image: '/fish-crab.jpg' },
-  { label: 'Lobster', image: '/fish-lobster.jpg' },
-  { label: 'Trout', image: '/fish-trout.jpg' },
-  { label: 'Haddock', image: '/fish-haddock.jpg' },
-]
+import { resizeImage, uploadImage, validateImageFile } from '@/lib/media'
 
 const ORIGIN_COUNTRIES = [
-  { name: 'Norway', flag: '🇳🇴' },
-  { name: 'Netherlands', flag: '🇳🇱' },
-  { name: 'Germany', flag: '🇩🇪' },
-  { name: 'Belgium', flag: '🇧🇪' },
-  { name: 'Iceland', flag: '🇮🇸' },
-  { name: 'Spain', flag: '🇪🇸' },
-  { name: 'France', flag: '🇫🇷' },
-  { name: 'Denmark', flag: '🇩🇰' },
-  { name: 'United Kingdom', flag: '🇬🇧' },
-  { name: 'Ireland', flag: '🇮🇪' },
-  { name: 'Faroe Islands', flag: '🇫🇴' },
-  { name: 'Portugal', flag: '🇵🇹' },
-  { name: 'Italy', flag: '🇮🇹' },
-  { name: 'Greece', flag: '🇬🇷' },
-  { name: 'Turkey', flag: '🇹🇷' },
-  { name: 'Chile', flag: '🇨🇱' },
-  { name: 'Peru', flag: '🇵🇪' },
-  { name: 'Ecuador', flag: '🇪🇨' },
-  { name: 'Canada', flag: '🇨🇦' },
-  { name: 'United States', flag: '🇺🇸' },
-  { name: 'Japan', flag: '🇯🇵' },
-  { name: 'Vietnam', flag: '🇻🇳' },
-  { name: 'Indonesia', flag: '🇮🇩' },
-  { name: 'India', flag: '🇮🇳' },
-  { name: 'Thailand', flag: '🇹🇭' },
-  { name: 'China', flag: '🇨🇳' },
-  { name: 'Morocco', flag: '🇲🇦' },
-  { name: 'Mauritania', flag: '🇲🇷' },
-  { name: 'Senegal', flag: '🇸🇳' },
-  { name: 'South Africa', flag: '🇿🇦' },
-  { name: 'New Zealand', flag: '🇳🇿' },
-  { name: 'Australia', flag: '🇦🇺' },
+  { name: 'Norway', code: 'no' },
+  { name: 'Netherlands', code: 'nl' },
+  { name: 'Germany', code: 'de' },
+  { name: 'Belgium', code: 'be' },
+  { name: 'Iceland', code: 'is' },
+  { name: 'Spain', code: 'es' },
+  { name: 'France', code: 'fr' },
+  { name: 'Denmark', code: 'dk' },
+  { name: 'United Kingdom', code: 'gb' },
+  { name: 'Ireland', code: 'ie' },
+  { name: 'Faroe Islands', code: 'fo' },
+  { name: 'Portugal', code: 'pt' },
+  { name: 'Italy', code: 'it' },
+  { name: 'Greece', code: 'gr' },
+  { name: 'Turkey', code: 'tr' },
+  { name: 'Chile', code: 'cl' },
+  { name: 'Peru', code: 'pe' },
+  { name: 'Ecuador', code: 'ec' },
+  { name: 'Canada', code: 'ca' },
+  { name: 'United States', code: 'us' },
+  { name: 'Japan', code: 'jp' },
+  { name: 'Vietnam', code: 'vn' },
+  { name: 'Indonesia', code: 'id' },
+  { name: 'India', code: 'in' },
+  { name: 'Thailand', code: 'th' },
+  { name: 'China', code: 'cn' },
+  { name: 'Morocco', code: 'ma' },
+  { name: 'Mauritania', code: 'mr' },
+  { name: 'Senegal', code: 'sn' },
+  { name: 'South Africa', code: 'za' },
+  { name: 'New Zealand', code: 'nz' },
+  { name: 'Australia', code: 'au' },
 ]
+
+const FORMS = [
+  { value: 'Fresh', icon: Droplets },
+  { value: 'Frozen', icon: Snowflake },
+  { value: 'Smoked', icon: Flame },
+  { value: 'Live', icon: Waves },
+] as const
+
+type FormType = (typeof FORMS)[number]['value']
+
+const PACKAGING_SUGGESTIONS = ['Fillet (Skin On)', 'Fillet (Skinless)', 'Whole Round', 'Gutted', 'IQF Frozen', 'Loins']
+
+const AVAILABILITY_OPTIONS = [
+  { value: 'In Stock — Ready to Ship', label: 'In stock — ready to ship' },
+  { value: 'Available within 7 days', label: 'Within 7 days' },
+  { value: 'Available within 2 weeks', label: 'Within 2 weeks' },
+  { value: 'Pre-order Required', label: 'Pre-order' },
+]
+
+const flagUrl = (code: string) => `https://flagcdn.com/w40/${code}.png`
 
 interface ProductPublishModalProps {
   isOpen: boolean
@@ -142,9 +89,84 @@ interface ProductPublishModalProps {
   }>
 }
 
-const lbl = 'block text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-1'
-const inp = 'w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-800 focus:outline-none focus:border-[#022B96] focus:bg-white transition'
-const sel = 'w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-800 focus:outline-none focus:border-[#022B96] focus:bg-white transition cursor-pointer'
+const label = 'block text-xs font-semibold text-slate-600 mb-1.5'
+const input =
+  'w-full h-11 px-3.5 bg-white border border-slate-200 rounded-xl text-sm text-slate-900 placeholder:text-slate-400 shadow-2xs focus:outline-none focus:ring-4 focus:ring-[#022B96]/10 focus:border-[#022B96] transition'
+
+function CountrySelect({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  const [open, setOpen] = useState(false)
+  const [query, setQuery] = useState('')
+  const ref = useRef<HTMLDivElement>(null)
+  const selected = ORIGIN_COUNTRIES.find((c) => c.name === value)
+
+  useEffect(() => {
+    if (!open) return
+    const close = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
+    }
+    document.addEventListener('mousedown', close)
+    return () => document.removeEventListener('mousedown', close)
+  }, [open])
+
+  const filtered = ORIGIN_COUNTRIES.filter((c) => c.name.toLowerCase().includes(query.trim().toLowerCase()))
+
+  return (
+    <div ref={ref} className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        className={`${input} flex items-center gap-2.5 text-left cursor-pointer`}
+        aria-haspopup="listbox"
+        aria-expanded={open}
+      >
+        {selected ? (
+          <img src={flagUrl(selected.code)} alt="" className="h-3.5 w-5 rounded-[3px] object-cover ring-1 ring-black/5" />
+        ) : null}
+        <span className={`flex-1 truncate ${selected ? '' : 'text-slate-400'}`}>{selected?.name || 'Select country'}</span>
+        <ChevronDown className={`h-4 w-4 text-slate-400 transition-transform ${open ? 'rotate-180' : ''}`} />
+      </button>
+
+      {open && (
+        <div className="absolute z-20 mt-1.5 w-full bg-white border border-slate-200 rounded-xl shadow-lg overflow-hidden">
+          <div className="p-2 border-b border-slate-100">
+            <div className="relative">
+              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
+              <input
+                autoFocus
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="Search country"
+                className="w-full h-8 pl-8 pr-2 text-sm bg-slate-50 rounded-lg focus:outline-none"
+              />
+            </div>
+          </div>
+          <ul role="listbox" className="max-h-56 overflow-y-auto py-1">
+            {filtered.map((c) => (
+              <li key={c.code}>
+                <button
+                  type="button"
+                  role="option"
+                  aria-selected={c.name === value}
+                  onClick={() => {
+                    onChange(c.name)
+                    setOpen(false)
+                    setQuery('')
+                  }}
+                  className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-slate-700 hover:bg-slate-50 cursor-pointer"
+                >
+                  <img src={flagUrl(c.code)} alt="" className="h-3.5 w-5 rounded-[3px] object-cover ring-1 ring-black/5" />
+                  <span className="flex-1 text-left">{c.name}</span>
+                  {c.name === value && <Check className="h-4 w-4 text-[#022B96]" />}
+                </button>
+              </li>
+            ))}
+            {filtered.length === 0 && <li className="px-3 py-3 text-sm text-slate-400">No country found</li>}
+          </ul>
+        </div>
+      )}
+    </div>
+  )
+}
 
 export function ProductPublishModal({
   isOpen,
@@ -155,124 +177,124 @@ export function ProductPublishModal({
   suppliers,
 }: ProductPublishModalProps) {
   const [selectedSupplierId, setSelectedSupplierId] = useState<string>('')
-  const [productName, setProductName] = useState('Atlantic Salmon')
+  const [productName, setProductName] = useState('')
   const [pricePerKg, setPricePerKg] = useState('')
-  const [currency, setCurrency] = useState('EUR')
-  const [freshFrozen, setFreshFrozen] = useState<'Fresh' | 'Frozen' | 'Smoked' | 'Live'>('Frozen')
+  const [freshFrozen, setFreshFrozen] = useState<FormType>('Fresh')
   const [countryOfOrigin, setCountryOfOrigin] = useState('Norway')
-  const [sizeWeight, setSizeWeight] = useState('1–3 kg')
-  const [packagingFillet, setPackagingFillet] = useState('Fillet (Skin On)')
-  const [availability, setAvailability] = useState('In Stock — Ready to Ship')
+  const [sizeWeight, setSizeWeight] = useState('')
+  const [packagingFillet, setPackagingFillet] = useState('')
+  const [availability, setAvailability] = useState(AVAILABILITY_OPTIONS[0].value)
   const [location, setLocation] = useState('')
   const [supplierInfoExtra, setSupplierInfoExtra] = useState('')
-  const [selectedPhoto, setSelectedPhoto] = useState<string>('/fish-salmon.png')
-  const [isCustomUpload, setIsCustomUpload] = useState(false)
+  // `photo` is what we display: an existing URL, or a local preview of a not-yet-uploaded file
+  const [photo, setPhoto] = useState<string>('')
+  const [photoBlob, setPhotoBlob] = useState<Blob | null>(null)
+  const [photoBusy, setPhotoBusy] = useState(false)
+  const [dragOver, setDragOver] = useState(false)
   const [saving, setSaving] = useState(false)
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
-  // Drawer / Visual Catalog Modal state
-  const [isCatalogDrawerOpen, setIsCatalogDrawerOpen] = useState(false)
-  const [catalogSearch, setCatalogSearch] = useState('')
+  const isEditing = Boolean(initialPost?.id)
 
   useEffect(() => {
     if (!isOpen) return
     setErrorMsg(null)
-    setIsCatalogDrawerOpen(false)
 
     if (initialPost) {
       setSelectedSupplierId(initialPost.company_id || defaultSupplierId || suppliers[0]?.id || '')
       setProductName(initialPost.product_name || '')
       setPricePerKg(initialPost.price_per_kg ? String(initialPost.price_per_kg) : '')
-      setCurrency(initialPost.currency || 'EUR')
-      setFreshFrozen(initialPost.fresh_frozen || 'Frozen')
+      setFreshFrozen(FORMS.some((f) => f.value === initialPost.fresh_frozen) ? initialPost.fresh_frozen : 'Fresh')
       setCountryOfOrigin(initialPost.country_of_origin || 'Norway')
       setSizeWeight(initialPost.size_weight || '')
       setPackagingFillet(initialPost.packaging || '')
-      setAvailability(initialPost.availability || 'In Stock — Ready to Ship')
+      setAvailability(initialPost.availability || AVAILABILITY_OPTIONS[0].value)
       setLocation(initialPost.location || '')
       setSupplierInfoExtra(initialPost.supplier_info_extra || '')
-
-      const existingImg = initialPost.custom_image || getFishImageForProduct(initialPost.product_name || '')
-      setSelectedPhoto(existingImg)
-      setIsCustomUpload(Boolean(initialPost.custom_image && !initialPost.custom_image.startsWith('/fish-') && initialPost.custom_image !== '/shrimp.png'))
+      setPhoto(initialPost.custom_image || '')
+      setPhotoBlob(null)
     } else {
       setSelectedSupplierId(defaultSupplierId || suppliers[0]?.id || '')
-      setProductName('Atlantic Salmon')
+      setProductName('')
       setPricePerKg('')
-      setCurrency('EUR')
-      setFreshFrozen('Frozen')
+      setFreshFrozen('Fresh')
       setCountryOfOrigin('Norway')
-      setSizeWeight('1–3 kg')
-      setPackagingFillet('Fillet (Skin On)')
-      setAvailability('In Stock — Ready to Ship')
+      setSizeWeight('')
+      setPackagingFillet('')
+      setAvailability(AVAILABILITY_OPTIONS[0].value)
       setLocation('')
       setSupplierInfoExtra('')
-      setSelectedPhoto('/fish-salmon.png')
-      setIsCustomUpload(false)
+      setPhoto('')
+      setPhotoBlob(null)
     }
   }, [isOpen, initialPost, defaultSupplierId, suppliers])
 
   if (!isOpen) return null
 
-  // Handler when user selects a preset product
-  const handleSelectPresetProduct = (preset: (typeof READY_SEAFOOD_PRESETS)[0]) => {
-    setProductName(preset.name)
-    setSelectedPhoto(preset.image)
-    setIsCustomUpload(false)
-    if (preset.defaultOrigin) {
-      setCountryOfOrigin(preset.defaultOrigin)
+  const handleFile = async (file: File | undefined) => {
+    if (!file) return
+    setErrorMsg(null)
+    setPhotoBusy(true)
+    try {
+      validateImageFile(file)
+      const blob = await resizeImage(file)
+      setPhotoBlob(blob)
+      setPhoto(URL.createObjectURL(blob))
+    } catch (err: any) {
+      setErrorMsg(err?.message || 'Could not read this image.')
+    } finally {
+      setPhotoBusy(false)
     }
-    setIsCatalogDrawerOpen(false)
   }
 
-  // Handler for custom file upload
-  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (!file) return
-    const reader = new FileReader()
-    reader.onload = (ev) => {
-      if (ev.target?.result) {
-        setSelectedPhoto(ev.target.result as string)
-        setIsCustomUpload(true)
-      }
-    }
-    reader.readAsDataURL(file)
-  }
+  const priceNum = parseFloat(pricePerKg)
+  const priceValid = Number.isFinite(priceNum) && priceNum > 0
+  const selectedSupplier = suppliers.find((s) => s.id === selectedSupplierId)
 
   const handleSave = async () => {
     setErrorMsg(null)
-    const selectedSupplier = suppliers.find((s) => s.id === selectedSupplierId)
-    if (!selectedSupplierId || !selectedSupplier) {
+    if (!selectedSupplier) {
       setErrorMsg('Please select a supplier.')
       return
     }
     if (!productName.trim()) {
-      setErrorMsg('Please enter or select a seafood product name.')
+      setErrorMsg('Please enter the seafood name.')
       return
     }
-    const priceNum = parseFloat(pricePerKg)
-    if (isNaN(priceNum) || priceNum <= 0) {
+    if (!priceValid) {
       setErrorMsg('Please enter a valid price per kg (e.g. 14.50).')
       return
     }
 
     setSaving(true)
+    const name = productName.trim()
+    const currency = 'EUR'
     const priceLabel = `${currency} ${priceNum.toFixed(2)}/kg`
-    const photoToSave = selectedPhoto || getFishImageForProduct(productName.trim())
+    let photoToSave = photo || getFishImageForProduct(name)
+    if (photoBlob) {
+      try {
+        photoToSave = await uploadImage(photoBlob, 'products')
+      } catch (err: any) {
+        setErrorMsg(err?.message || 'Photo upload failed.')
+        setSaving(false)
+        return
+      }
+    }
 
     const details = {
-      productName: productName.trim(),
+      productName: name,
       pricePerKg: priceNum,
       minPricePerKg: priceNum,
       maxPricePerKg: 0,
       currency,
       countryOfOrigin,
       freshFrozen,
-      sizeWeight,
-      packagingFillet,
+      sizeWeight: sizeWeight.trim(),
+      packagingFillet: packagingFillet.trim(),
       availability,
-      location,
-      supplierInfoExtra,
+      location: location.trim(),
+      supplierInfoExtra: supplierInfoExtra.trim(),
       customImage: photoToSave,
       companyId: selectedSupplier.id,
       companyName: selectedSupplier.name,
@@ -282,81 +304,56 @@ export function ProductPublishModal({
       createdAt: initialPost?.created_at || new Date().toISOString(),
     }
 
+    const savedView = {
+      company_id: selectedSupplier.id,
+      company_name: selectedSupplier.name,
+      company_logo: selectedSupplier.logoUrl,
+      company_country: selectedSupplier.country,
+      product_name: name,
+      price_per_kg: priceNum,
+      max_price_per_kg: 0,
+      currency,
+      country_of_origin: countryOfOrigin,
+      fresh_frozen: freshFrozen,
+      size_weight: details.sizeWeight,
+      packaging: details.packagingFillet,
+      availability,
+      location: details.location,
+      supplier_info_extra: details.supplierInfoExtra,
+      custom_image: photoToSave,
+      is_published: true,
+    }
+
     try {
-      if (initialPost?.id) {
+      if (isEditing) {
         const res = await fetch('/api/supplier/posts', {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             postId: initialPost.id,
-            title: `${productName.trim()} — ${priceLabel}`,
+            title: `${name} — ${priceLabel}`,
             content: JSON.stringify(details),
             is_published: true,
-            updated_at: new Date().toISOString(),
           }),
         })
         const json = await res.json()
         if (!res.ok || json.error) throw new Error(json.error || 'Failed to update product')
-        onSaved({
-          ...initialPost,
-          company_id: selectedSupplier.id,
-          company_name: selectedSupplier.name,
-          company_logo: selectedSupplier.logoUrl,
-          company_country: selectedSupplier.country,
-          product_name: productName.trim(),
-          price_per_kg: priceNum,
-          max_price_per_kg: 0,
-          currency,
-          country_of_origin: countryOfOrigin,
-          fresh_frozen: freshFrozen,
-          size_weight: sizeWeight,
-          packaging: packagingFillet,
-          availability,
-          location,
-          supplier_info_extra: supplierInfoExtra,
-          custom_image: photoToSave,
-          is_published: true,
-          updated_at: new Date().toISOString(),
-        })
+        onSaved({ ...initialPost, ...savedView, updated_at: new Date().toISOString() })
       } else {
         const res = await fetch('/api/supplier/posts', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             companyId: selectedSupplier.id,
-            companyName: selectedSupplier.name,
             category: 'product_availability',
-            title: `${productName.trim()} — ${priceLabel}`,
+            title: `${name} — ${priceLabel}`,
             content: JSON.stringify(details),
-            details,
             is_published: true,
           }),
         })
         const json = await res.json()
         if (!res.ok || !json.success) throw new Error(json.error || 'Failed to publish product')
-        onSaved(
-          json.post || {
-            id: `post-${Date.now()}`,
-            company_id: selectedSupplier.id,
-            company_name: selectedSupplier.name,
-            company_logo: selectedSupplier.logoUrl,
-            company_country: selectedSupplier.country,
-            product_name: productName.trim(),
-            price_per_kg: priceNum,
-            max_price_per_kg: 0,
-            currency,
-            country_of_origin: countryOfOrigin,
-            fresh_frozen: freshFrozen,
-            size_weight: sizeWeight,
-            packaging: packagingFillet,
-            availability,
-            location,
-            supplier_info_extra: supplierInfoExtra,
-            custom_image: photoToSave,
-            is_published: true,
-            created_at: new Date().toISOString(),
-          }
-        )
+        onSaved({ ...savedView, ...json.post })
       }
       onClose()
     } catch (err: any) {
@@ -366,462 +363,316 @@ export function ProductPublishModal({
     }
   }
 
-  // Filtered presets for visual drawer
-  const filteredCatalog = READY_SEAFOOD_PRESETS.filter((p) => {
-    if (!catalogSearch.trim()) return true
-    const q = catalogSearch.toLowerCase()
-    return p.name.toLowerCase().includes(q) || p.category.toLowerCase().includes(q)
-  })
-
-  // Group catalog presets by category
-  const categories = Array.from(new Set(READY_SEAFOOD_PRESETS.map((p) => p.category)))
-
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-5 bg-slate-900/60 backdrop-blur-xs overflow-y-auto">
-      {/* ── Wide Clean Modal Card ── */}
-      <div className="bg-white rounded-3xl max-w-4xl w-full shadow-2xl border border-slate-200 overflow-hidden my-auto flex flex-col max-h-[92vh]">
-        
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-slate-950/50 backdrop-blur-sm overflow-y-auto">
+      <div className="w-full max-w-4xl bg-white rounded-3xl shadow-2xl overflow-hidden flex flex-col max-h-[94vh] animate-in fade-in zoom-in-95 duration-150">
         {/* Header */}
-        <div className="flex items-center justify-between px-6 sm:px-8 py-3.5 bg-[#022B96] text-white shrink-0">
-          <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-2xl bg-white/10 border border-white/20 flex items-center justify-center">
-              <Fish className="w-4 h-4 text-white" />
+        <div className="flex items-start justify-between gap-4 px-6 sm:px-8 pt-6 pb-5 border-b border-slate-100">
+          <div className="flex items-center gap-3.5">
+            <div className="h-11 w-11 rounded-2xl bg-[#022B96]/8 text-[#022B96] flex items-center justify-center">
+              <Fish className="h-5 w-5" />
             </div>
             <div>
-              <h2 className="text-base font-black tracking-tight leading-tight">
-                {initialPost ? 'Edit Seafood Product' : 'Add Seafood Product'}
+              <h2 className="text-lg font-bold text-slate-900 leading-tight">
+                {isEditing ? 'Edit product' : 'Add seafood product'}
               </h2>
-              <p className="text-[11px] text-blue-200 font-medium">
-                Fast entry with ready seafood catalog species &amp; photos
-              </p>
+              <p className="text-sm text-slate-500">Publish a supplier offer to the marketplace</p>
             </div>
           </div>
           <button
             type="button"
             onClick={onClose}
-            className="p-1.5 rounded-xl text-blue-200 hover:text-white hover:bg-white/10 transition cursor-pointer"
+            className="h-9 w-9 rounded-full flex items-center justify-center text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition cursor-pointer"
+            aria-label="Close"
           >
-            <X className="w-4 h-4" />
+            <X className="h-5 w-5" />
           </button>
         </div>
 
-        {/* Modal Body */}
-        <div className="p-5 sm:p-7 overflow-y-auto flex-1 space-y-4">
-          {errorMsg && (
-            <div className="p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-xs font-bold flex items-center gap-2">
-              <X className="w-3.5 h-3.5 shrink-0" />
-              <span>{errorMsg}</span>
-            </div>
-          )}
-
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
-            {/* ══ LEFT COLUMN: Ready Photos & Supplier Info (5 cols) ══ */}
-            <div className="lg:col-span-5 space-y-3.5">
-              {/* Ready Product Photo Card */}
-              <div className="bg-slate-50 border border-slate-200/90 rounded-2xl p-3.5 space-y-2.5">
-                <div className="flex items-center justify-between">
-                  <label className={lbl}>Product Photo</label>
-                  <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
-                    Ready to Use
-                  </span>
-                </div>
-
-                {/* Big Active Photo Preview */}
-                <div className="w-full h-36 rounded-xl bg-white border border-slate-200 p-2 flex items-center justify-center overflow-hidden shadow-2xs relative group">
-                  <img
-                    src={selectedPhoto || getFishImageForProduct(productName)}
-                    alt={productName}
-                    className="max-h-full max-w-full object-contain transition-transform group-hover:scale-105 duration-200"
-                  />
-                  {isCustomUpload && (
-                    <span className="absolute bottom-1.5 right-1.5 text-[9px] font-bold bg-slate-900/80 text-white px-1.5 py-0.5 rounded">
-                      Custom Upload
-                    </span>
-                  )}
-                </div>
-
-                {/* Ready Seafood Quick Photo Selector */}
-                <div>
-                  <div className="flex items-center justify-between mb-1.5">
-                    <span className="text-[10px] font-bold uppercase text-slate-500 tracking-wider">
-                      Choose Ready Photo ({READY_SEAFOOD_PHOTOS.length}):
-                    </span>
-                    {isCustomUpload && (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setSelectedPhoto(getFishImageForProduct(productName))
-                          setIsCustomUpload(false)
-                        }}
-                        className="text-[10px] font-bold text-[#022B96] hover:underline cursor-pointer"
-                      >
-                        Reset
-                      </button>
-                    )}
+        {/* Body */}
+        <div className="flex-1 overflow-y-auto px-6 sm:px-8 py-6">
+          <div className="grid grid-cols-1 md:grid-cols-[260px_1fr] gap-8">
+            {/* Photo */}
+            <div className="space-y-3">
+              <span className={label}>Product photo</span>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/jpeg,image/png,image/webp"
+                className="hidden"
+                onChange={(e) => {
+                  handleFile(e.target.files?.[0])
+                  e.target.value = ''
+                }}
+              />
+              {photo ? (
+                <div className="group relative aspect-square rounded-2xl overflow-hidden border border-slate-200 bg-slate-50">
+                  <img src={photo} alt={productName || 'Product photo'} className="h-full w-full object-cover" />
+                  <div className="absolute inset-x-0 bottom-0 p-2.5 flex gap-2 bg-gradient-to-t from-black/50 to-transparent opacity-0 group-hover:opacity-100 transition">
+                    <button
+                      type="button"
+                      onClick={() => fileInputRef.current?.click()}
+                      className="flex-1 h-8 rounded-lg bg-white/95 text-xs font-semibold text-slate-800 hover:bg-white cursor-pointer"
+                    >
+                      Replace
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setPhoto('')
+                        setPhotoBlob(null)
+                      }}
+                      className="h-8 w-8 rounded-lg bg-white/95 text-red-600 flex items-center justify-center hover:bg-white cursor-pointer"
+                      aria-label="Remove photo"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </button>
                   </div>
-                  <div className="grid grid-cols-8 gap-1">
-                    {READY_SEAFOOD_PHOTOS.map((item) => {
-                      const isCurrent = selectedPhoto === item.image
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  onDragOver={(e) => {
+                    e.preventDefault()
+                    setDragOver(true)
+                  }}
+                  onDragLeave={() => setDragOver(false)}
+                  onDrop={(e) => {
+                    e.preventDefault()
+                    setDragOver(false)
+                    handleFile(e.dataTransfer.files?.[0])
+                  }}
+                  className={`w-full aspect-square rounded-2xl border-2 border-dashed flex flex-col items-center justify-center gap-3 text-center px-6 transition cursor-pointer ${
+                    dragOver
+                      ? 'border-[#022B96] bg-[#022B96]/5'
+                      : 'border-slate-200 bg-slate-50/60 hover:border-[#022B96]/50 hover:bg-[#022B96]/[0.03]'
+                  }`}
+                >
+                  {photoBusy ? (
+                    <Loader2 className="h-7 w-7 text-[#022B96] animate-spin" />
+                  ) : (
+                    <div className="h-12 w-12 rounded-2xl bg-white shadow-sm border border-slate-100 flex items-center justify-center">
+                      <ImagePlus className="h-5 w-5 text-[#022B96]" />
+                    </div>
+                  )}
+                  <div>
+                    <p className="text-sm font-semibold text-slate-800">Upload a photo</p>
+                    <p className="text-xs text-slate-500 mt-0.5">Drag & drop or click · JPG, PNG, WebP</p>
+                  </div>
+                </button>
+              )}
+              <p className="text-[11px] text-slate-400 leading-relaxed">
+                Photos are resized automatically. Without a photo, a standard image is used.
+              </p>
+            </div>
+
+            {/* Fields */}
+            <div className="space-y-6">
+              {/* Product */}
+              <section className="space-y-4">
+                <div>
+                  <label htmlFor="pp-name" className={label}>Seafood name *</label>
+                  <input
+                    id="pp-name"
+                    value={productName}
+                    onChange={(e) => setProductName(e.target.value)}
+                    placeholder="e.g. Atlantic Salmon"
+                    className={input}
+                    maxLength={80}
+                  />
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label htmlFor="pp-price" className={label}>Price per kg *</label>
+                    <div className="relative">
+                      <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-sm font-semibold text-slate-500">€</span>
+                      <input
+                        id="pp-price"
+                        type="number"
+                        inputMode="decimal"
+                        step="0.01"
+                        min="0"
+                        value={pricePerKg}
+                        onChange={(e) => setPricePerKg(e.target.value)}
+                        placeholder="14.50"
+                        className={`${input} pl-8 pr-14`}
+                      />
+                      <span className="absolute right-3.5 top-1/2 -translate-y-1/2 text-xs font-medium text-slate-400">EUR/kg</span>
+                    </div>
+                  </div>
+                  <div>
+                    <span className={label}>Country of origin</span>
+                    <CountrySelect value={countryOfOrigin} onChange={setCountryOfOrigin} />
+                  </div>
+                </div>
+
+                <div>
+                  <span className={label}>Form</span>
+                  <div className="grid grid-cols-4 gap-1.5 p-1 bg-slate-100 rounded-xl">
+                    {FORMS.map(({ value, icon: Icon }) => {
+                      const active = freshFrozen === value
                       return (
                         <button
-                          key={item.label}
+                          key={value}
                           type="button"
-                          title={item.label}
-                          onClick={() => {
-                            setSelectedPhoto(item.image)
-                            setIsCustomUpload(false)
-                          }}
-                          className={`h-9 rounded-lg p-0.5 bg-white border flex items-center justify-center transition-all cursor-pointer overflow-hidden ${
-                            isCurrent
-                              ? 'border-[#022B96] ring-2 ring-[#022B96]/30 bg-blue-50/50'
-                              : 'border-slate-200 hover:border-blue-300 hover:bg-slate-50'
+                          onClick={() => setFreshFrozen(value)}
+                          aria-pressed={active}
+                          className={`h-9 rounded-lg text-sm font-semibold flex items-center justify-center gap-1.5 transition cursor-pointer ${
+                            active ? 'bg-white text-[#022B96] shadow-sm' : 'text-slate-500 hover:text-slate-800'
                           }`}
                         >
-                          <img src={item.image} alt={item.label} className="h-full w-full object-contain" />
+                          <Icon className="h-3.5 w-3.5" />
+                          {value}
                         </button>
                       )
                     })}
                   </div>
                 </div>
+              </section>
 
-                {/* Upload Custom Photo Option */}
-                <div className="pt-1 border-t border-slate-200/80">
-                  <label className="cursor-pointer inline-flex items-center justify-center gap-1.5 w-full py-1.5 bg-white hover:bg-slate-100 border border-slate-200 rounded-lg text-[11px] font-bold text-slate-700 transition">
-                    <Upload className="w-3 h-3 text-slate-500" />
-                    <span>Upload Custom Photo</span>
-                    <input type="file" accept="image/*" onChange={handleImageUpload} className="hidden" />
-                  </label>
-                </div>
-              </div>
+              <div className="h-px bg-slate-100" />
 
-              {/* Supplier Selection */}
-              <div>
-                <label className={lbl}>
-                  <span className="flex items-center gap-1">
-                    <Building2 className="w-3.5 h-3.5 text-[#022B96]" /> Supplier Company *
-                  </span>
-                </label>
-                <select
-                  value={selectedSupplierId}
-                  onChange={(e) => setSelectedSupplierId(e.target.value)}
-                  className={sel}
-                >
-                  <option value="">— Select Supplier Profile —</option>
-                  {suppliers.map((s) => (
-                    <option key={s.id} value={s.id}>
-                      {s.name} {s.country ? `(${s.country})` : ''}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              {/* Availability & Location row */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                <div>
-                  <label className={lbl}>Availability</label>
-                  <select
-                    value={availability}
-                    onChange={(e) => setAvailability(e.target.value)}
-                    className={sel}
-                  >
-                    <option value="In Stock — Ready to Ship">In Stock — Ready to Ship</option>
-                    <option value="Available within 7 days">Within 7 days</option>
-                    <option value="Available within 2 weeks">Within 2 weeks</option>
-                    <option value="Pre-order Required">Pre-order</option>
-                  </select>
-                </div>
-                <div>
-                  <label className={lbl}>Location (Port / City)</label>
-                  <input
-                    type="text"
-                    value={location}
-                    onChange={(e) => setLocation(e.target.value)}
-                    placeholder="e.g. Rotterdam, Bergen"
-                    className={inp}
-                  />
-                </div>
-              </div>
-            </div>
-
-            {/* ══ RIGHT COLUMN: Product Species & Specifications (7 cols) ══ */}
-            <div className="lg:col-span-7 space-y-3.5">
-              {/* Product Name with Ready Dropdown & Drawer Button */}
-              <div className="bg-slate-50 border border-slate-200/90 rounded-2xl p-3.5 space-y-2">
-                <div className="flex items-center justify-between">
-                  <label className={lbl}>Seafood Species &amp; Name *</label>
-                  <button
-                    type="button"
-                    onClick={() => setIsCatalogDrawerOpen(true)}
-                    className="inline-flex items-center gap-1 text-[11px] font-bold text-[#022B96] hover:text-[#011a5e] bg-blue-100/70 hover:bg-blue-100 px-2 py-0.5 rounded-lg transition cursor-pointer"
-                  >
-                    <Layers className="w-3 h-3" />
-                    <span>Visual Catalog Drawer</span>
-                  </button>
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                  {/* Ready Species Quick Dropdown */}
-                  <select
-                    value={productName}
-                    onChange={(e) => {
-                      const val = e.target.value
-                      setProductName(val)
-                      const match = READY_SEAFOOD_PRESETS.find((p) => p.name === val)
-                      if (match) {
-                        setSelectedPhoto(match.image)
-                        setIsCustomUpload(false)
-                        if (match.defaultOrigin) setCountryOfOrigin(match.defaultOrigin)
-                      }
-                    }}
-                    className={sel + ' font-bold'}
-                  >
-                    <option value="">— Choose Species —</option>
-                    {categories.map((cat) => (
-                      <optgroup key={cat} label={`── ${cat} ──`}>
-                        {READY_SEAFOOD_PRESETS.filter((p) => p.category === cat).map((p) => (
-                          <option key={p.name} value={p.name}>
-                            {p.name}
-                          </option>
-                        ))}
-                      </optgroup>
-                    ))}
-                  </select>
-
-                  {/* Title / Description */}
-                  <input
-                    type="text"
-                    required
-                    value={productName}
-                    onChange={(e) => setProductName(e.target.value)}
-                    placeholder="Custom Title / Grade"
-                    className={inp}
-                  />
-                </div>
-              </div>
-
-              {/* Price & Currency */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label className={lbl}>Price per KG *</label>
-                  <div className="relative">
-                    <span className="absolute left-3 top-2 text-xs font-bold text-slate-400">
-                      {currency === 'USD' ? '$' : currency === 'GBP' ? '£' : '€'}
-                    </span>
+              {/* Details */}
+              <section className="space-y-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label htmlFor="pp-size" className={label}>Size / weight</label>
                     <input
-                      type="number"
-                      step="0.01"
-                      required
-                      value={pricePerKg}
-                      onChange={(e) => setPricePerKg(e.target.value)}
-                      placeholder="14.50"
-                      className={inp + ' pl-7 text-sm font-black text-[#022B96]'}
+                      id="pp-size"
+                      value={sizeWeight}
+                      onChange={(e) => setSizeWeight(e.target.value)}
+                      placeholder="e.g. 1–3 kg"
+                      className={input}
+                    />
+                  </div>
+                  <div>
+                    <label htmlFor="pp-pack" className={label}>Packaging / cut</label>
+                    <input
+                      id="pp-pack"
+                      value={packagingFillet}
+                      onChange={(e) => setPackagingFillet(e.target.value)}
+                      placeholder="e.g. Fillet (Skin On)"
+                      className={input}
+                      list="pp-pack-options"
+                    />
+                    <datalist id="pp-pack-options">
+                      {PACKAGING_SUGGESTIONS.map((p) => <option key={p} value={p} />)}
+                    </datalist>
+                  </div>
+                </div>
+                <div>
+                  <label htmlFor="pp-notes" className={label}>Notes for buyers</label>
+                  <textarea
+                    id="pp-notes"
+                    value={supplierInfoExtra}
+                    onChange={(e) => setSupplierInfoExtra(e.target.value)}
+                    placeholder="e.g. Wild-caught North Sea, MSC certified. Minimum order 500 kg."
+                    rows={3}
+                    className={`${input} h-auto py-2.5 resize-none`}
+                  />
+                </div>
+              </section>
+
+              <div className="h-px bg-slate-100" />
+
+              {/* Supplier */}
+              <section className="space-y-4">
+                <div>
+                  <label htmlFor="pp-supplier" className={label}>Supplier *</label>
+                  <div className="relative">
+                    <Building2 className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 pointer-events-none" />
+                    <select
+                      id="pp-supplier"
+                      value={selectedSupplierId}
+                      onChange={(e) => setSelectedSupplierId(e.target.value)}
+                      className={`${input} pl-10 pr-9 appearance-none cursor-pointer`}
+                    >
+                      <option value="">Select supplier</option>
+                      {suppliers.map((s) => (
+                        <option key={s.id} value={s.id}>
+                          {s.name}{s.country ? ` · ${s.country}` : ''}
+                        </option>
+                      ))}
+                    </select>
+                    <ChevronDown className="absolute right-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 pointer-events-none" />
+                  </div>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label htmlFor="pp-avail" className={label}>Availability</label>
+                    <div className="relative">
+                      <select
+                        id="pp-avail"
+                        value={availability}
+                        onChange={(e) => setAvailability(e.target.value)}
+                        className={`${input} pr-9 appearance-none cursor-pointer`}
+                      >
+                        {AVAILABILITY_OPTIONS.map((o) => (
+                          <option key={o.value} value={o.value}>{o.label}</option>
+                        ))}
+                      </select>
+                      <ChevronDown className="absolute right-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 pointer-events-none" />
+                    </div>
+                  </div>
+                  <div>
+                    <label htmlFor="pp-loc" className={label}>Location (port / city)</label>
+                    <input
+                      id="pp-loc"
+                      value={location}
+                      onChange={(e) => setLocation(e.target.value)}
+                      placeholder="e.g. Rotterdam"
+                      className={input}
                     />
                   </div>
                 </div>
-
-                <div>
-                  <label className={lbl}>Currency</label>
-                  <select
-                    value={currency}
-                    onChange={(e) => setCurrency(e.target.value)}
-                    className={sel}
-                  >
-                    <option value="EUR">EUR (€) — Euro</option>
-                    <option value="USD">USD ($) — US Dollar</option>
-                    <option value="GBP">GBP (£) — British Pound</option>
-                  </select>
-                </div>
-              </div>
-
-              {/* Form & Processing */}
-              <div>
-                <label className={lbl}>Form / Processing</label>
-                <div className="grid grid-cols-4 gap-1.5">
-                  {(['Fresh', 'Frozen', 'Smoked', 'Live'] as const).map((type) => (
-                    <button
-                      key={type}
-                      type="button"
-                      onClick={() => setFreshFrozen(type)}
-                      className={`py-1.5 text-xs font-bold rounded-xl border text-center transition cursor-pointer ${
-                        freshFrozen === type
-                          ? 'bg-[#022B96] text-white border-[#022B96] shadow-2xs'
-                          : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100'
-                      }`}
-                    >
-                      {type}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* Origin Country & Size/Weight */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label className={lbl}>Country of Origin</label>
-                  <select
-                    value={countryOfOrigin}
-                    onChange={(e) => setCountryOfOrigin(e.target.value)}
-                    className={sel}
-                  >
-                    {ORIGIN_COUNTRIES.map((c) => (
-                      <option key={c.name} value={c.name}>
-                        {c.flag} {c.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div>
-                  <label className={lbl}>Size / Weight Grading</label>
-                  <input
-                    type="text"
-                    value={sizeWeight}
-                    onChange={(e) => setSizeWeight(e.target.value)}
-                    placeholder="e.g. 1–3 kg, 3–5 kg, 500–800g"
-                    className={inp}
-                  />
-                </div>
-              </div>
-
-              {/* Packaging / Cut with quick pills */}
-              <div>
-                <div className="flex items-center justify-between mb-1">
-                  <label className={lbl}>Packaging / Cut</label>
-                  <div className="flex flex-wrap gap-1">
-                    {['Fillet (Skin On)', 'Whole Round', 'IQF Frozen'].map((opt) => (
-                      <button
-                        key={opt}
-                        type="button"
-                        onClick={() => setPackagingFillet(opt)}
-                        className={`text-[9px] font-bold px-1.5 py-0.5 rounded border transition cursor-pointer ${
-                          packagingFillet === opt
-                            ? 'bg-[#022B96] text-white border-[#022B96]'
-                            : 'bg-slate-100 hover:bg-slate-200 text-slate-600 border-slate-200'
-                        }`}
-                      >
-                        {opt}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-                <input
-                  type="text"
-                  value={packagingFillet}
-                  onChange={(e) => setPackagingFillet(e.target.value)}
-                  placeholder="e.g. Fillet (Skin On), Whole Round, IQF"
-                  className={inp}
-                />
-              </div>
-
-              {/* Notes */}
-              <div>
-                <label className={lbl}>Specifications / Supplier Notes</label>
-                <textarea
-                  rows={2}
-                  value={supplierInfoExtra}
-                  onChange={(e) => setSupplierInfoExtra(e.target.value)}
-                  placeholder="e.g. Wild-caught North Sea, MSC certified. Min order: 500 kg."
-                  className={inp + ' resize-none font-medium text-xs'}
-                />
-              </div>
+              </section>
             </div>
           </div>
         </div>
 
-        {/* Modal Footer */}
-        <div className="flex items-center justify-between px-6 sm:px-8 py-3.5 bg-slate-50 border-t border-slate-200 shrink-0">
-          <button
-            type="button"
-            onClick={onClose}
-            className="px-4 py-2 rounded-xl border border-slate-200 text-xs font-bold text-slate-600 hover:bg-slate-100 transition cursor-pointer"
-          >
-            Cancel
-          </button>
-          <button
-            type="button"
-            disabled={saving}
-            onClick={handleSave}
-            className="inline-flex items-center gap-2 px-6 py-2.5 bg-[#022B96] hover:bg-[#011a5e] text-white text-xs font-extrabold rounded-xl shadow-md transition cursor-pointer disabled:opacity-50"
-          >
-            {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
-            <span>{saving ? 'Publishing...' : initialPost ? 'Update Product' : 'Publish Product'}</span>
-          </button>
-        </div>
-      </div>
-
-      {/* ══ Visual Species Catalog Drawer / Overlay ══ */}
-      {isCatalogDrawerOpen && (
-        <div className="fixed inset-0 z-60 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in duration-150">
-          <div className="bg-white rounded-3xl max-w-2xl w-full shadow-2xl border border-slate-200 overflow-hidden flex flex-col max-h-[82vh]">
-            <div className="flex items-center justify-between px-6 py-3.5 border-b border-slate-200 bg-slate-50">
-              <div>
-                <h3 className="font-black text-slate-900 text-base">Select Seafood Catalog Species</h3>
-                <p className="text-xs text-slate-500">
-                  Click any species to load its name and ready high-res photo
-                </p>
-              </div>
+        {/* Footer */}
+        <div className="border-t border-slate-100 bg-slate-50/70 px-6 sm:px-8 py-4">
+          {errorMsg && (
+            <div className="mb-3 flex items-center gap-2 rounded-xl bg-red-50 border border-red-100 px-3.5 py-2.5 text-sm text-red-700">
+              <AlertCircle className="h-4 w-4 shrink-0" />
+              {errorMsg}
+            </div>
+          )}
+          <div className="flex items-center justify-between gap-4">
+            <p className="hidden sm:block text-sm text-slate-500 truncate">
+              {productName.trim() ? (
+                <>
+                  <span className="font-semibold text-slate-800">{productName.trim()}</span>
+                  {priceValid && <> · €{priceNum.toFixed(2)}/kg</>} · {freshFrozen}
+                  {selectedSupplier && <> · {selectedSupplier.name}</>}
+                </>
+              ) : (
+                'Fill in the name and price to publish'
+              )}
+            </p>
+            <div className="flex items-center gap-2.5 ml-auto">
               <button
                 type="button"
-                onClick={() => setIsCatalogDrawerOpen(false)}
-                className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-200 transition cursor-pointer"
+                onClick={onClose}
+                className="h-10 px-4 rounded-xl text-sm font-semibold text-slate-600 hover:bg-slate-100 transition cursor-pointer"
               >
-                <X className="w-4 h-4" />
+                Cancel
               </button>
-            </div>
-
-            <div className="p-3.5 border-b border-slate-100">
-              <div className="relative">
-                <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
-                <input
-                  type="text"
-                  autoFocus
-                  placeholder="Search species (e.g. Salmon, Tuna, Cod, Crab, Squid, Octopus, Snapper)..."
-                  value={catalogSearch}
-                  onChange={(e) => setCatalogSearch(e.target.value)}
-                  className="w-full pl-9 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-800 focus:outline-none focus:border-[#022B96]"
-                />
-              </div>
-            </div>
-
-            <div className="p-5 overflow-y-auto flex-1 space-y-5">
-              {categories.map((cat) => {
-                const items = filteredCatalog.filter((p) => p.category === cat)
-                if (items.length === 0) return null
-                return (
-                  <div key={cat} className="space-y-2">
-                    <div className="flex items-center gap-2">
-                      <span className="text-[11px] font-black uppercase text-slate-500 tracking-wider">
-                        {cat}
-                      </span>
-                      <div className="flex-1 h-px bg-slate-100" />
-                    </div>
-                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                      {items.map((preset) => (
-                        <button
-                          key={preset.name}
-                          type="button"
-                          onClick={() => handleSelectPresetProduct(preset)}
-                          className="p-2 bg-slate-50 hover:bg-blue-50 border border-slate-200 hover:border-blue-300 rounded-xl flex items-center gap-2.5 text-left transition cursor-pointer group"
-                        >
-                          <div className="w-10 h-10 rounded-lg bg-white border border-slate-200 p-0.5 flex items-center justify-center shrink-0 overflow-hidden">
-                            <img src={preset.image} alt={preset.name} className="h-full w-full object-contain" />
-                          </div>
-                          <div className="min-w-0">
-                            <p className="text-xs font-bold text-slate-800 group-hover:text-[#022B96] truncate">
-                              {preset.name}
-                            </p>
-                            <p className="text-[10px] text-slate-400">{preset.defaultOrigin}</p>
-                          </div>
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                )
-              })}
+              <button
+                type="button"
+                onClick={handleSave}
+                disabled={saving || photoBusy}
+                className="h-10 px-5 rounded-xl bg-[#022B96] hover:bg-[#011a5e] disabled:opacity-60 text-white text-sm font-semibold flex items-center gap-2 shadow-sm transition cursor-pointer"
+              >
+                {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
+                {isEditing ? 'Save changes' : 'Publish product'}
+              </button>
             </div>
           </div>
         </div>
-      )}
+      </div>
     </div>
   )
 }

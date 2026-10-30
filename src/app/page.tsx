@@ -1,4 +1,4 @@
-import { createPublicServerClient } from '@/lib/supabase/server'
+import { createClient } from '@/lib/supabase/server'
 import { HeroSection } from '@/components/home/hero-section'
 import { PartnersSection } from '@/components/home/partners-section'
 import { SeafoodIndexCard } from '@/components/home/seafood-index'
@@ -8,9 +8,16 @@ import { ExpertProfile } from '@/components/home/expert-profile'
 import { FAQSection } from '@/components/home/faq-section'
 import { StatsBar } from '@/components/home/stats-bar'
 import { NewsArticle } from '@/types/database'
-import { parseSupplierPostsToMarketData, getLiveMarketData, LiveCountryMarketData, LiveSpeciesIndex } from '@/lib/data/market-data'
-import { getManagedIndexItems } from '@/lib/data/seafood-index-server'
+import { parseSupplierPostsToMarketData, LiveCountryMarketData, LiveSpeciesIndex, TopMarketProduct } from '@/lib/data/market-data'
+import { getFishImageForProduct } from '@/lib/data/products-data'
 import { ManagedIndexItem } from '@/lib/data/seafood-index-data'
+import { getAuthUser } from '@/lib/auth/server'
+import {
+  getCachedProductListings,
+  getCachedLatestNews,
+  getCachedActiveCompanyCount,
+  getCachedManagedIndex,
+} from '@/lib/data/public-cache'
 
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
@@ -44,142 +51,70 @@ function managedToEuEntry(items: ManagedIndexItem[]): LiveCountryMarketData {
   }
 }
 
-/**
- * Merge admin-managed index items into Supabase-derived country data.
- * Admin prices + trends override Supabase; new species in managed index are added.
- */
-function mergeWithManagedIndex(
-  countryData: LiveCountryMarketData[],
-  managedItems: ManagedIndexItem[]
-): LiveCountryMarketData[] {
-  if (!managedItems.length) return countryData
+function listingCategory(name: string): string {
+  const lower = name.toLowerCase()
+  return ['shrimp', 'crab', 'lobster', 'prawn', 'mussel', 'oyster', 'scallop'].some(k => lower.includes(k)) ? 'Shellfish' : 'Finfish'
+}
 
-  const euEntry = countryData.find(c => c.id === 'eu')
-
-  if (!euEntry || euEntry.species.length === 0) {
-    // No Supabase data — use managed index entirely
-    return [managedToEuEntry(managedItems), ...countryData.filter(c => c.id !== 'eu')]
-  }
-
-  const supabaseSlugs = new Set(euEntry.species.map((s: LiveSpeciesIndex) => s.slug))
-
-  // Override Supabase species with admin prices/trends where slug matches
-  const mergedSpecies: LiveSpeciesIndex[] = euEntry.species.map((sp: LiveSpeciesIndex) => {
-    const managed = managedItems.find(m => m.slug === sp.slug || m.id === sp.id)
-    if (!managed) return sp
+/** Visitor-safe top products: names, origins and images only — no prices, counts or suppliers */
+function listingsToTopProducts(listings: any[]): TopMarketProduct[] {
+  return listings.slice(0, 6).map((l) => {
+    const name = String(l.product_name || '').trim()
+    const origins: string[] = Array.isArray(l.origins) && l.origins.length > 0 ? l.origins : ['Europe']
     return {
-      ...sp,
-      latest: managed.latestPrice,
-      weekHigh: managed.monthHigh,
-      weekLow: managed.monthLow,
-      change: managed.monthlyChangePct,
-      color: managed.color,
-      data: managed.data,
-      suppliersCount: Math.max(sp.suppliersCount, managed.activeOffersCount),
+      name,
+      slug: name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)+/g, ''),
+      origin: origins.join(', '),
+      origins,
+      avgPrice: '',
+      avgPriceNum: 0,
+      suppliersCount: 0,
+      imageUrl: getFishImageForProduct(name, l.image || undefined),
+      category: listingCategory(name),
     }
   })
-
-  // Add species only in managed index (not in Supabase)
-  for (const item of managedItems) {
-    if (!supabaseSlugs.has(item.slug)) {
-      mergedSpecies.push({
-        id: item.id,
-        slug: item.slug,
-        label: item.label,
-        currency: item.currency,
-        unit: item.unit,
-        latest: item.latestPrice,
-        weekHigh: item.monthHigh,
-        weekLow: item.monthLow,
-        change: item.monthlyChangePct,
-        color: item.color,
-        suppliersCount: item.activeOffersCount,
-        topOrigin: 'Europe',
-        origins: ['Europe'],
-        imageUrl: '',
-        data: item.data,
-      })
-    }
-  }
-
-  return countryData.map(c =>
-    c.id === 'eu'
-      ? { ...c, species: mergedSpecies, description: `${mergedSpecies.length} species · Live verified data` }
-      : c
-  )
-}
-
-interface SupabaseHomeCache {
-  posts: any[]
-  news: any[]
-  supplierCount: number
-  timestamp: number
-}
-
-let supabaseHomeCache: SupabaseHomeCache | null = null
-const CACHE_TTL_MS = 30_000 // 30s cache for remote DB calls to ensure instant logo clicks and navigation
-
-export function invalidateHomeSupabaseCache() {
-  supabaseHomeCache = null
 }
 
 export default async function HomePage() {
-  const now = Date.now()
-  let posts: any[] = []
-  let news: any[] = []
-  let supplierCount = 0
+  // Cookie-aware client: offers (with prices) are only readable by signed-in users (RLS).
+  // Public data comes from the shared server cache; only signed-in users trigger a live query.
+  const supabase = await createClient()
+  const user = await getAuthUser(supabase)
 
-  if (supabaseHomeCache && now - supabaseHomeCache.timestamp < CACHE_TTL_MS) {
-    posts = supabaseHomeCache.posts
-    news = supabaseHomeCache.news
-    supplierCount = supabaseHomeCache.supplierCount
-  } else {
-    try {
-      const supabase = createPublicServerClient()
-      const [postsRes, newsRes, suppliersCountRes] = await Promise.all([
-        supabase
+  const safe = <T,>(p: Promise<T>, fallback: T, what: string): Promise<T> =>
+    p.catch((err) => {
+      console.error(`Home page ${what} error:`, err?.message || err)
+      return fallback
+    })
+
+  const [rows, news, supplierCount, managedItems] = await Promise.all([
+    user
+      ? supabase
           .from('supplier_posts')
           .select('id, title, content, created_at, updated_at')
           .eq('is_published', true)
-          .order('created_at', { ascending: false }),
-        supabase
-          .from('news')
-          .select('*')
-          .eq('is_published', true)
-          .order('published_at', { ascending: false })
-          .limit(3),
-        supabase
-          .from('companies')
-          .select('id', { count: 'exact', head: true }),
-      ])
+          .order('created_at', { ascending: false })
+          .then(({ data, error }) => {
+            if (error) throw new Error(error.message)
+            return (data || []) as any[]
+          })
+      : safe<any[]>(getCachedProductListings(), [], 'listings'),
+    safe<any[]>(getCachedLatestNews(), [], 'news'),
+    safe(getCachedActiveCompanyCount(), 0, 'company count'),
+    safe(getCachedManagedIndex(), [] as ManagedIndexItem[], 'seafood index'),
+  ]).catch((err) => {
+    console.error('Home page offers fetch error:', err?.message || err)
+    return [[], [], 0, []] as [any[], any[], number, ManagedIndexItem[]]
+  })
 
-      posts = postsRes?.data || []
-      news = newsRes?.data || []
-      supplierCount = suppliersCountRes?.count ?? 0
+  // The Seafood Index is exactly what the admin manages — the same for every viewer
+  const countryData: LiveCountryMarketData[] = managedItems.length > 0 ? [managedToEuEntry(managedItems)] : []
+  const topProducts: TopMarketProduct[] = user
+    ? parseSupplierPostsToMarketData(rows).topProducts
+    : listingsToTopProducts(rows)
 
-      supabaseHomeCache = {
-        posts,
-        news,
-        supplierCount,
-        timestamp: Date.now(),
-      }
-    } catch (err) {
-      console.error('Home page data fetch error:', err)
-      if (supabaseHomeCache) {
-        posts = supabaseHomeCache.posts
-        news = supabaseHomeCache.news
-        supplierCount = supabaseHomeCache.supplierCount
-      }
-    }
-  }
-
-  // Always read latest managed items on every request so admin updates are instant
-  const managedItems = getManagedIndexItems()
-  const rawMarketData = parseSupplierPostsToMarketData(posts)
-  const mergedCountryData = mergeWithManagedIndex(rawMarketData.countryData, managedItems)
-
-  const { topProducts } = rawMarketData
-  const productCount = topProducts?.length ?? 0
+  const mergedCountryData = countryData
+  const productCount = user ? topProducts.length : rows.length
   const marketCount = mergedCountryData?.filter(c => c.species && c.species.length > 0).length ?? 0
 
   return (

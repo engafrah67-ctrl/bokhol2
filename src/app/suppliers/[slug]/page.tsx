@@ -51,6 +51,11 @@ interface SupplierProductListing {
   createdAt?: string
 }
 
+// Columns visitors may read (no email/phone/address/owner) vs. what signed-in members get
+const COMPANY_PUBLIC_COLUMNS =
+  'id, name, slug, country_id, description, website, logo_url, city, year_founded, employee_count, export_markets, status, is_verified, activity_score, trust_score, created_at, updated_at, country:countries(name, flag_emoji, slug)'
+const COMPANY_MEMBER_COLUMNS = '*, country:countries(name, flag_emoji, slug)'
+
 export default function SupplierProfilePage() {
   const params = useParams()
   const router = useRouter()
@@ -68,157 +73,113 @@ export default function SupplierProfilePage() {
   const [selectedProductForEnquiry, setSelectedProductForEnquiry] = useState<SupplierProductListing | null>(null)
 
   useEffect(() => {
-    if (!slug) return
+    if (!slug || userLoading) return
 
     async function fetchProfile() {
       setLoading(true)
       try {
-        // 1. Fetch company from Supabase safely by UUID, slug, or name
+        // Visitors may only read public profile columns; contact details are for signed-in users
+        const columns = user ? COMPANY_MEMBER_COLUMNS : COMPANY_PUBLIC_COLUMNS
+
+        // 1. Fetch company by UUID, slug, or name
         let matchedCompany: any = null
         const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(slug)
 
         if (isUuid) {
-          const { data } = await supabase
-            .from('companies')
-            .select('*, country:countries(name, flag_emoji, slug)')
-            .eq('id', slug)
-            .maybeSingle()
+          const { data } = await supabase.from('companies').select(columns).eq('id', slug).maybeSingle()
           matchedCompany = data
         } else {
-          // Try exact slug
-          const { data } = await supabase
-            .from('companies')
-            .select('*, country:countries(name, flag_emoji, slug)')
-            .eq('slug', slug)
-            .maybeSingle()
+          const { data } = await supabase.from('companies').select(columns).eq('slug', slug).maybeSingle()
           matchedCompany = data
 
-          // Try case-insensitive slug or company name
           if (!matchedCompany) {
-            const { data: byIlike } = await supabase
-              .from('companies')
-              .select('*, country:countries(name, flag_emoji, slug)')
-              .ilike('slug', slug)
-              .maybeSingle()
+            const { data: byIlike } = await supabase.from('companies').select(columns).ilike('slug', slug).maybeSingle()
             matchedCompany = byIlike
           }
 
           if (!matchedCompany) {
             const { data: byName } = await supabase
               .from('companies')
-              .select('*, country:countries(name, flag_emoji, slug)')
+              .select(columns)
               .ilike('name', slug.replace(/-/g, ' '))
               .maybeSingle()
             matchedCompany = byName
           }
         }
 
-        // Fallback to logged-in user company if matching
-        if (!matchedCompany && user) {
-          const { data: userComp } = await supabase
-            .from('companies')
-            .select('*, country:countries(name, flag_emoji, slug)')
-            .eq('owner_id', user.id)
-            .maybeSingle()
-
-          if (
-            userComp &&
-            (userComp.slug?.toLowerCase() === slug.toLowerCase() ||
-              userComp.name?.toLowerCase() === slug.toLowerCase() ||
-              userComp.id === slug)
-          ) {
-            matchedCompany = userComp
-          }
-        }
-
         if (!matchedCompany) {
-          try {
-            const res = await fetch('/api/admin/add-supplier')
-            const json = await res.json()
-            if (json.success && Array.isArray(json.suppliers)) {
-              const found = json.suppliers.find(
-                (s: any) =>
-                  s.id === slug ||
-                  s.slug?.toLowerCase() === slug.toLowerCase() ||
-                  s.name?.toLowerCase() === slug.toLowerCase() ||
-                  s.name?.toLowerCase() === slug.replace(/-/g, ' ').toLowerCase()
-              )
-              if (found) {
-                matchedCompany = {
-                  ...found,
-                  logo_url: found.logoUrl || found.logo_url,
-                  country: { name: found.country, flag_emoji: '' },
-                }
-              }
-            }
-          } catch (_) {}
-        }
-
-        if (!matchedCompany) {
+          setCompany(null)
           setLoading(false)
           return
         }
 
         setCompany(matchedCompany)
 
-        // 2. Fetch REAL uploaded products from supplier_posts
-        let rawPosts: any[] = []
+        // 2. Products. Signed-in users get full offers (RLS); visitors get names only, no prices.
+        let parsedProducts: SupplierProductListing[] = []
 
-        if (matchedCompany.id) {
-          const { data: dbPosts, error: postsErr } = await supabase
+        if (user) {
+          const { data: dbPosts } = await supabase
             .from('supplier_posts')
             .select('*')
             .eq('company_id', matchedCompany.id)
             .order('created_at', { ascending: false })
 
-          if (dbPosts && dbPosts.length > 0) {
-            rawPosts = [...dbPosts]
-          }
+          parsedProducts = (dbPosts || []).map((post: any) => {
+            let details: any = {}
+            if (typeof post.content === 'string') {
+              try {
+                details = JSON.parse(post.content)
+              } catch (_) {}
+            }
+
+            const pName = details.productName || post.title?.split(' —')[0] || 'Seafood Product'
+            const priceNum = parseFloat(details.pricePerKg || 0)
+            const currency = details.currency || 'EUR'
+            const symbol = currency === 'USD' ? '$' : currency === 'GBP' ? '£' : '€'
+
+            return {
+              id: post.id,
+              productName: pName,
+              priceFormatted: priceNum > 0 ? `${symbol}${priceNum.toFixed(2)}/kg` : 'Contact for price',
+              pricePerKg: priceNum,
+              currency,
+              countryOfOrigin: details.countryOfOrigin || matchedCompany.country?.name || 'Europe',
+              freshFrozen: details.freshFrozen || 'Fresh',
+              sizeWeight: details.sizeWeight || 'Standard Size',
+              packagingFillet: details.packagingFillet || 'Standard Packaging',
+              availability: details.availability || 'In Stock — Ready to Ship',
+              location: details.location || matchedCompany.city || 'EU Port',
+              supplierInfoExtra: details.supplierInfoExtra || '',
+              customImage: details.customImage || getFishImageForProduct(pName),
+              createdAt: post.created_at || details.createdAt,
+            }
+          })
+        } else {
+          const { data: listings } = await supabase.rpc('get_public_company_products', {
+            p_company_id: matchedCompany.id,
+          })
+
+          parsedProducts = (listings || []).map((l: any) => {
+            const pName = l.product_name || 'Seafood Product'
+            return {
+              id: l.id,
+              productName: pName,
+              priceFormatted: '',
+              pricePerKg: 0,
+              currency: 'EUR',
+              countryOfOrigin: l.origin || matchedCompany.country?.name || 'Europe',
+              freshFrozen: l.fresh_frozen || 'Fresh',
+              sizeWeight: '—',
+              packagingFillet: '—',
+              availability: '—',
+              location: matchedCompany.city || '—',
+              supplierInfoExtra: '',
+              customImage: l.image || getFishImageForProduct(pName),
+              createdAt: l.updated_at,
+            }
+          })
         }
-
-        // Parse all 9 specification fields from real posts
-        const parsedProducts: SupplierProductListing[] = rawPosts.map((post) => {
-          let details: any = {}
-          if (typeof post.content === 'string') {
-            try {
-              details = JSON.parse(post.content)
-            } catch (_) {}
-          } else if (post.content && typeof post.content === 'object') {
-            details = post.content
-          }
-
-          const pName = details.productName || post.product_name || post.title?.split(' —')[0] || 'Seafood Product'
-          const priceNum = parseFloat(details.pricePerKg || post.price_per_kg || 0)
-          const currency = details.currency || post.currency || 'EUR'
-          const symbol = currency === 'USD' ? '$' : currency === 'GBP' ? '£' : '€'
-          const priceFormatted = priceNum > 0 ? `${symbol}${priceNum.toFixed(2)}/kg` : 'Contact for price'
-
-          const origin = details.countryOfOrigin || post.country_of_origin || matchedCompany.country?.name || matchedCompany.country || 'Europe'
-          const freshFrozen = details.freshFrozen || post.fresh_frozen || 'Fresh'
-          const sizeWeight = details.sizeWeight || post.size_weight || 'Standard Size'
-          const packaging = details.packagingFillet || post.packaging || 'Standard Packaging'
-          const availability = details.availability || post.availability || 'In Stock — Ready to Ship'
-          const location = details.location || post.location || matchedCompany.city || 'EU Port'
-          const extra = details.supplierInfoExtra || post.supplier_info_extra || ''
-          const image = details.customImage || post.custom_image || post.image_url || getFishImageForProduct(pName)
-
-          return {
-            id: post.id,
-            productName: pName,
-            priceFormatted,
-            pricePerKg: priceNum,
-            currency,
-            countryOfOrigin: origin,
-            freshFrozen,
-            sizeWeight,
-            packagingFillet: packaging,
-            availability,
-            location,
-            supplierInfoExtra: extra,
-            customImage: image,
-            createdAt: post.created_at || details.createdAt,
-          }
-        })
 
         setProducts(parsedProducts)
         setPosts([])
@@ -230,7 +191,7 @@ export default function SupplierProfilePage() {
     }
 
     fetchProfile()
-  }, [slug, user?.id])
+  }, [slug, user?.id, userLoading])
 
   const isOwner = Boolean(
     user &&
@@ -305,10 +266,10 @@ export default function SupplierProfilePage() {
         }),
       })
 
-      if (!res.ok) {
-        // Direct Supabase insert fallback if API endpoint returns non-200
+      if (!res.ok && user) {
+        // Direct insert fallback — always on behalf of the signed-in user (RLS enforces this)
         await supabase.from('buyer_requests').insert({
-          user_id: user?.id || company.owner_id,
+          user_id: user.id,
           title,
           description,
           quantity: qtyNum,

@@ -1,6 +1,7 @@
 ﻿'use client'
 
 import React, { useState, useEffect } from 'react'
+import { useRouter } from 'next/navigation'
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
 } from 'recharts'
@@ -17,6 +18,29 @@ interface MarketIndexTabProps {
 const SPECIES_COLORS = ['#1d4ed8','#3b82f6','#f97316','#0d9488','#0284c7','#7c3aed','#dc2626','#059669']
 
 const MONTH_LABELS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
+
+// Shared across tab switches so re-opening the tab is instant; refreshed in the background
+let cachedItems: ManagedIndexItem[] | null = null
+let inflight: Promise<ManagedIndexItem[] | null> | null = null
+
+function loadSeafoodIndex(): Promise<ManagedIndexItem[] | null> {
+  if (!inflight) {
+    inflight = fetch('/api/admin/seafood-index', { cache: 'no-store' })
+      .then(r => r.json())
+      .then(json => {
+        if (json.success && Array.isArray(json.items)) cachedItems = json.items
+        return cachedItems
+      })
+      .catch(() => cachedItems)
+      .finally(() => { inflight = null })
+  }
+  return inflight
+}
+
+/** Warm the cache while the admin dashboard loads, so the tab opens instantly. */
+export function prefetchSeafoodIndex(): Promise<unknown> {
+  return loadSeafoodIndex()
+}
 
 function generateSmoothedCurve(latestPrice: number, monthlyChangePct: number): ManagedIndexPoint[] {
   const offsets = [-0.09, -0.07, -0.05, -0.03, -0.01, 0.01, 0.02, 0.01, 0.03, 0.02, 0.01, 0]
@@ -37,30 +61,35 @@ function CustomTooltip({ active, payload, label }: any) {
 }
 
 export function MarketIndexTab({ onBackToDashboard }: MarketIndexTabProps) {
-  const [items, setItems] = useState<ManagedIndexItem[]>(DEFAULT_MANAGED_INDEX_ITEMS)
-  const [activeItemId, setActiveItemId] = useState<string>(DEFAULT_MANAGED_INDEX_ITEMS[0]?.id || '')
-  const [loading, setLoading] = useState(true)
+  const [items, setItems] = useState<ManagedIndexItem[]>(() => cachedItems ?? [])
+  const [activeItemId, setActiveItemId] = useState<string>(() => cachedItems?.[0]?.id ?? '')
+  const [loading, setLoading] = useState(() => cachedItems === null)
   const [saving, setSaving] = useState(false)
   const [saveMsg, setSaveMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
   const [isMounted, setIsMounted] = useState(false)
   const [showAddForm, setShowAddForm] = useState(false)
   const [newLabel, setNewLabel] = useState('')
   const [expandedMonths, setExpandedMonths] = useState(false)
+  const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null)
+  const [busy, setBusy] = useState(false)
+  const router = useRouter()
 
   useEffect(() => { setIsMounted(true) }, [])
 
-  // Load from API
+  // Show cached items instantly; refresh only when nothing is cached yet
+  // (a background refresh would overwrite unsaved edits)
   useEffect(() => {
-    fetch('/api/admin/seafood-index', { cache: 'no-store' })
-      .then(r => r.json())
-      .then(json => {
-        if (json.success && Array.isArray(json.items) && json.items.length > 0) {
-          setItems(json.items)
-          setActiveItemId(json.items[0].id)
+    if (cachedItems !== null) return
+    let active = true
+    loadSeafoodIndex()
+      .then(fresh => {
+        if (active && fresh && fresh.length > 0) {
+          setItems(fresh)
+          setActiveItemId(prev => prev || fresh[0].id)
         }
       })
-      .catch(() => {})
-      .finally(() => setLoading(false))
+      .finally(() => { if (active) setLoading(false) })
+    return () => { active = false }
   }, [])
 
   const activeItem = items.find(i => i.id === activeItemId) || items[0]
@@ -81,9 +110,22 @@ export function MarketIndexTab({ onBackToDashboard }: MarketIndexTabProps) {
     updateActiveItem({ data: curve })
   }
 
-  function addNewSpecies() {
-    if (!newLabel.trim()) return
-    const slug = newLabel.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-')
+  // Next.js keeps visited pages in a client cache; clear it so the home page shows the change
+  function refreshSite() {
+    router.refresh()
+  }
+
+  async function addNewSpecies() {
+    if (!newLabel.trim() || busy) return
+    const slug = newLabel.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)+/g, '').slice(0, 64)
+    if (!slug) {
+      setSaveMsg({ type: 'error', text: 'Use letters or numbers in the species name.' })
+      return
+    }
+    if (items.some(it => it.id === slug)) {
+      setSaveMsg({ type: 'error', text: `"${newLabel.trim()}" is already in the index.` })
+      return
+    }
     const colorIndex = items.length % SPECIES_COLORS.length
     const newItem: ManagedIndexItem = {
       id: slug,
@@ -100,16 +142,56 @@ export function MarketIndexTab({ onBackToDashboard }: MarketIndexTabProps) {
       color: SPECIES_COLORS[colorIndex],
       data: generateSmoothedCurve(10.00, 1.0),
     }
-    setItems(prev => [...prev, newItem])
-    setActiveItemId(slug)
-    setNewLabel('')
-    setShowAddForm(false)
+
+    setBusy(true)
+    setSaveMsg(null)
+    try {
+      const res = await fetch('/api/admin/seafood-index', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ item: newItem }),
+      })
+      const json = await res.json()
+      if (!res.ok || !json.success) throw new Error(json.error || 'Could not add species.')
+
+      const next = [...items, newItem]
+      setItems(next)
+      cachedItems = next
+      setActiveItemId(slug)
+      setNewLabel('')
+      setShowAddForm(false)
+      setSaveMsg({ type: 'success', text: `✓ "${newItem.label}" added and live on the home page. Set its prices, then Save & Publish.` })
+      refreshSite()
+    } catch (err: any) {
+      setSaveMsg({ type: 'error', text: err.message })
+    } finally {
+      setBusy(false)
+    }
   }
 
-  function removeSpecies(id: string) {
-    const remaining = items.filter(it => it.id !== id)
-    setItems(remaining)
-    if (activeItemId === id) setActiveItemId(remaining[0]?.id || '')
+  async function confirmDelete() {
+    const target = items.find(it => it.id === pendingDeleteId)
+    if (!target) return setPendingDeleteId(null)
+
+    setBusy(true)
+    setSaveMsg(null)
+    try {
+      const res = await fetch(`/api/admin/seafood-index?id=${encodeURIComponent(target.id)}`, { method: 'DELETE' })
+      const json = await res.json()
+      if (!res.ok || !json.success) throw new Error(json.error || 'Could not delete species.')
+
+      const remaining = items.filter(it => it.id !== target.id)
+      setItems(remaining)
+      cachedItems = remaining
+      if (activeItemId === target.id) setActiveItemId(remaining[0]?.id || '')
+      setSaveMsg({ type: 'success', text: `✓ "${target.label}" deleted from the index and the home page.` })
+      refreshSite()
+    } catch (err: any) {
+      setSaveMsg({ type: 'error', text: err.message })
+    } finally {
+      setBusy(false)
+      setPendingDeleteId(null)
+    }
   }
 
   async function saveAndPublish() {
@@ -123,6 +205,8 @@ export function MarketIndexTab({ onBackToDashboard }: MarketIndexTabProps) {
       })
       const json = await res.json()
       if (json.success) {
+        cachedItems = items
+        refreshSite()
         setSaveMsg({ type: 'success', text: `✓ ${json.saved} species published to live site!` })
       } else {
         setSaveMsg({ type: 'error', text: json.error || 'Save failed.' })
@@ -136,6 +220,7 @@ export function MarketIndexTab({ onBackToDashboard }: MarketIndexTabProps) {
   }
 
   function resetToDefaults() {
+    if (!confirm('Replace the editor with the default species and prices? Nothing changes on the site until you click Save & Publish.')) return
     setItems(DEFAULT_MANAGED_INDEX_ITEMS)
     setActiveItemId(DEFAULT_MANAGED_INDEX_ITEMS[0]?.id || '')
   }
@@ -151,8 +236,49 @@ export function MarketIndexTab({ onBackToDashboard }: MarketIndexTabProps) {
 
   const isUp = (activeItem?.monthlyChangePct ?? 0) >= 0
 
+  const pendingDelete = items.find(it => it.id === pendingDeleteId)
+
   return (
     <div className="space-y-6">
+      {/* Delete confirmation */}
+      {pendingDelete && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/50 backdrop-blur-sm"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="delete-species-title"
+        >
+          <div className="w-full max-w-sm bg-white rounded-2xl shadow-2xl p-6">
+            <div className="h-11 w-11 rounded-full bg-red-50 text-red-600 flex items-center justify-center mb-4">
+              <Trash2 size={18} />
+            </div>
+            <h3 id="delete-species-title" className="text-base font-bold text-slate-900">
+              Delete &ldquo;{pendingDelete.label}&rdquo;?
+            </h3>
+            <p className="text-sm text-slate-500 mt-1.5">
+              It will be removed from the Seafood Index and from the home page immediately. This cannot be undone.
+            </p>
+            <div className="flex justify-end gap-2.5 mt-6">
+              <button
+                onClick={() => setPendingDeleteId(null)}
+                disabled={busy}
+                className="h-10 px-4 rounded-xl text-sm font-semibold text-slate-600 hover:bg-slate-100 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={confirmDelete}
+                disabled={busy}
+                autoFocus
+                className="h-10 px-4 rounded-xl text-sm font-semibold text-white bg-red-600 hover:bg-red-700 disabled:opacity-60 transition-colors"
+              >
+                {busy ? 'Deleting…' : 'Delete species'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
@@ -230,7 +356,7 @@ export function MarketIndexTab({ onBackToDashboard }: MarketIndexTabProps) {
               className="text-xs px-2.5 py-1.5 border border-slate-300 rounded-lg outline-none focus:border-blue-500"
               autoFocus
             />
-            <button onClick={addNewSpecies} className="text-xs px-3 py-1.5 bg-blue-600 text-white rounded-lg font-bold">Add</button>
+            <button onClick={addNewSpecies} disabled={busy} className="text-xs px-3 py-1.5 bg-blue-600 text-white rounded-lg font-bold disabled:opacity-60">{busy ? 'Adding…' : 'Add'}</button>
             <button onClick={() => setShowAddForm(false)} className="text-xs px-2 py-1.5 text-slate-500 hover:text-slate-700">✕</button>
           </div>
         )}
@@ -249,7 +375,7 @@ export function MarketIndexTab({ onBackToDashboard }: MarketIndexTabProps) {
                 </h3>
                 {items.length > 1 && (
                   <button
-                    onClick={() => removeSpecies(activeItem.id)}
+                    onClick={() => setPendingDeleteId(activeItem.id)}
                     className="text-red-400 hover:text-red-600 transition-colors p-1"
                     title="Remove species"
                   >

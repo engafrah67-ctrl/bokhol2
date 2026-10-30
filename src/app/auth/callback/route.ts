@@ -5,7 +5,9 @@ import { createClient } from '@/lib/supabase/server'
 export async function GET(request: Request) {
   const { searchParams, origin } = new URL(request.url)
   const code = searchParams.get('code')
-  const next = searchParams.get('next') ?? '/dashboard'
+  // Only allow same-site relative paths (blocks //evil.com and @evil.com redirects)
+  const requested = searchParams.get('next') ?? '/dashboard'
+  const next = /^\/(?![/\\@])/.test(requested) ? requested : '/dashboard'
 
   if (code) {
     const supabase = await createClient()

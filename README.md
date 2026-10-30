@@ -1,5 +1,20 @@
 This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
 
+## Database setup (new Supabase project)
+
+1. Copy `.env.example` to `.env.local` and fill in the project URL and publishable key.
+2. In the Supabase SQL Editor, run in order:
+   1. `supabase/migrations/20261030000000_initial_schema.sql` — tables, RLS, functions, grants
+   2. `supabase/migrations/20261030000001_tighten_anon_grants.sql` — removes Supabase's automatic visitor grants
+   3. `supabase/migrations/20261030000002_media_storage.sql` — image storage bucket (photos/logos served from CDN)
+   4. `supabase/migrations/20261030000003_buyer_requests_v2.sql` — buyer request form fields; requests visible to the buyer and admins only
+   5. `supabase/seed.sql` — countries, product catalog, partner buyers, seafood index
+3. Sign up on the site with the admin email and confirm it, then run `supabase/admin_bootstrap.sql`.
+
+Security model: admin access comes only from `users.role = 'admin'` in the database.
+Prices and supplier offers are readable only by signed-in users (enforced by RLS);
+visitors receive product names/origins only, via `get_public_product_listings()`.
+
 ## Getting Started
 
 First, run the development server:

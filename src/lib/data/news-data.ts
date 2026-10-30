@@ -55,6 +55,11 @@ function mapRow(item: any): NewsArticle {
   }
 }
 
+// Refresh the server's cached public data (home page news) after an admin change
+function refreshPublicCache() {
+  fetch('/api/revalidate?path=/news', { method: 'POST' }).catch(() => {})
+}
+
 export async function fetchNewsArticles(): Promise<NewsArticle[]> {
   try {
     const supabase = createClient()
@@ -99,6 +104,7 @@ export async function addNewsArticle(
     .single()
 
   if (error) throw new Error(error.message)
+  refreshPublicCache()
   return mapRow(data)
 }
 
@@ -113,4 +119,5 @@ export async function deleteNewsArticle(id: string): Promise<void> {
     : await query.eq('slug', cleanId)
 
   if (error) throw new Error(error.message)
+  refreshPublicCache()
 }

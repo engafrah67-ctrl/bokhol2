@@ -13,6 +13,7 @@ export type PostCategory =
   | 'company_update'
   | 'trade_event'
 export type RequestStatus = 'open' | 'closed' | 'fulfilled'
+export type ClaimStatus = 'pending' | 'approved' | 'rejected'
 export type CertificateType =
   | 'ASC'
   | 'MSC'
@@ -25,6 +26,7 @@ export type CertificateType =
 // ── users ─────────────────────────────────────────────────────
 export interface User {
   id: string
+  email: string | null
   role: UserRole
   full_name: string | null
   avatar_url: string | null
@@ -65,7 +67,7 @@ export interface Product {
 // ── companies ─────────────────────────────────────────────────
 export interface Company {
   id: string
-  owner_id: string
+  owner_id: string | null  // null = admin-added, not yet claimed
   name: string
   slug: string
   country_id: string | null
@@ -152,6 +154,14 @@ export interface BuyerRequest {
   destination: string | null
   status: RequestStatus
   expires_at: string | null
+  company_name: string | null
+  contact_name: string | null
+  contact_email: string | null
+  contact_phone: string | null
+  whatsapp: string | null
+  product_name: string | null
+  fresh_frozen: string | null
+  delivery_date: string | null
   created_at: string
   updated_at: string
 }
@@ -262,6 +272,55 @@ export interface SavedSupplierWithRelations extends SavedSupplier {
   company?: CompanyWithRelations
 }
 
+// ── seafood_index_items ───────────────────────────────────────
+export interface SeafoodIndexItemRow {
+  id: string
+  slug: string
+  label: string
+  currency: string
+  unit: string
+  latest_price: number
+  monthly_change_pct: number
+  month_high: number
+  month_low: number
+  source: string | null
+  active_offers_count: number
+  color: string | null
+  data: { week: string; price: number }[]
+  sort_order: number
+  created_at: string
+  updated_at: string
+}
+
+// ── partner_buyers ───────────────────────────────────────────
+export interface PartnerBuyerRow {
+  id: string
+  name: string
+  logo_url: string
+  country: string | null
+  website: string | null
+  created_at: string
+  updated_at: string
+}
+
+// ── profile_claims ───────────────────────────────────────────
+export interface ProfileClaim {
+  id: string
+  user_id: string
+  company_id: string
+  company_name: string
+  full_name: string
+  job_title: string | null
+  business_email: string
+  phone: string | null
+  status: ClaimStatus
+  rejection_reason: string | null
+  reviewed_by: string | null
+  reviewed_at: string | null
+  created_at: string
+  updated_at: string
+}
+
 // ── Supabase Database type map ────────────────────────────────
 export type Database = {
   public: {
@@ -278,6 +337,9 @@ export type Database = {
       market_history:   { Row: MarketHistory; Insert: Partial<MarketHistory>; Update: Partial<MarketHistory> }
       news:             { Row: NewsArticle;   Insert: Partial<NewsArticle>;   Update: Partial<NewsArticle> }
       saved_suppliers:  { Row: SavedSupplier; Insert: Partial<SavedSupplier>; Update: Partial<SavedSupplier> }
+      seafood_index_items: { Row: SeafoodIndexItemRow; Insert: Partial<SeafoodIndexItemRow>; Update: Partial<SeafoodIndexItemRow> }
+      partner_buyers:   { Row: PartnerBuyerRow; Insert: Partial<PartnerBuyerRow>; Update: Partial<PartnerBuyerRow> }
+      profile_claims:   { Row: ProfileClaim;  Insert: Partial<ProfileClaim>;  Update: Partial<ProfileClaim> }
     }
   }
 }

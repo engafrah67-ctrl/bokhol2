@@ -9,13 +9,16 @@ interface BlurGateProps {
   blurPx?: number
   /** If true, always blur regardless of auth state */
   forceBlur?: boolean
+  /** Text shown (blurred) instead of the real value for visitors. Default: "€ ••.••" */
+  placeholder?: string
 }
 
 /**
- * BlurGate — blurs content for unauthenticated users.
- * Clicking navigates to /signup.
+ * BlurGate — hides gated values from unauthenticated users.
+ * Visitors never receive `children` in the DOM: a fixed placeholder is blurred instead,
+ * so nothing can be read from DevTools. Clicking navigates to /signup.
  */
-export function BlurGate({ children, blurPx = 4, forceBlur = false }: BlurGateProps) {
+export function BlurGate({ children, blurPx = 4, forceBlur = false, placeholder = '€ ••.••' }: BlurGateProps) {
   const { user, isLoading } = useUser()
   const router = useRouter()
 
@@ -36,13 +39,13 @@ export function BlurGate({ children, blurPx = 4, forceBlur = false }: BlurGatePr
         router.push('/signup')
       }}
     >
-      {/* Purely blurred text — no icons */}
+      {/* Placeholder only — the real value is never rendered for visitors */}
       <span
         className="pointer-events-none"
         style={{ filter: `blur(${blurPx}px)`, userSelect: 'none' }}
         aria-hidden="true"
       >
-        {children}
+        {placeholder}
       </span>
 
       {/* Tooltip on hover */}

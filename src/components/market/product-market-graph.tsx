@@ -30,6 +30,7 @@ export function ProductMarketGraph({
   compact = false,
 }: ProductMarketGraphProps) {
   const { user } = useUser()
+  const userId = user?.id ?? null
   const [trendData, setTrendData] = useState<{
     currentAvg: number
     weekHigh: number
@@ -44,6 +45,13 @@ export function ProductMarketGraph({
     let isMounted = true
     if (!productName || !productName.trim()) {
       setTrendData(null)
+      setLoading(false)
+      return
+    }
+
+    // Visitors never receive benchmark prices — show the locked, empty graph instead
+    if (!userId) {
+      setTrendData({ currentAvg: 0, weekHigh: 0, weekLow: 0, changePct: 0, suppliersCount: 0, trendPoints: [] })
       setLoading(false)
       return
     }
@@ -68,7 +76,7 @@ export function ProductMarketGraph({
     return () => {
       isMounted = false
     }
-  }, [productName])
+  }, [productName, userId])
 
   if (!productName || !productName.trim()) {
     return null
@@ -149,7 +157,7 @@ export function ProductMarketGraph({
         <div className="bg-slate-50 dark:bg-slate-800/60 p-3 rounded-xl border border-slate-100 dark:border-slate-800">
           <span className="text-[10px] font-bold uppercase text-slate-400 block">Active Verified Suppliers</span>
           <div className="font-bold text-slate-800 dark:text-slate-200 text-sm mt-0.5">
-            <BlurGate>
+            <BlurGate placeholder="•• Suppliers">
               <span>{trendData.suppliersCount} {trendData.suppliersCount === 1 ? 'Supplier' : 'Suppliers'}</span>
             </BlurGate>
           </div>
@@ -192,7 +200,7 @@ export function ProductMarketGraph({
           </div>
         )}
         <ResponsiveContainer width="100%" height="100%">
-          <AreaChart data={trendData.trendPoints} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+          <AreaChart data={user ? trendData.trendPoints : []} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
             <defs>
               <linearGradient id="productMarketTrendGrad" x1="0" y1="0" x2="0" y2="1">
                 <stop offset="5%" stopColor="#0284c7" stopOpacity={0.25} />

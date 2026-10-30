@@ -46,7 +46,7 @@ export default function BuyerRequestsPage() {
   const [replyMessage, setReplyMessage] = useState('')
   const [replySubmitted, setReplySubmitted] = useState(false)
 
-  const isSupplierOrAdmin = role === 'supplier' || role === 'admin' || user?.email?.toLowerCase() === 'superadminbkhol@gmail.com'
+  const isSupplierOrAdmin = role === 'supplier' || role === 'admin'
 
   useEffect(() => {
     async function loadRequests() {

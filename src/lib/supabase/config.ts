@@ -1,0 +1,14 @@
+// Supabase connection settings — read from environment only (.env.local / hosting env).
+// NEXT_PUBLIC_* values must be referenced literally so Next.js can inline them in the browser bundle.
+
+const url = process.env.NEXT_PUBLIC_SUPABASE_URL
+const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+
+if (!url || !anonKey) {
+  throw new Error(
+    'Missing Supabase configuration. Set NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY in .env.local'
+  )
+}
+
+export const SUPABASE_URL: string = url
+export const SUPABASE_ANON_KEY: string = anonKey

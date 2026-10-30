@@ -13,7 +13,7 @@ import { BlurGate } from '@/components/blur-gate'
 import { getFishImageForProduct, getFlagUrl } from '@/lib/data/products-data'
 import { createClient } from '@/lib/supabase/client'
 import { ProductMarketGraph } from '@/components/market/product-market-graph'
-import { syncWithServerClaims } from '@/lib/data/companies-data'
+import { useUser } from '@/hooks/use-user'
 
 const ALLOWED_COUNTRY_OPTIONS = [
   { value: 'All', label: 'All Countries 🌍' },
@@ -76,17 +76,21 @@ export default function ProductDetailsPage({ params }: { params: Promise<{ slug:
   const [sortBy, setSortBy] = useState<'price' | 'availability'>('price')
   const [offers, setOffers] = useState<SupplierOffer[]>([])
   const [loading, setLoading] = useState(true)
+  const { user, isLoading: authLoading } = useUser()
+  const userId = user?.id ?? null
 
   useEffect(() => {
     async function fetchOffers() {
+      // Offers (prices, suppliers) are signed-in only — visitors get a sign-up prompt instead
+      if (authLoading) return
+      if (!userId) {
+        setOffers([])
+        setLoading(false)
+        return
+      }
+
       const supabase = createClient()
       try {
-        // Pre-fetch directory companies so we know every supplier's registered nationality
-        let directoryCompanies: any[] = []
-        try {
-          directoryCompanies = await syncWithServerClaims()
-        } catch (_) {}
-
         // Fetch published posts for this product name
         const { data: posts } = await supabase
           .from('supplier_posts')
@@ -117,20 +121,7 @@ export default function ProductDetailsPage({ params }: { params: Promise<{ slug:
           // 1. Supplier's registered company country from DB join
           let regCountry = companyCountryObj?.name || ''
 
-          // 2. Lookup in directory / INITIAL_COMPANIES by company slug, id, or name
-          if (!regCountry && company) {
-            const matched = directoryCompanies.find(
-              (c: any) =>
-                (c.id && company.id && c.id === company.id) ||
-                (c.slug && company.slug && c.slug === company.slug) ||
-                (c.name && company.name && c.name.toLowerCase() === company.name.toLowerCase())
-            )
-            if (matched?.country) {
-              regCountry = matched.country
-            }
-          }
-
-          // 3. Fallback to details.countryOfOrigin if it specifies one of the countries
+          // 2. Fallback to details.countryOfOrigin if it specifies one of the countries
           if (!regCountry && details.countryOfOrigin) {
             regCountry = details.countryOfOrigin
           }
@@ -168,7 +159,7 @@ export default function ProductDetailsPage({ params }: { params: Promise<{ slug:
     }
 
     fetchOffers()
-  }, [slug])
+  }, [slug, userId, authLoading])
 
   const filteredOffers = offers
     .filter(o => filterFresh === 'All' || o.freshFrozen === filterFresh)
@@ -249,7 +240,7 @@ export default function ProductDetailsPage({ params }: { params: Promise<{ slug:
                 <span className="text-[10px] uppercase font-bold text-slate-400 block tracking-wider">
                   Active Offers
                 </span>
-                <BlurGate>
+                <BlurGate placeholder="••">
                   <span className="text-base font-extrabold text-slate-900 dark:text-white">
                     {offers.length}
                   </span>
@@ -356,7 +347,33 @@ export default function ProductDetailsPage({ params }: { params: Promise<{ slug:
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800 text-sm">
-                {loading ? (
+                {!authLoading && !user ? (
+                  <tr>
+                    <td colSpan={7} className="py-16 text-center">
+                      <Fish className="h-8 w-8 text-slate-300 mx-auto mb-2" />
+                      <p className="text-sm font-semibold text-slate-700 dark:text-slate-200 mb-1">
+                        Sign in to see supplier offers and prices
+                      </p>
+                      <p className="text-xs text-slate-400 mb-4">
+                        Verified suppliers, live prices and contact details are available to registered members.
+                      </p>
+                      <div className="flex items-center justify-center gap-2">
+                        <Link
+                          href={`/login?next=/products/${slug}`}
+                          className="bg-[#022B96] hover:bg-[#011a5e] text-white text-xs font-semibold px-4 py-1.5 rounded-xl transition shadow-xs"
+                        >
+                          Sign In
+                        </Link>
+                        <Link
+                          href="/signup"
+                          className="bg-white hover:bg-slate-50 text-slate-700 border border-slate-300 dark:bg-slate-800 dark:text-slate-200 dark:border-slate-700 text-xs font-semibold px-4 py-1.5 rounded-xl transition shadow-2xs"
+                        >
+                          Register Free
+                        </Link>
+                      </div>
+                    </td>
+                  </tr>
+                ) : loading ? (
                   <tr>
                     <td colSpan={7} className="py-16 text-center text-slate-400">
                       <Loader2 className="h-5 w-5 animate-spin mx-auto text-[#022B96] mb-2" />

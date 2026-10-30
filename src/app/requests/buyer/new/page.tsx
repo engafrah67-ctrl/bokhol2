@@ -114,28 +114,21 @@ export default function NewBuyerRequestPage() {
           quantityUnit: 'kg',
           targetPrice: targetPrice ? parseFloat(targetPrice) : null,
           currency: 'USD',
-          userId: currentUser?.id,
           countryId: null,
         }),
       })
 
       if (!res.ok) {
-        // Direct Supabase insert fallback
-        await supabase.from('buyer_requests').insert({
-          user_id: currentUser?.id,
-          title: `${quantity} ${productNeeded} — ${location}`,
-          description: descriptionPayload,
-          destination: location,
-          quantity: parseFloat(quantity) || null,
-          quantity_unit: 'kg',
-          target_price: targetPrice ? parseFloat(targetPrice) : null,
-          currency: 'USD',
-          status: 'open',
-          country_id: null,
-        })
+        const json = await res.json().catch(() => ({}))
+        setErrorMessage(json.error || 'Could not save your request. Please sign in and try again.')
+        setLoading(false)
+        return
       }
     } catch (err) {
-      console.error('Error saving request to Supabase:', err)
+      console.error('Error saving request:', err)
+      setErrorMessage('Network error. Please try again.')
+      setLoading(false)
+      return
     }
 
     setLoading(false)

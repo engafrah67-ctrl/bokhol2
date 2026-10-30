@@ -6,6 +6,7 @@ import Link from 'next/link'
 import Image from 'next/image'
 import { BlurGate } from '@/components/blur-gate'
 import { createClient } from '@/lib/supabase/client'
+import { useUser } from '@/hooks/use-user'
 import { getFishImageForProduct, getFlagUrl } from '@/lib/data/products-data'
 
 const CATEGORIES = ['All', 'Finfish', 'Shellfish', 'Cephalopods']
@@ -39,6 +40,8 @@ export function ProductsClient({ initialProducts }: ProductsClientProps) {
   const [activeCategory, setActiveCategory] = useState('All')
   const [searchQuery, setSearchQuery] = useState('')
   const [products, setProducts] = useState<ProductCard[]>(initialProducts)
+  const { user } = useUser()
+  const userId = user?.id ?? null
 
   useEffect(() => {
     setProducts(initialProducts)
@@ -196,8 +199,10 @@ export function ProductsClient({ initialProducts }: ProductsClientProps) {
     }
   }, [])
 
+  // The server already rendered fresh cards for this user; only reload when offers change.
+  // Offers are only readable when signed in; visitors keep the server-rendered, price-free cards.
   useEffect(() => {
-    fetchLiveProducts()
+    if (!userId) return
 
     const supabase = createClient()
     const channel = supabase
@@ -207,14 +212,10 @@ export function ProductsClient({ initialProducts }: ProductsClientProps) {
       })
       .subscribe()
 
-    const onFocus = () => fetchLiveProducts()
-    window.addEventListener('focus', onFocus)
-
     return () => {
       supabase.removeChannel(channel)
-      window.removeEventListener('focus', onFocus)
     }
-  }, [fetchLiveProducts])
+  }, [fetchLiveProducts, userId])
 
   const filteredProducts = products.filter((product) => {
     const matchesCategory = activeCategory === 'All' || product.category === activeCategory
@@ -329,7 +330,7 @@ export function ProductsClient({ initialProducts }: ProductsClientProps) {
                         Live offers
                       </span>
                       <span className="font-bold text-slate-800">
-                        <BlurGate>{product.suppliersCount}</BlurGate>
+                        <BlurGate placeholder="••">{product.suppliersCount}</BlurGate>
                       </span>
                     </div>
                     <div className="flex justify-between items-center gap-2">

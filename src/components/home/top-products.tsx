@@ -190,7 +190,7 @@ export function TopProducts({ topProducts }: TopProductsProps) {
                 {/* 5. Active Suppliers */}
                 <td className="py-4 px-4 text-right">
                   <span className="inline-flex items-center text-xs font-semibold text-slate-600 dark:text-slate-400 bg-slate-100 dark:bg-slate-800 px-3 py-1.5 rounded-full">
-                    <BlurGate>
+                    <BlurGate placeholder="••">
                       <span>{p.suppliersCount}</span>
                     </BlurGate>
                     <span className="ml-1">{p.suppliersCount === 1 ? t('role_supplier', 'Supplier') : t('top_products_suppliers', 'Suppliers')}</span>

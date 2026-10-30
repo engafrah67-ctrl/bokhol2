@@ -121,19 +121,15 @@ export async function signIn(
       return { error: error.message || 'Invalid login credentials' }
     }
 
-    const user = data?.user
-    const role = user?.email?.toLowerCase() === 'superadminbkhol@gmail.com' ? 'admin' : (user?.user_metadata?.role as string) || null
+    // Role comes from the database profile, never from editable user metadata
+    const { data: profile } = await supabase
+      .from('users')
+      .select('role')
+      .eq('id', data.user.id)
+      .maybeSingle()
+    const role = profile?.role
 
     if (role === 'admin') {
-      // Ensure DB role is synced to 'admin' before entering admin dashboard
-      // (account may have been created via Supabase admin panel with no metadata)
-      if (user?.id) {
-        await supabase.from('users').upsert({
-          id: user.id,
-          full_name: user.user_metadata?.full_name || 'Administrator',
-          role: 'admin',
-        }, { onConflict: 'id' })
-      }
       redirect('/dashboard/admin')
     } else if (role === 'buyer' || role === 'supplier') {
       redirect('/dashboard/buyer')

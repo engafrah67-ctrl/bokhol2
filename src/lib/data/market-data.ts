@@ -357,7 +357,7 @@ export async function getProductMarketTrend(productName: string): Promise<{
       weekLow: found.weekLow, changePct: found.change, suppliersCount: found.suppliersCount,
       currency: found.currency, trendPoints: found.data }
   }
-  const basePrice = 8.50
-  return { productName, currentAvg: basePrice, weekHigh: 9.20, weekLow: 7.80,
-    changePct: 1.5, suppliersCount: 0, currency: 'EUR', trendPoints: generate8WeekTrend(basePrice, 1.5) }
+  // No live offers (or no session — offers are signed-in only): neutral data, never invented prices
+  return { productName, currentAvg: 0, weekHigh: 0, weekLow: 0,
+    changePct: 0, suppliersCount: 0, currency: 'EUR', trendPoints: [] }
 }

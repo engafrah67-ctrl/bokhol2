@@ -1,4 +1,6 @@
-import { createPublicServerClient } from '@/lib/supabase/server'
+import { createClient } from '@/lib/supabase/server'
+import { getAuthUser } from '@/lib/auth/server'
+import { getCachedCatalogProducts, getCachedProductListings } from '@/lib/data/public-cache'
 import { getFishImageForProduct } from '@/lib/data/products-data'
 import { ProductsClient, ProductCard } from '@/components/products/products-client'
 
@@ -14,15 +16,26 @@ function getCategory(name: string): string {
 }
 
 export default async function ProductsPage() {
-  const supabase = createPublicServerClient()
+  // Cookie-aware client: offers (prices, suppliers) are only readable by signed-in users (RLS)
+  const supabase = await createClient()
+  const user = await getAuthUser(supabase)
 
   let cards: ProductCard[] = []
   try {
-    // 1. Fetch catalog products for accurate categories, slugs and images
-    const { data: catalogProducts } = await supabase
-      .from('products')
-      .select('name, slug, category, image_url')
-      .order('name', { ascending: true })
+    // Catalog (cached, public) and offers/listings load in parallel
+    const [catalogProducts, offersOrListings] = await Promise.all([
+      getCachedCatalogProducts(),
+      user
+        ? supabase
+            .from('supplier_posts')
+            .select('id, title, content, created_at, updated_at, company_id, companies(id, name, logo_url)')
+            .eq('is_published', true)
+            .then(({ data, error }) => {
+              if (error) throw new Error(error.message)
+              return (data || []) as any[]
+            })
+        : getCachedProductListings(),
+    ])
 
     const catalogMap = new Map<string, any>()
     if (catalogProducts) {
@@ -31,11 +44,34 @@ export default async function ProductsPage() {
       }
     }
 
-    // 2. Fetch all active supplier posts with company profile for supplier logos
-    const { data: posts } = await supabase
-      .from('supplier_posts')
-      .select('id, title, content, created_at, updated_at, company_id, companies(id, name, logo_url)')
-      .eq('is_published', true)
+    // Visitors: product names, origins and images only — nothing price- or supplier-related
+    if (!user) {
+      cards = (offersOrListings as any[]).map((l: any) => {
+        const name: string = String(l.product_name || '').trim()
+        const cat = catalogMap.get(name.toLowerCase())
+        const origins: string[] = Array.isArray(l.origins) && l.origins.length > 0 ? l.origins : ['Europe']
+        return {
+          slug: cat?.slug || name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)+/g, ''),
+          name: cat?.name || name,
+          category: cat?.category || getCategory(name),
+          imageUrl: getFishImageForProduct(name, l.image || undefined),
+          suppliersCount: 0,
+          avgPrice: '',
+          priceRange: '',
+          topOrigin: origins.join(', '),
+          origins,
+          lastUpdated: l.last_updated
+            ? new Date(l.last_updated).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+            : 'Recently',
+          suppliers: [],
+        }
+      })
+      cards.sort((a, b) => a.name.localeCompare(b.name))
+      return <ProductsClient initialProducts={cards} />
+    }
+
+    // Signed-in: offers already loaded above (with company profile for supplier logos)
+    const posts = offersOrListings as any[]
 
     // Group posts by normalized product name
     const postGroups = new Map<string, {

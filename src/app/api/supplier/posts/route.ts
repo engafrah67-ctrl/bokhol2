@@ -1,296 +1,165 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { revalidatePath } from 'next/cache'
-import { createClient } from '@/lib/supabase/server'
-import { createPublicServerClient } from '@/lib/supabase/server'
+import { revalidatePath, revalidateTag } from 'next/cache'
+import { PUBLIC_DATA_TAG } from '@/lib/data/public-cache'
+import { requireUser, UUID_RE } from '@/lib/auth/server'
 import { invalidateMarketCache } from '@/lib/data/market-data'
 
+export const dynamic = 'force-dynamic'
+
+const POST_CATEGORIES = new Set([
+  'product_availability', 'new_stock', 'shipment', 'certification', 'company_update', 'trade_event',
+])
+
+function refreshListings() {
+  invalidateMarketCache()
+  revalidateTag(PUBLIC_DATA_TAG)
+  revalidatePath('/products')
+  revalidatePath('/')
+  revalidatePath('/dashboard/admin')
+  revalidatePath('/dashboard/supplier')
+}
+
+// Offers contain prices, so they are only returned to signed-in users (RLS enforces this too)
 export async function GET(req: NextRequest) {
+  const guard = await requireUser()
+  if (!guard.ok) return guard.response
+
+  const { searchParams } = new URL(req.url)
+  const companyId = searchParams.get('company_id')
+
+  let query = guard.supabase
+    .from('supplier_posts')
+    .select('id, title, content, is_published, created_at, updated_at, company_id, companies(id, name, slug, logo_url, city, country_id, countries(name, iso_code))')
+    .order('created_at', { ascending: false })
+
+  if (companyId) {
+    if (!UUID_RE.test(companyId)) {
+      return NextResponse.json({ success: false, error: 'Invalid company_id.' }, { status: 400 })
+    }
+    query = query.eq('company_id', companyId)
+  }
+  if (searchParams.get('published') === 'true') {
+    query = query.eq('is_published', true)
+  }
+
+  const { data, error } = await query
+  if (error) return NextResponse.json({ success: false, error: error.message }, { status: 500 })
+  return NextResponse.json({ success: true, posts: data || [] })
+}
+
+// Create an offer. Allowed for admins (any company) and for the company's owner (RLS).
+export async function POST(req: NextRequest) {
+  const guard = await requireUser()
+  if (!guard.ok) return guard.response
+
   try {
-    const { searchParams } = new URL(req.url)
-    const companyId = searchParams.get('company_id')
-    const publishedOnly = searchParams.get('published') === 'true'
+    const body = await req.json()
+    let { title } = body
+    const { companyId, category, content, details, is_published } = body
 
-    const supabase = createPublicServerClient()
-    let query = supabase
+    let resolvedCompanyId: string | null = companyId && UUID_RE.test(companyId) ? companyId : null
+
+    // Posting without an explicit company uses the company the caller owns (if any)
+    if (!resolvedCompanyId) {
+      const { data: owned } = await guard.supabase
+        .from('companies')
+        .select('id')
+        .eq('owner_id', guard.user.id)
+        .limit(1)
+        .maybeSingle()
+      resolvedCompanyId = owned?.id ?? null
+    }
+
+    if (!resolvedCompanyId) {
+      return NextResponse.json({ success: false, error: 'Select the supplier company for this product.' }, { status: 400 })
+    }
+
+    if (!title && details?.productName) {
+      const minPrice = parseFloat(details.minPricePerKg ?? details.pricePerKg) || 0
+      const maxPrice = parseFloat(details.maxPricePerKg) || 0
+      const priceLabel = maxPrice > minPrice ? `EUR ${minPrice}–${maxPrice}/kg` : `EUR ${minPrice}/kg`
+      title = `${details.productName} — ${priceLabel}`
+    }
+
+    const { data: newPost, error } = await guard.supabase
       .from('supplier_posts')
-      .select('id, title, content, is_published, created_at, updated_at, company_id, companies(id, name, slug, logo_url, city, country_id, countries(name, iso_code))')
-      .order('created_at', { ascending: false })
+      .insert({
+        company_id: resolvedCompanyId,
+        category: POST_CATEGORIES.has(category) ? category : 'product_availability',
+        title: String(title || 'Product Availability').trim(),
+        content: typeof content === 'string' ? content : JSON.stringify(details || {}),
+        is_published: is_published !== false,
+      })
+      .select('id, title, company_id, category, is_published, created_at')
+      .single()
 
-    if (companyId) {
-      query = query.eq('company_id', companyId)
-    }
-    if (publishedOnly) {
-      query = query.eq('is_published', true)
-    }
-
-    const { data, error } = await query
     if (error) {
-      return NextResponse.json({ success: false, error: error.message }, { status: 500 })
+      const status = error.code === '42501' ? 403 : 500
+      const message = status === 403 ? 'You can only post products for your own company.' : error.message
+      return NextResponse.json({ success: false, error: message }, { status })
     }
 
-    return NextResponse.json({ success: true, posts: data || [] })
+    refreshListings()
+    return NextResponse.json({ success: true, post: newPost })
   } catch (err: any) {
-    return NextResponse.json({ success: false, error: err?.message || 'Internal error' }, { status: 500 })
+    return NextResponse.json({ success: false, error: err?.message || 'Internal server error' }, { status: 500 })
   }
 }
 
 export async function PATCH(req: NextRequest) {
-  try {
-    const body = await req.json()
-    const { postId, content, title, is_published, updated_at } = body
+  const guard = await requireUser()
+  if (!guard.ok) return guard.response
 
-    if (!postId) {
+  try {
+    const { postId, content, title, is_published } = await req.json()
+    if (!postId || !UUID_RE.test(postId)) {
       return NextResponse.json({ error: 'postId is required' }, { status: 400 })
     }
 
-    const updatePayload: Record<string, any> = {}
-    if (content !== undefined) updatePayload.content = content
-    if (title !== undefined) updatePayload.title = title
+    const updatePayload: Record<string, unknown> = {}
+    if (typeof content === 'string') updatePayload.content = content
+    if (typeof title === 'string') updatePayload.title = title.trim()
     if (typeof is_published === 'boolean') updatePayload.is_published = is_published
-    if (updated_at) updatePayload.updated_at = updated_at
 
-    // Try with the admin's authenticated session first (satisfies RLS admin check)
-    let updateError: any = null
-    try {
-      const authSupabase = await createClient()
-      const { error } = await authSupabase
-        .from('supplier_posts')
-        .update(updatePayload)
-        .eq('id', postId)
-      updateError = error
-      if (!error) {
-        // Success via authenticated client
-        invalidateMarketCache()
-        revalidatePath('/products')
-        revalidatePath('/')
-        revalidatePath('/dashboard/admin')
-        return NextResponse.json({ success: true })
-      }
-      console.warn('[PATCH supplier/posts] Auth client failed, trying anon:', error.message)
-    } catch (authErr) {
-      console.warn('[PATCH supplier/posts] Auth client threw:', authErr)
-    }
-
-    // Fallback: anon client (works if RLS is relaxed or for service-key setups)
-    const pubSupabase = createPublicServerClient()
-    const { error: pubError } = await pubSupabase
+    // .select() makes RLS-blocked updates visible: zero rows means "not allowed or not found"
+    const { data, error } = await guard.supabase
       .from('supplier_posts')
       .update(updatePayload)
       .eq('id', postId)
+      .select('id')
 
-    if (pubError) {
-      console.error('[PATCH supplier/posts] Both clients failed. Auth error:', updateError?.message, 'Anon error:', pubError.message)
-      return NextResponse.json({ error: pubError.message || 'Update failed — check RLS policies' }, { status: 500 })
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+    if (!data || data.length === 0) {
+      return NextResponse.json({ error: 'Post not found or you are not allowed to edit it.' }, { status: 404 })
     }
 
-    // Invalidate caches so the products page reflects the new price
-    invalidateMarketCache()
-    revalidatePath('/products')
-    revalidatePath('/')
-    revalidatePath('/dashboard/admin')
-
+    refreshListings()
     return NextResponse.json({ success: true })
   } catch (err: any) {
-    console.error('[PATCH supplier/posts] Unexpected error:', err)
     return NextResponse.json({ error: err?.message || 'Internal server error' }, { status: 500 })
   }
 }
 
-
 export async function DELETE(req: NextRequest) {
-  try {
-    const url = new URL(req.url)
-    const postId = url.searchParams.get('id')
+  const guard = await requireUser()
+  if (!guard.ok) return guard.response
 
-
-    if (!postId) {
-      return NextResponse.json({ error: 'Post ID is required' }, { status: 400 })
-    }
-
-    // Try deleting via authenticated client first
-    const authSupabase = await createClient()
-    let { error } = await authSupabase
-      .from('supplier_posts')
-      .delete()
-      .eq('id', postId)
-
-    // Fallback: If delete had error, try setting is_published = false
-    if (error) {
-      console.warn('Auth delete failed, trying soft delete:', error)
-      const { error: softErr } = await authSupabase
-        .from('supplier_posts')
-        .update({ is_published: false })
-        .eq('id', postId)
-
-      if (softErr) {
-        // Also try with public server client
-        const pubSupabase = createPublicServerClient()
-        await pubSupabase
-          .from('supplier_posts')
-          .delete()
-          .eq('id', postId)
-      }
-    }
-
-    // Invalidate caches and revalidate paths immediately
-    invalidateMarketCache()
-    revalidatePath('/products')
-    revalidatePath('/')
-    revalidatePath('/dashboard/supplier')
-
-    return NextResponse.json({ success: true, deletedId: postId })
-  } catch (err: any) {
-    console.error('Error deleting post:', err)
-    return NextResponse.json({ error: err?.message || 'Failed to delete post' }, { status: 500 })
+  const postId = new URL(req.url).searchParams.get('id')
+  if (!postId || !UUID_RE.test(postId)) {
+    return NextResponse.json({ error: 'Post ID is required' }, { status: 400 })
   }
-}
 
-export async function POST(req: NextRequest) {
-  try {
-    const body = await req.json()
-    let { companyId, companyName, category, title, content, details, is_published } = body
+  const { data, error } = await guard.supabase
+    .from('supplier_posts')
+    .delete()
+    .eq('id', postId)
+    .select('id')
 
-    if (!title && details?.productName) {
-      const price = parseFloat(details.pricePerKg || details.minPricePerKg) || 0
-      const minPrice = parseFloat(details.minPricePerKg) || price
-      const maxPrice = parseFloat(details.maxPricePerKg) || price
-      const priceLabel = maxPrice && maxPrice !== minPrice
-        ? `EUR ${minPrice}–${maxPrice}/kg`
-        : `EUR ${minPrice || price}/kg`
-      title = `${details.productName} — ${priceLabel}`
-    }
-
-    const contentStr = typeof content === 'string' ? content : JSON.stringify(details || {})
-    const pubSupabase = createPublicServerClient()
-
-    // 1. Get authenticated user if available
-    let userId: string | null = null
-    let userEmail: string | null = null
-    try {
-      const authSupabase = await createClient()
-      const { data: { user } } = await authSupabase.auth.getUser()
-      if (user) {
-        userId = user.id
-        userEmail = user.email || null
-      }
-    } catch (_) {}
-
-    const isValidUuid = (id?: string | null) =>
-      Boolean(id && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id))
-
-    let resolvedCompanyId: string | null = null
-
-    // 2. If companyId is a valid UUID, verify it exists in the companies table
-    if (isValidUuid(companyId)) {
-      const { data: existing } = await pubSupabase
-        .from('companies')
-        .select('id, owner_id')
-        .eq('id', companyId)
-        .maybeSingle()
-      if (existing?.id) {
-        resolvedCompanyId = existing.id
-        if (userId && (!existing.owner_id || existing.owner_id === '2198809e-0401-483a-ba3b-a6f18392c9ea')) {
-          try {
-            await pubSupabase.from('companies').update({ owner_id: userId }).eq('id', resolvedCompanyId)
-          } catch (_) {}
-        }
-      }
-    }
-
-    // 3. If not resolved yet, search companies by user ID, email, or company name
-    if (!resolvedCompanyId) {
-      if (userId) {
-        const { data: byOwner } = await pubSupabase
-          .from('companies')
-          .select('id')
-          .eq('owner_id', userId)
-          .maybeSingle()
-        if (byOwner?.id) resolvedCompanyId = byOwner.id
-      }
-
-      if (!resolvedCompanyId && userEmail) {
-        const { data: byEmail } = await pubSupabase
-          .from('companies')
-          .select('id')
-          .ilike('email', userEmail)
-          .maybeSingle()
-        if (byEmail?.id) resolvedCompanyId = byEmail.id
-      }
-
-      if (!resolvedCompanyId && companyName) {
-        const { data: byName } = await pubSupabase
-          .from('companies')
-          .select('id')
-          .ilike('name', String(companyName).trim())
-          .maybeSingle()
-        if (byName?.id) resolvedCompanyId = byName.id
-      }
-    }
-
-    // 4. Fallback: ensure a company row exists in Supabase so the foreign key succeeds
-    if (!resolvedCompanyId) {
-      const effectiveName = companyName || userEmail?.split('@')[0] || 'Supplier Company'
-      const slug = effectiveName
-        .toLowerCase()
-        .replace(/[^a-z0-9]+/g, '-')
-        .replace(/(^-|-$)+/g, '') + '-' + Math.random().toString(36).slice(2, 6)
-
-      const { data: createdCo, error: coErr } = await pubSupabase
-        .from('companies')
-        .insert({
-          owner_id: userId || '2198809e-0401-483a-ba3b-a6f18392c9ea',
-          name: effectiveName,
-          slug,
-          email: userEmail || null,
-          status: 'active',
-          is_verified: true,
-        })
-        .select('id')
-        .maybeSingle()
-
-      if (coErr || !createdCo?.id) {
-        console.error('[API supplier/posts] Could not create fallback company:', coErr)
-        return NextResponse.json(
-          { success: false, error: 'Could not resolve or link a company record in the database.' },
-          { status: 400 }
-        )
-      }
-      resolvedCompanyId = createdCo.id
-    }
-
-    // 5. Insert into supplier_posts via pubSupabase (service/public server client bypasses RLS)
-    const { data: newPost, error: postErr } = await pubSupabase
-      .from('supplier_posts')
-      .insert({
-        company_id: resolvedCompanyId,
-        category: category || 'product_availability',
-        title: title || 'Product Availability',
-        content: contentStr,
-        is_published: is_published !== false,
-      })
-      .select('id, title, company_id, category, is_published, created_at')
-      .maybeSingle()
-
-    if (postErr) {
-      console.error('[API supplier/posts] Insert error:', postErr)
-      return NextResponse.json(
-        { success: false, error: postErr.message || 'Database insert error.' },
-        { status: 500 }
-      )
-    }
-
-    // 6. Invalidate caches and revalidate paths
-    invalidateMarketCache()
-    revalidatePath('/products')
-    revalidatePath('/')
-    revalidatePath('/dashboard/supplier')
-
-    return NextResponse.json({ success: true, post: newPost })
-  } catch (err: any) {
-    console.error('[API supplier/posts] Unexpected error:', err)
-    return NextResponse.json(
-      { success: false, error: err?.message || 'Internal server error' },
-      { status: 500 }
-    )
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (!data || data.length === 0) {
+    return NextResponse.json({ error: 'Post not found or you are not allowed to delete it.' }, { status: 404 })
   }
+
+  refreshListings()
+  return NextResponse.json({ success: true, deletedId: postId })
 }

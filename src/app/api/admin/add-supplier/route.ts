@@ -1,285 +1,138 @@
 import { NextRequest, NextResponse } from 'next/server'
-import fs from 'fs'
-import path from 'path'
-import { createPublicServerClient } from '@/lib/supabase/server'
-import { INITIAL_COMPANIES } from '@/lib/data/companies-data'
+import { revalidateTag } from 'next/cache'
+import { PUBLIC_DATA_TAG } from '@/lib/data/public-cache'
+import { adminRead, requireAdmin, UUID_RE } from '@/lib/auth/server'
 
 export const dynamic = 'force-dynamic'
 
-const SUPPLIERS_FILE = path.join(process.cwd(), 'src', 'lib', 'data', 'added-suppliers.json')
+// Supplier markets the platform operates in
+const SUPPLIER_COUNTRIES = ['Netherlands', 'Belgium', 'Norway', 'Germany']
 
-function readSuppliersFromFile(): any[] {
-  try {
-    if (!fs.existsSync(SUPPLIERS_FILE)) {
-      return []
-    }
-    const raw = fs.readFileSync(SUPPLIERS_FILE, 'utf-8')
-    const parsed = JSON.parse(raw)
-    return Array.isArray(parsed) ? parsed : []
-  } catch (err) {
-    console.error('Failed to read added suppliers file:', err)
-    return []
+const COMPANY_COLUMNS =
+  'id, name, slug, email, phone, website, logo_url, description, city, address, country_id, owner_id, is_verified, status, created_at, countries(id, name, iso_code)'
+
+function toSupplier(co: any) {
+  const country = Array.isArray(co.countries) ? co.countries[0] : co.countries
+  const speciesList = co.description
+    ? co.description.replace(/^Specializing in\s*/i, '').replace(/\.$/, '').split(',').map((s: string) => s.trim()).filter(Boolean)
+    : []
+  return {
+    id: co.id,
+    name: co.name,
+    slug: co.slug,
+    email: co.email || '',
+    phone: co.phone || '',
+    website: co.website || '',
+    category: 'SEAFOOD SUPPLIER',
+    country: country?.name || '',
+    countryCode: country?.iso_code || '',
+    address: co.address || co.city || '',
+    description: co.description || '',
+    logoUrl: co.logo_url || null,
+    status: co.status,
+    isVerified: co.is_verified,
+    isClaimed: Boolean(co.owner_id),
+    species: speciesList,
+    createdAt: co.created_at,
   }
 }
 
-function writeSuppliersToFile(suppliers: any[]) {
-  try {
-    const dir = path.dirname(SUPPLIERS_FILE)
-    if (!fs.existsSync(dir)) {
-      fs.mkdirSync(dir, { recursive: true })
-    }
-    fs.writeFileSync(SUPPLIERS_FILE, JSON.stringify(suppliers, null, 2), 'utf-8')
-  } catch (err) {
-    console.error('Failed to write added suppliers file:', err)
-  }
-}
-
+// Admin: list every company (any status), including contact details
 export async function GET() {
-  try {
-    const fileSuppliers = readSuppliersFromFile()
-    const supabase = createPublicServerClient()
+  const read = await adminRead((supabase) =>
+    supabase.from('companies').select(COMPANY_COLUMNS).order('created_at', { ascending: false })
+  )
+  if (!read.ok) return read.response
 
-    let dbSuppliers: any[] = []
-    try {
-      const queryPromise = supabase
-        .from('companies')
-        .select('id, name, slug, email, phone, website, logo_url, description, city, country_id, is_verified, status, created_at, countries(id, name, iso_code)')
-        .order('created_at', { ascending: false })
-      const timeoutPromise = new Promise<{ data: null; error: null }>((res) =>
-        setTimeout(() => res({ data: null, error: null }), 3000)
-      )
-      const { data, error }: any = await Promise.race([queryPromise, timeoutPromise])
-
-      if (!error && Array.isArray(data)) {
-        dbSuppliers = data.map((co: any) => {
-          const countryName = co.countries?.name || co.city || 'Netherlands'
-          const countryCode = co.countries?.iso_code || (countryName === 'Germany' ? 'DE' : countryName === 'Norway' ? 'NO' : countryName === 'Belgium' ? 'BE' : 'NL')
-          const speciesList = co.description ? co.description.replace(/^Specializing in\s*/i, '').split(',').map((s: string) => s.trim()).filter(Boolean) : []
-          return {
-            id: co.id,
-            name: co.name,
-            slug: co.slug || co.name.toLowerCase().replace(/[^a-z0-9]+/g, '-'),
-            email: co.email || '',
-            phone: co.phone || '',
-            website: co.website || '',
-            category: 'SEAFOOD SUPPLIER',
-            country: countryName,
-            countryCode,
-            address: co.city || '',
-            description: co.description || '',
-            logoUrl: co.logo_url || null,
-            status: co.status || 'active',
-            isVerified: co.is_verified ?? true,
-            species: speciesList,
-            createdAt: co.created_at || new Date().toISOString(),
-          }
-        })
-      }
-    } catch (e: any) {
-      console.warn('[API/add-supplier GET] Supabase fetch error:', e?.message)
-    }
-
-    // Merge: INITIAL_COMPANIES as baseline, then fileSuppliers, then dbSuppliers
-    const map = new Map<string, any>()
-    for (const c of INITIAL_COMPANIES) {
-      const key = (c.id || c.slug || c.name || '').toLowerCase()
-      if (key) map.set(key, { ...c, isVerified: true })
-    }
-    for (const s of fileSuppliers) {
-      const key = (s.id || s.slug || s.name || '').toLowerCase()
-      if (key) {
-        const existing = map.get(key) || {}
-        map.set(key, { ...existing, ...s })
-      }
-    }
-    for (const s of dbSuppliers) {
-      const key = (s.id || s.slug || s.name || '').toLowerCase()
-      if (key) {
-        const fileMatch = map.get(key)
-        map.set(key, {
-          ...fileMatch,
-          ...s,
-          logoUrl: s.logoUrl || fileMatch?.logoUrl || null,
-          species: s.species?.length > 0 ? s.species : fileMatch?.species || [],
-        })
-      }
-    }
-
-    const mergedSuppliers = Array.from(map.values()).sort(
-      (a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime()
-    )
-
-    return NextResponse.json({ success: true, suppliers: mergedSuppliers })
-  } catch (err: any) {
-    return NextResponse.json({ success: false, error: err.message }, { status: 500 })
+  const { data, error } = read.result
+  if (error) {
+    return NextResponse.json({ success: false, error: error.message }, { status: 500 })
   }
+  return NextResponse.json({ success: true, suppliers: (data || []).map(toSupplier) })
 }
 
+// Admin: create an unclaimed supplier profile (owner_id stays NULL until a claim is approved)
 export async function POST(req: NextRequest) {
-  try {
-    const body = await req.json()
-    const { name, email, phone, country, logoUrl, species, category, address } = body
+  const guard = await requireAdmin()
+  if (!guard.ok) return guard.response
 
-    if (!name || !email) {
+  try {
+    const { name, email, phone, country, logoUrl, species, address, website } = await req.json()
+
+    const trimmedName = String(name || '').trim()
+    const trimmedEmail = String(email || '').trim().toLowerCase()
+    if (!trimmedName || !trimmedEmail) {
+      return NextResponse.json({ success: false, error: 'Company name and email are required.' }, { status: 400 })
+    }
+
+    const baseSlug = trimmedName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)+/g, '') || 'supplier'
+    const slug = `${baseSlug}-${Date.now().toString(36)}`
+
+    const speciesList: string[] = Array.isArray(species)
+      ? species.map((s) => String(s).trim()).filter(Boolean)
+      : typeof species === 'string'
+        ? species.split(',').map((s) => s.trim()).filter(Boolean)
+        : []
+
+    const countryName = SUPPLIER_COUNTRIES.find((c) => c.toLowerCase() === String(country || '').trim().toLowerCase())
+    if (!countryName) {
       return NextResponse.json(
-        { success: false, error: 'Company name and email are required.' },
+        { success: false, error: `Country must be one of: ${SUPPLIER_COUNTRIES.join(', ')}.` },
         { status: 400 }
       )
     }
 
-    const trimmedName = String(name).trim()
-    const trimmedEmail = String(email).trim().toLowerCase()
-    const baseSlug = trimmedName
-      .toLowerCase()
-      .replace(/[^a-z0-9\s-]/g, '')
-      .trim()
-      .replace(/\s+/g, '-')
+    const { data: cData } = await guard.supabase
+      .from('countries')
+      .select('id')
+      .eq('name', countryName)
+      .maybeSingle()
+    const countryId: string | null = cData?.id ?? null
 
-    const slug = `${baseSlug}-${Date.now().toString(36)}`
+    const { data, error } = await guard.supabase
+      .from('companies')
+      .insert({
+        owner_id: null,
+        name: trimmedName,
+        slug,
+        email: trimmedEmail,
+        phone: phone ? String(phone).trim() : null,
+        website: website ? String(website).trim() : null,
+        address: address ? String(address).trim() : null,
+        city: address ? String(address).trim() : country || null,
+        country_id: countryId,
+        logo_url: logoUrl || null,
+        description: speciesList.length > 0 ? `Specializing in ${speciesList.join(', ')}.` : null,
+        status: 'active',
+        is_verified: true,
+      })
+      .select(COMPANY_COLUMNS)
+      .single()
 
-    const speciesList = Array.isArray(species)
-      ? species
-      : typeof species === 'string' && species.trim()
-        ? species.split(',').map((s: string) => s.trim()).filter(Boolean)
-        : []
-
-    const countryCodeMap: Record<string, string> = {
-      Germany: 'DE',
-      Norway: 'NO',
-      Netherlands: 'NL',
-      Belgium: 'BE',
-      Spain: 'ES',
-      France: 'FR',
-      Denmark: 'DK',
-      Iceland: 'IS',
-      UnitedKingdom: 'GB',
-      'United Kingdom': 'GB',
+    if (error) {
+      return NextResponse.json({ success: false, error: error.message }, { status: 500 })
     }
-    const countryCode = country ? (countryCodeMap[country] || 'NL') : 'NL'
-
-    let countryId: string | null = null
-    const supabase = createPublicServerClient()
-
-    if (country) {
-      try {
-        const { data: cData } = await supabase
-          .from('countries')
-          .select('id')
-          .ilike('name', country)
-          .maybeSingle()
-        if (cData?.id) {
-          countryId = cData.id
-        }
-      } catch (_) {}
-    }
-
-    // 1. Insert into Supabase companies table
-    let dbCompany: any = null
-    try {
-      const { data, error } = await supabase
-        .from('companies')
-        .insert({
-          owner_id: '2198809e-0401-483a-ba3b-a6f18392c9ea',
-          name: trimmedName,
-          slug,
-          email: trimmedEmail,
-          phone: phone ? String(phone).trim() : null,
-          city: address || country || null,
-          country_id: countryId,
-          logo_url: logoUrl || null,
-          description: speciesList.length > 0 ? `Specializing in ${speciesList.join(', ')}.` : null,
-          status: 'active',
-          is_verified: true,
-        })
-        .select('id, name, slug, email, phone, logo_url, description, country_id, status, is_verified, created_at')
-        .maybeSingle()
-
-      if (!error && data) {
-        dbCompany = data
-      } else if (error) {
-        console.warn('[AddSupplier] Supabase insert warning:', error.message)
-      }
-    } catch (e: any) {
-      console.warn('[AddSupplier] Supabase error:', e?.message)
-    }
-
-    // 2. Build CompanyProfile record
-    const companyProfile = {
-      id: dbCompany?.id || `sup-${Date.now()}`,
-      rank: 50 + readSuppliersFromFile().length,
-      name: trimmedName,
-      slug: dbCompany?.slug || slug,
-      category: (category || 'SEAFOOD SUPPLIER') as any,
-      country: country || 'Netherlands',
-      countryCode,
-      address: address || '',
-      website: '',
-      email: trimmedEmail,
-      phone: phone ? String(phone).trim() : '',
-      domain: trimmedEmail.split('@')[1] || '',
-      description: speciesList.length > 0 ? `Specializing in ${speciesList.join(', ')}.` : '',
-      logoUrl: logoUrl || undefined,
-      status: 'active',
-      isVerified: true,
-      isPublicListing: true,
-      species: speciesList,
-      tags: ['SUPPLIER', ...(country ? [country.toUpperCase()] : [])],
-      createdAt: dbCompany?.created_at || new Date().toISOString(),
-    }
-
-    // 3. Save to local server file for persistence guarantee
-    const existing = readSuppliersFromFile()
-    const duplicateIdx = existing.findIndex(
-      (s) => s.slug === companyProfile.slug || s.name.toLowerCase() === companyProfile.name.toLowerCase()
-    )
-    if (duplicateIdx !== -1) {
-      existing[duplicateIdx] = { ...existing[duplicateIdx], ...companyProfile }
-    } else {
-      existing.unshift(companyProfile)
-    }
-    writeSuppliersToFile(existing)
-
-    return NextResponse.json({
-      success: true,
-      company: companyProfile,
-      dbSaved: !!dbCompany,
-    })
+    revalidateTag(PUBLIC_DATA_TAG)
+    return NextResponse.json({ success: true, company: toSupplier(data) })
   } catch (err: any) {
-    console.error('[API/add-supplier] Unexpected error:', err)
-    return NextResponse.json(
-      { success: false, error: err?.message || 'Unexpected server error.' },
-      { status: 500 }
-    )
+    return NextResponse.json({ success: false, error: err?.message || 'Unexpected server error.' }, { status: 500 })
   }
 }
 
+// Admin: delete a company (its posts, products and claims cascade)
 export async function DELETE(req: NextRequest) {
-  try {
-    const { searchParams } = new URL(req.url)
-    const id = searchParams.get('id')
+  const guard = await requireAdmin()
+  if (!guard.ok) return guard.response
 
-    if (!id) {
-      return NextResponse.json({ success: false, error: 'Missing id parameter.' }, { status: 400 })
-    }
-
-    const existing = readSuppliersFromFile()
-    const filtered = existing.filter((s) => s.id !== id)
-    writeSuppliersToFile(filtered)
-
-    const supabase = createPublicServerClient()
-    if (/^[0-9a-f-]{36}$/i.test(id)) {
-      try {
-        await supabase.from('supplier_posts').delete().eq('company_id', id)
-        await supabase.from('companies').delete().eq('id', id)
-      } catch (_) {}
-    } else {
-      try {
-        await supabase.from('companies').delete().eq('slug', id)
-      } catch (_) {}
-    }
-
-    return NextResponse.json({ success: true, message: 'Supplier deleted successfully.' })
-  } catch (err: any) {
-    return NextResponse.json({ success: false, error: err.message }, { status: 500 })
+  const id = new URL(req.url).searchParams.get('id')
+  if (!id || !UUID_RE.test(id)) {
+    return NextResponse.json({ success: false, error: 'A valid company id is required.' }, { status: 400 })
   }
+
+  const { error } = await guard.supabase.from('companies').delete().eq('id', id)
+  if (error) {
+    return NextResponse.json({ success: false, error: error.message }, { status: 500 })
+  }
+  revalidateTag(PUBLIC_DATA_TAG)
+  return NextResponse.json({ success: true, message: 'Supplier deleted successfully.' })
 }

@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { createServerClient } from '@supabase/ssr'
+import { SUPABASE_URL, SUPABASE_ANON_KEY } from '@/lib/supabase/config'
 
 const AUTH_PATHS = ['/login', '/signup', '/forgot-password', '/reset-password', '/verify-email']
 
@@ -39,8 +40,8 @@ export async function middleware(request: NextRequest) {
     request,
   })
 
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://sfbixmrmdfignczavzbw.supabase.co'
-  const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'sb_publishable_CzLhV-083W6ru-INTER2-A_LxYLSxZC'
+  const supabaseUrl = SUPABASE_URL
+  const supabaseAnonKey = SUPABASE_ANON_KEY
 
   const supabase = createServerClient(supabaseUrl, supabaseAnonKey, {
     cookies: {
@@ -59,11 +60,11 @@ export async function middleware(request: NextRequest) {
     },
   })
 
-  let user = null
+  // getClaims() verifies the JWT locally with cached signing keys (no Auth server round-trip)
+  let user: string | null = null
   try {
-    const timeoutPromise = new Promise<null>((res) => setTimeout(() => res(null), 800))
-    const userPromise = supabase.auth.getUser().then((r) => r.data?.user || null).catch(() => null)
-    user = await Promise.race([userPromise, timeoutPromise])
+    const { data } = await supabase.auth.getClaims()
+    user = data?.claims?.sub ?? null
   } catch (err) {
     console.warn('Middleware auth check warn:', err)
   }

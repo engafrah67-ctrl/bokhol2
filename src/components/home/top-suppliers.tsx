@@ -26,9 +26,13 @@ export function TopSuppliers() {
   useEffect(() => {
     async function getSuppliers() {
       try {
+        // Contact details are only requested for signed-in users (visitors lack column access)
+        const columns = user
+          ? 'id, slug, name, description, logo_url, year_founded, employee_count, is_verified, activity_score, trust_score, email, phone, country:countries(name, flag_emoji)'
+          : 'id, slug, name, description, logo_url, year_founded, employee_count, is_verified, activity_score, trust_score, country:countries(name, flag_emoji)'
         const { data } = await supabase
           .from('companies')
-          .select('*, country:countries(name, flag_emoji)')
+          .select(columns)
           .eq('status', 'active')
           .limit(4)
 
