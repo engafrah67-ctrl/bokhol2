@@ -3,11 +3,9 @@ import { HeroSection } from '@/components/home/hero-section'
 import { PartnersSection } from '@/components/home/partners-section'
 import { SeafoodIndexCard } from '@/components/home/seafood-index'
 import { TopProducts } from '@/components/home/top-products'
-import { MarketFeed } from '@/components/home/market-feed'
+import { LatestNews } from '@/components/home/latest-news'
 import { ExpertProfile } from '@/components/home/expert-profile'
 import { FAQSection } from '@/components/home/faq-section'
-import { StatsBar } from '@/components/home/stats-bar'
-import { NewsArticle } from '@/types/database'
 import { parseSupplierPostsToMarketData, LiveCountryMarketData, LiveSpeciesIndex, TopMarketProduct } from '@/lib/data/market-data'
 import { getFishImageForProduct } from '@/lib/data/products-data'
 import { ManagedIndexItem } from '@/lib/data/seafood-index-data'
@@ -15,7 +13,6 @@ import { getAuthUser } from '@/lib/auth/server'
 import {
   getCachedProductListings,
   getCachedLatestNews,
-  getCachedActiveCompanyCount,
   getCachedManagedIndex,
 } from '@/lib/data/public-cache'
 
@@ -87,7 +84,7 @@ export default async function HomePage() {
       return fallback
     })
 
-  const [rows, news, supplierCount, managedItems] = await Promise.all([
+  const [rows, news, managedItems] = await Promise.all([
     user
       ? supabase
           .from('supplier_posts')
@@ -100,11 +97,10 @@ export default async function HomePage() {
           })
       : safe<any[]>(getCachedProductListings(), [], 'listings'),
     safe<any[]>(getCachedLatestNews(), [], 'news'),
-    safe(getCachedActiveCompanyCount(), 0, 'company count'),
     safe(getCachedManagedIndex(), [] as ManagedIndexItem[], 'seafood index'),
   ]).catch((err) => {
     console.error('Home page offers fetch error:', err?.message || err)
-    return [[], [], 0, []] as [any[], any[], number, ManagedIndexItem[]]
+    return [[], [], []] as [any[], any[], ManagedIndexItem[]]
   })
 
   // The Seafood Index is exactly what the admin manages — the same for every viewer
@@ -114,8 +110,6 @@ export default async function HomePage() {
     : listingsToTopProducts(rows)
 
   const mergedCountryData = countryData
-  const productCount = user ? topProducts.length : rows.length
-  const marketCount = mergedCountryData?.filter(c => c.species && c.species.length > 0).length ?? 0
 
   return (
     <div>
@@ -135,15 +129,8 @@ export default async function HomePage() {
         {/* 3.5 Expert Profile */}
         <ExpertProfile />
 
-        {/* 4. Market Feed */}
-        <MarketFeed news={(news as NewsArticle[]) || []} />
-
-        {/* 5. Bottom Stats Bar */}
-        <StatsBar
-          supplierCount={supplierCount}
-          productCount={productCount}
-          marketCount={marketCount}
-        />
+        {/* 4. Latest News (published by admin) */}
+        <LatestNews news={news || []} />
 
         {/* FAQ Section */}
         <FAQSection />
